@@ -44,7 +44,7 @@ export default function Home() {
           </div>
           <form onSubmit={submitLogin}>
             <label>手机号 / 企业邮箱<input required placeholder="请输入手机号或企业邮箱" /></label>
-            <label>密码<a href="#">忘记密码？</a><input required type="password" placeholder="请输入登录密码" /></label>
+            <label>密码<a href="#">忘记密码？</a><input required type="password" placeholder="请输入登录密码" onInvalid={event=>event.currentTarget.setCustomValidity('请输入密码')} onInput={event=>event.currentTarget.setCustomValidity('')} /></label>
             <div className="form-meta"><label className="check"><input type="checkbox" /> 记住我</label></div>
             <button className="primary-button" type="submit">登录工作台 <span>→</span></button>
           </form>
