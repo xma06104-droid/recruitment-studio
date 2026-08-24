@@ -55,6 +55,19 @@ export default function WorkbenchClient() {
   useEffect(()=>{try{const j=localStorage.getItem('dexian-jobs');const c=localStorage.getItem('dexian-candidates');if(j)setJobs(JSON.parse(j));if(c)setCandidates(JSON.parse(c))}catch{}setLoaded(true)},[]);
   useEffect(()=>{if(loaded)localStorage.setItem('dexian-jobs',JSON.stringify(jobs))},[jobs,loaded]);
   useEffect(()=>{if(loaded)localStorage.setItem('dexian-candidates',JSON.stringify(candidates))},[candidates,loaded]);
+  useEffect(()=>{
+    if(active!=='工作台')return;
+    const cards=Array.from(document.querySelectorAll<HTMLElement>('.kpi-grid article')).slice(0,2);
+    const routes=['职位管理','人才库'];
+    const cleanups=cards.map((card,index)=>{
+      const open=()=>setActive(routes[index]);
+      const key=(event:KeyboardEvent)=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();open()}};
+      card.classList.add('clickable');card.tabIndex=0;card.setAttribute('role','button');
+      card.addEventListener('click',open);card.addEventListener('keydown',key);
+      return()=>{card.removeEventListener('click',open);card.removeEventListener('keydown',key)};
+    });
+    return()=>cleanups.forEach(cleanup=>cleanup());
+  },[active]);
 
   const filteredJobs=useMemo(()=>jobs.filter(j=>(j.title+j.dept+j.city).includes(search)),[jobs,search]);
   const filteredPeople=useMemo(()=>candidates.filter(c=>(c.name+c.role+c.company+c.skills.join('')).includes(search)),[candidates,search]);
