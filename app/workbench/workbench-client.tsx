@@ -57,8 +57,8 @@ export default function WorkbenchClient() {
   useEffect(()=>{if(loaded)localStorage.setItem('dexian-candidates',JSON.stringify(candidates))},[candidates,loaded]);
   useEffect(()=>{
     if(active!=='工作台')return;
-    const cards=Array.from(document.querySelectorAll<HTMLElement>('.kpi-grid article')).slice(0,2);
-    const routes=['职位管理','人才库'];
+    const cards=Array.from(document.querySelectorAll<HTMLElement>('.kpi-grid article')).slice(0,4);
+    const routes=['职位管理','人才库','简历筛选','Offer 管理'];
     const cleanups=cards.map((card,index)=>{
       const open=()=>setActive(routes[index]);
       const key=(event:KeyboardEvent)=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();open()}};
