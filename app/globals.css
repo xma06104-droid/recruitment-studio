@@ -428,3 +428,15 @@ body{background:#edf3fb}
 @keyframes tech-scan{0%,100%{transform:translateY(-25%);opacity:.2}50%{transform:translateY(190%);opacity:1}}
 @media(prefers-reduced-motion:reduce){.dashboard-sidebar:after{animation:none}}
 @media(max-width:760px){.dash-logo:after{display:none}.dashboard-header:after{left:12px;right:12px}.brand-copy .eyebrow:before{display:none}.kpi-grid article:before{left:15px;right:15px}.auth-card:before,.register-card:before{left:22px;right:22px}}
+
+/* Authentication validation and account feedback */
+.auth-error{display:flex;align-items:flex-start;gap:10px;margin:0 0 15px;padding:11px 12px;border:1px solid rgba(255,102,119,.28);border-radius:12px;color:#ffd7dc;background:rgba(123,33,54,.2);box-shadow:0 0 22px rgba(255,66,99,.06)}
+.auth-error>span{display:grid;place-items:center;width:23px;height:23px;flex:0 0 auto;border-radius:50%;color:#fff;background:#ef5c71;font-size:12px;font-weight:800;box-shadow:0 0 14px rgba(239,92,113,.22)}
+.auth-error>div{min-width:0}.auth-error b{display:block;color:#fff1f3;font-size:11px}.auth-error p{margin:3px 0 0;color:#e7aeb8;font-size:9px;line-height:1.5}
+.auth-card input[aria-invalid="true"]{border-color:rgba(239,92,113,.52)}
+.primary-button:disabled,.code-row button:disabled{cursor:not-allowed;opacity:.58;transform:none;box-shadow:none}
+.success-message,.auth-notice{margin:12px 0 0;padding:9px 11px;border:1px solid rgba(69,211,167,.18);border-radius:10px;color:#89e7c5;background:rgba(31,119,94,.13);text-align:left;font-size:9px;line-height:1.5}
+.demo-credentials{display:flex;align-items:center;justify-content:center;gap:7px;margin:12px 0 0;color:#718099;font-size:8px}.demo-credentials span{padding:3px 6px;border:1px solid rgba(80,210,255,.16);border-radius:6px;color:#6fdfff;background:rgba(51,131,185,.12)}.demo-credentials i{color:#42516a;font-style:normal}
+.field-hint{display:block;margin-top:7px;color:#66758c;font-size:8px;font-weight:500}.register-error{margin-top:2px}.auth-notice{margin:0 0 14px}
+.register-card{max-width:570px}.register-form-wrap{padding-top:68px;padding-bottom:40px}
+@media(max-width:760px){.demo-credentials{flex-wrap:wrap}.auth-error{padding:10px}.register-form-wrap{padding-top:22px}.register-card{max-width:100%}}

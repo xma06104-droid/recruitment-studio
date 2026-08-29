@@ -1,12 +1,63 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
+import {
+  DEMO_ACCOUNT,
+  LAST_REGISTERED_KEY,
+  hashPassword,
+  isValidIdentifier,
+  normalizeIdentifier,
+  readAccounts,
+} from './auth-rules';
 
 export default function Home() {
   const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  function submitLogin(event: FormEvent<HTMLFormElement>) {
+  useEffect(() => {
+    const registered = window.localStorage.getItem(LAST_REGISTERED_KEY);
+    if (!registered) return;
+    setIdentifier(registered);
+    setMessage('注册成功，请使用刚刚设置的密码登录。');
+    window.localStorage.removeItem(LAST_REGISTERED_KEY);
+  }, []);
+
+  async function submitLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setError('');
+    setMessage('');
+    const accountInput = normalizeIdentifier(identifier);
+
+    if (!accountInput) {
+      setError('请输入手机号或企业邮箱。');
+      return;
+    }
+    if (!isValidIdentifier(accountInput)) {
+      setError('请输入正确的中国大陆手机号或企业邮箱。');
+      return;
+    }
+    if (!password) {
+      setError('请输入登录密码。');
+      return;
+    }
+
+    setSubmitting(true);
+    const isDemoIdentifier = accountInput === DEMO_ACCOUNT.phone || accountInput === DEMO_ACCOUNT.email;
+    const isDemoMatch = isDemoIdentifier && password === DEMO_ACCOUNT.password;
+    const account = readAccounts().find(item => item.phone === accountInput || item.email === accountInput);
+    const passwordHash = account ? await hashPassword(password) : '';
+    const isRegisteredMatch = Boolean(account && account.passwordHash === passwordHash);
+
+    if (!isDemoMatch && !isRegisteredMatch) {
+      setSubmitting(false);
+      setError('账号或密码错误，请检查后重新输入。');
+      return;
+    }
+
+    window.sessionStorage.setItem('xingjian-current-user', accountInput);
     setMessage('登录成功，正在进入工作台…');
     window.setTimeout(() => window.location.assign('/workbench'), 500);
   }
@@ -42,16 +93,18 @@ export default function Home() {
             <h2>欢迎登录</h2>
             <p>登录你的企业招聘工作台</p>
           </div>
-          <form onSubmit={submitLogin}>
-            <label>手机号 / 企业邮箱<input required placeholder="请输入手机号或企业邮箱" /></label>
-            <label>密码<a href="#">忘记密码？</a><input required type="password" placeholder="请输入登录密码" onInvalid={event=>event.currentTarget.setCustomValidity('请输入密码')} onInput={event=>event.currentTarget.setCustomValidity('')} /></label>
+          <form noValidate onSubmit={submitLogin}>
+            <label>手机号 / 企业邮箱<input name="identifier" value={identifier} onChange={event=>setIdentifier(event.target.value)} autoComplete="username" inputMode="email" aria-invalid={Boolean(error)} placeholder="请输入手机号或企业邮箱" /></label>
+            <label>密码<a href="#">忘记密码？</a><input name="password" value={password} onChange={event=>setPassword(event.target.value)} type="password" autoComplete="current-password" aria-invalid={Boolean(error)} placeholder="请输入登录密码" /></label>
             <div className="form-meta"><label className="check"><input type="checkbox" /> 记住我</label></div>
-            <button className="primary-button" type="submit">登录工作台 <span>→</span></button>
+            {error && <div className="auth-error" role="alert" aria-live="assertive"><span>!</span><div><b>登录失败</b><p>{error}</p></div></div>}
+            <button className="primary-button" type="submit" disabled={submitting}>{submitting ? '正在验证…' : '登录工作台'} <span>→</span></button>
           </form>
-          {message && <p className="success-message">{message}</p>}
+          {message && <p className="success-message" role="status">{message}</p>}
+          <p className="demo-credentials"><span>测试账号</span> {DEMO_ACCOUNT.email} <i>/</i> {DEMO_ACCOUNT.password}</p>
           <div className="divider"><span>或</span></div>
           <button className="demo-button" onClick={() => window.location.assign('/workbench')}>直接查看演示工作台</button>
-          <p className="switch-auth">还没有企业账号？ <a href="/register">免费注册</a></p>
+          <p className="switch-auth">还没有账号？ <a href="/register">免费注册</a></p>
           <p className="terms">登录即代表你同意《用户协议》和《隐私政策》</p>
         </div>
       </section>
