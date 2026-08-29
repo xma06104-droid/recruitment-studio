@@ -14,7 +14,7 @@ export default function Home() {
   return (
     <main className="auth-shell">
       <section className="brand-panel">
-        <div className="brand-mark"><span>得</span> 得贤招聘官</div>
+        <div className="brand-mark"><span>星</span> 星鉴人才</div>
         <div className="brand-copy">
           <span className="eyebrow">AI RECRUITING COPILOT</span>
           <h1>让每一次招聘，<br />更快找到对的人。</h1>
@@ -22,7 +22,7 @@ export default function Home() {
           <div className="preview-window">
             <div className="preview-bar"><i /><i /><i /><b>招聘工作台</b></div>
             <div className="preview-body">
-              <div className="mini-sidebar"><strong>DX</strong><i /><i /><i /><i /></div>
+              <div className="mini-sidebar"><strong>XJ</strong><i /><i /><i /><i /></div>
               <div className="mini-content">
                 <span>上午好，招聘负责人</span>
                 <div className="mini-kpis"><b>12<small>招聘中职位</small></b><b>286<small>新增候选人</small></b><b>43<small>待处理</small></b></div>
@@ -31,11 +31,11 @@ export default function Home() {
             </div>
           </div>
         </div>
-        <p className="brand-footer">AI 得贤招聘官 · 企业智能招聘解决方案</p>
+        <p className="brand-footer">星鉴人才 · AI 人才决策与智能招聘平台</p>
       </section>
 
       <section className="auth-panel">
-        <div className="mobile-brand"><span>得</span> 得贤招聘官</div>
+        <div className="mobile-brand"><span>星</span> 星鉴人才</div>
         <div className="auth-card">
           <div className="auth-title">
             <span className="eyebrow purple">WELCOME BACK</span>

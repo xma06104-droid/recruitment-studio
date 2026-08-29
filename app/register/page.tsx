@@ -13,7 +13,7 @@ export default function RegisterPage() {
 
   return (
     <main className="register-shell">
-      <a className="register-brand" href="/"><span>得</span> 得贤招聘官</a>
+      <a className="register-brand" href="/"><span>星</span> 星鉴人才</a>
       <section className="register-side">
         <span className="eyebrow">START SMART RECRUITING</span>
         <h1>三分钟开启<br />智能招聘之旅</h1>
