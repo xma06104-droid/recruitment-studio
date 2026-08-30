@@ -40,9 +40,19 @@ export async function POST(request: NextRequest) {
   if (resource === 'job') {
     const title = text(payload.title, 100);
     const department = text(payload.department, 80);
+    const city = text(payload.city, 80) || '待设置';
     if (!title || !department) return invalid('请填写职位名称和所属部门。');
-    await db.prepare(`INSERT INTO jobs (id, owner_id, title, department, city, status, headcount, owner_name, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, '草稿', ?, ?, ?, ?)`).bind(id, account.id, title, department, text(payload.city, 80) || '待设置', integer(payload.headcount, 1, 999, 1), account.contact, now, now).run();
+    const duplicate = await db.prepare(`SELECT id FROM jobs
+      WHERE owner_id = ? AND title = ? COLLATE NOCASE AND department = ? COLLATE NOCASE AND city = ? COLLATE NOCASE
+      LIMIT 1`).bind(account.id, title, department, city).first<{id:string}>();
+    if (duplicate) return NextResponse.json({ ok:false, message:'相同职位已存在，不能重复创建。' }, { status:409 });
+    try {
+      await db.prepare(`INSERT INTO jobs (id, owner_id, title, department, city, status, headcount, owner_name, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, '草稿', ?, ?, ?, ?)`).bind(id, account.id, title, department, city, integer(payload.headcount, 1, 999, 1), account.contact, now, now).run();
+    } catch (error) {
+      if (String(error).includes('UNIQUE constraint')) return NextResponse.json({ ok:false, message:'相同职位已存在，不能重复创建。' }, { status:409 });
+      throw error;
+    }
   } else if (resource === 'candidate') {
     const name = text(payload.name, 60);
     const role = text(payload.role, 100);
