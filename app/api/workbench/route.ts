@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     if (jobId && !(await ownedRecord('jobs', jobId, account.id))) return invalid('所选职位不存在。');
     const skills = list(payload.skills).slice(0, 12);
     await db.prepare(`INSERT INTO candidates (id, owner_id, job_id, name, role, company, years, stage, source, skills_json, score, phone, email, city, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'AI 初筛', ?, ?, NULL, ?, ?, ?, ?, ?)`).bind(id, account.id, jobId, name, role, text(payload.company, 100), text(payload.years, 40), text(payload.source, 80), JSON.stringify(skills), text(payload.phone, 30), text(payload.email, 120), text(payload.city, 80), now, now).run();
+      VALUES (?, ?, ?, ?, ?, ?, ?, '待初筛', ?, ?, NULL, ?, ?, ?, ?, ?)`).bind(id, account.id, jobId, name, role, text(payload.company, 100), text(payload.years, 40), text(payload.source, 80), JSON.stringify(skills), text(payload.phone, 30), text(payload.email, 120), text(payload.city, 80), now, now).run();
   } else if (resource === 'interview') {
     const candidateId = text(payload.candidateId, 80);
     if (!candidateId || !(await ownedRecord('candidates', candidateId, account.id))) return invalid('请选择有效候选人。');
@@ -103,7 +103,7 @@ export async function PATCH(request: NextRequest) {
   const now = new Date().toISOString();
   const db = getDb();
   const configs: Record<string, { table: string; field: string; allowed: string[] }> = {
-    candidateStage: { table: 'candidates', field: 'stage', allowed: ['AI 初筛', '待沟通', '一面', '技术面', '二面', 'Offer', '已入职', '已淘汰'] },
+    candidateStage: { table: 'candidates', field: 'stage', allowed: ['待初筛', '待复核', '面试待安排', 'AI 初面待发起', '初筛淘汰', '淘汰人才库', '待沟通', '一面', '技术面', '二面', 'Offer', '已入职', '已淘汰'] },
     jobStatus: { table: 'jobs', field: 'status', allowed: ['草稿', '招聘中', '急聘', '已暂停', '已关闭'] },
     interviewStatus: { table: 'interviews', field: 'status', allowed: ['待确认', '已确认', '已完成', '已取消'] },
     offerStatus: { table: 'offers', field: 'status', allowed: ['待审批', '已发放', '已接受', '已拒绝', '已撤回'] },
