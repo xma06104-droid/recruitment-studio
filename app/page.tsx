@@ -32,11 +32,11 @@ export default function Home() {
     const accountInput = normalizeIdentifier(identifier);
 
     if (!accountInput) {
-      setError('请输入手机号或企业邮箱。');
+      setError('请输入手机号或邮箱。');
       return;
     }
     if (!isValidIdentifier(accountInput)) {
-      setError('请输入正确的中国大陆手机号或企业邮箱。');
+      setError('请输入正确的中国大陆手机号或邮箱。');
       return;
     }
     if (!password) {
@@ -94,7 +94,7 @@ export default function Home() {
             <p>登录你的企业招聘工作台</p>
           </div>
           <form noValidate onSubmit={submitLogin}>
-            <label>手机号 / 企业邮箱<input name="identifier" value={identifier} onChange={event=>setIdentifier(event.target.value)} autoComplete="username" inputMode="email" aria-invalid={Boolean(error)} placeholder="请输入手机号或企业邮箱" /></label>
+            <label>手机号 / 邮箱<input name="identifier" value={identifier} onChange={event=>setIdentifier(event.target.value)} autoComplete="username" inputMode="email" aria-invalid={Boolean(error)} placeholder="请输入手机号或邮箱" /></label>
             <label>密码<a href="#">忘记密码？</a><input name="password" value={password} onChange={event=>setPassword(event.target.value)} type="password" autoComplete="current-password" aria-invalid={Boolean(error)} placeholder="请输入登录密码" /></label>
             <div className="form-meta"><label className="check"><input type="checkbox" /> 记住我</label></div>
             {error && <div className="auth-error" role="alert" aria-live="assertive"><span>!</span><div><b>登录失败</b><p>{error}</p></div></div>}

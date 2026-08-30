@@ -38,17 +38,15 @@ export default function RegisterPage() {
     setError('');
     setNotice('');
     const data = new FormData(event.currentTarget);
-    const company = String(data.get('company') || '').trim();
     const contact = String(data.get('contact') || '').trim();
-    const teamSize = String(data.get('teamSize') || '');
     const normalizedPhone = phone.trim();
     const email = normalizeIdentifier(String(data.get('email') || ''));
     const code = String(data.get('code') || '').trim();
     const password = String(data.get('password') || '');
     const agreed = data.get('agreement') === 'on';
 
-    if (!company || !contact || !teamSize) {
-      setError('请完整填写企业名称、联系人姓名和团队规模。');
+    if (!contact) {
+      setError('请输入姓名。');
       return;
     }
     if (!isMainlandMobile(normalizedPhone)) {
@@ -56,7 +54,7 @@ export default function RegisterPage() {
       return;
     }
     if (!isValidEmail(email)) {
-      setError('企业邮箱格式不正确，请检查邮箱名称和域名。');
+      setError('邮箱格式不正确，请检查邮箱名称和域名。');
       return;
     }
     if (!/^\d{6}$/.test(code) || code !== '123456') {
@@ -74,12 +72,12 @@ export default function RegisterPage() {
 
     const accounts = readAccounts();
     if (accounts.some(account => account.phone === normalizedPhone || account.email === email)) {
-      setError('该手机号或企业邮箱已注册，请直接登录。');
+      setError('该手机号或邮箱已注册，请直接登录。');
       return;
     }
 
     const passwordHash = await hashPassword(password);
-    writeAccounts([...accounts, {company, contact, phone: normalizedPhone, email, passwordHash, createdAt: new Date().toISOString()}]);
+    writeAccounts([...accounts, {company: '', contact, phone: normalizedPhone, email, passwordHash, createdAt: new Date().toISOString()}]);
     window.localStorage.setItem(LAST_REGISTERED_KEY, email);
     setDone(true);
     setNotice('注册成功，正在返回登录页…');
@@ -101,17 +99,13 @@ export default function RegisterPage() {
       <section className="register-form-wrap">
         <div className="register-card">
           <div className="step-row"><span className="active">1</span><i /><span>2</span><i /><span>3</span></div>
-          <h2>创建企业账号</h2>
+          <h2>创建账号</h2>
           <p className="register-sub">免费体验完整招聘工作台，无需绑定支付方式</p>
           <form noValidate onSubmit={submit}>
-            <label>企业名称<input name="company" autoComplete="organization" placeholder="请输入营业执照上的企业名称" /></label>
-            <div className="form-grid">
-              <label>联系人姓名<input name="contact" autoComplete="name" placeholder="怎么称呼你" /></label>
-              <label>团队规模<select name="teamSize" defaultValue=""><option value="" disabled>请选择</option><option>1-20 人</option><option>21-100 人</option><option>101-500 人</option><option>500 人以上</option></select></label>
-            </div>
+            <label>姓名<input name="contact" autoComplete="name" placeholder="请输入姓名" /></label>
             <div className="form-grid">
               <label>手机号<input name="phone" value={phone} onChange={event=>setPhone(event.target.value.replace(/\D/g,'').slice(0,11))} type="tel" inputMode="numeric" autoComplete="tel" placeholder="请输入 11 位大陆手机号" /></label>
-              <label>企业邮箱<input name="email" type="email" inputMode="email" autoComplete="email" placeholder="name@company.com" /></label>
+              <label>邮箱<input name="email" type="email" inputMode="email" autoComplete="email" placeholder="name@example.com" /></label>
             </div>
             <div className="code-row"><label>验证码<input name="code" inputMode="numeric" maxLength={6} placeholder="6 位验证码" /></label><button type="button" disabled={sending} onClick={sendCode}>{sending ? '正在发送…' : '获取验证码'}</button></div>
             <label>设置密码<input name="password" type="password" autoComplete="new-password" placeholder="8–20 位，同时包含字母和数字" /><small className="field-hint">支持字母、数字和符号，不能包含空格</small></label>
