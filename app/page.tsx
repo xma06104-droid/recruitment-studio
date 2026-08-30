@@ -1,28 +1,23 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
-import {
-  DEMO_ACCOUNT,
-  LAST_REGISTERED_KEY,
-  hashPassword,
-  isValidIdentifier,
-  normalizeIdentifier,
-  readAccounts,
-} from './auth-rules';
+import { isValidIdentifier, normalizeIdentifier } from './auth-rules';
 
 export default function Home() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [remember, setRemember] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    const registered = window.localStorage.getItem(LAST_REGISTERED_KEY);
-    if (!registered) return;
-    setIdentifier(registered);
-    setMessage('注册成功，请使用刚刚设置的密码登录。');
-    window.localStorage.removeItem(LAST_REGISTERED_KEY);
+    const registered = new URLSearchParams(window.location.search).get('registered');
+    if (registered) {
+      setIdentifier(registered);
+      setMessage('注册成功，请使用刚刚设置的密码登录。');
+      window.history.replaceState(null, '', '/');
+    }
   }, []);
 
   async function submitLogin(event: FormEvent<HTMLFormElement>) {
@@ -45,19 +40,25 @@ export default function Home() {
     }
 
     setSubmitting(true);
-    const isDemoIdentifier = accountInput === DEMO_ACCOUNT.phone || accountInput === DEMO_ACCOUNT.email;
-    const isDemoMatch = isDemoIdentifier && password === DEMO_ACCOUNT.password;
-    const account = readAccounts().find(item => item.phone === accountInput || item.email === accountInput);
-    const passwordHash = account ? await hashPassword(password) : '';
-    const isRegisteredMatch = Boolean(account && account.passwordHash === passwordHash);
-
-    if (!isDemoMatch && !isRegisteredMatch) {
+    let response: Response;
+    try {
+      response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: accountInput, password, remember }),
+      });
+    } catch {
       setSubmitting(false);
-      setError('账号或密码错误，请检查后重新输入。');
+      setError('暂时无法连接账号服务，请稍后重试。');
+      return;
+    }
+    const result = await response.json().catch(() => ({})) as { message?: string };
+    if (!response.ok) {
+      setSubmitting(false);
+      setError(result.message || '账号或密码错误，请检查后重新输入。');
       return;
     }
 
-    window.sessionStorage.setItem('xingjian-current-user', accountInput);
     setMessage('登录成功，正在进入工作台…');
     window.setTimeout(() => window.location.assign('/workbench'), 500);
   }
@@ -76,7 +77,7 @@ export default function Home() {
               <div className="mini-sidebar"><strong>XJ</strong><i /><i /><i /><i /></div>
               <div className="mini-content">
                 <span>上午好，招聘负责人</span>
-                <div className="mini-kpis"><b>12<small>招聘中职位</small></b><b>286<small>新增候选人</small></b><b>43<small>待处理</small></b></div>
+                <div className="mini-kpis"><b>实时<small>职位进展</small></b><b>实时<small>候选人动态</small></b><b>实时<small>招聘待办</small></b></div>
                 <div className="mini-chart"><i /><i /><i /><i /><i /><i /><i /></div>
               </div>
             </div>
@@ -95,13 +96,11 @@ export default function Home() {
           <form noValidate onSubmit={submitLogin}>
             <label>手机号 / 邮箱<input name="identifier" value={identifier} onChange={event=>setIdentifier(event.target.value)} autoComplete="username" inputMode="email" aria-invalid={Boolean(error)} placeholder="请输入手机号或邮箱" /></label>
             <label>密码<a href="#">忘记密码？</a><input name="password" value={password} onChange={event=>setPassword(event.target.value)} type="password" autoComplete="current-password" aria-invalid={Boolean(error)} placeholder="请输入登录密码" /></label>
-            <div className="form-meta"><label className="check"><input type="checkbox" /> 记住我</label></div>
+            <div className="form-meta"><label className="check"><input type="checkbox" checked={remember} onChange={event=>setRemember(event.target.checked)} /> 记住我</label></div>
             {error && <div className="auth-error" role="alert" aria-live="assertive"><span>!</span><div><b>登录失败</b><p>{error}</p></div></div>}
             <button className="primary-button" type="submit" disabled={submitting}>{submitting ? '正在验证…' : '登录工作台'} <span>→</span></button>
           </form>
           {message && <p className="success-message" role="status">{message}</p>}
-          <div className="divider"><span>或</span></div>
-          <button className="demo-button" onClick={() => window.location.assign('/workbench')}>直接查看演示工作台</button>
           <p className="switch-auth">还没有账号？ <a href="/register">免费注册</a></p>
           <p className="terms">登录即代表你同意《用户协议》和《隐私政策》</p>
         </div>

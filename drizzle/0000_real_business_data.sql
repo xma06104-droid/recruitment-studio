@@ -1,0 +1,121 @@
+CREATE TABLE IF NOT EXISTS accounts (
+  id TEXT PRIMARY KEY,
+  contact TEXT NOT NULL,
+  phone TEXT NOT NULL UNIQUE,
+  email TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  token_hash TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS jobs (
+  id TEXT PRIMARY KEY,
+  owner_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  department TEXT NOT NULL,
+  city TEXT NOT NULL,
+  status TEXT NOT NULL,
+  headcount INTEGER NOT NULL DEFAULT 1,
+  owner_name TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (owner_id) REFERENCES accounts(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS candidates (
+  id TEXT PRIMARY KEY,
+  owner_id TEXT NOT NULL,
+  job_id TEXT,
+  name TEXT NOT NULL,
+  role TEXT NOT NULL,
+  company TEXT NOT NULL DEFAULT '',
+  years TEXT NOT NULL DEFAULT '',
+  stage TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT '',
+  skills_json TEXT NOT NULL DEFAULT '[]',
+  score INTEGER,
+  phone TEXT NOT NULL DEFAULT '',
+  email TEXT NOT NULL DEFAULT '',
+  city TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (owner_id) REFERENCES accounts(id) ON DELETE CASCADE,
+  FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS interviews (
+  id TEXT PRIMARY KEY,
+  owner_id TEXT NOT NULL,
+  candidate_id TEXT NOT NULL,
+  scheduled_at TEXT NOT NULL,
+  round TEXT NOT NULL,
+  mode TEXT NOT NULL,
+  interviewer TEXT NOT NULL,
+  status TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (owner_id) REFERENCES accounts(id) ON DELETE CASCADE,
+  FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS offers (
+  id TEXT PRIMARY KEY,
+  owner_id TEXT NOT NULL,
+  candidate_id TEXT NOT NULL,
+  job_title TEXT NOT NULL,
+  salary TEXT NOT NULL,
+  owner_name TEXT NOT NULL,
+  status TEXT NOT NULL,
+  deadline TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (owner_id) REFERENCES accounts(id) ON DELETE CASCADE,
+  FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS ai_questions (
+  id TEXT PRIMARY KEY,
+  owner_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  category TEXT NOT NULL,
+  question_type TEXT NOT NULL,
+  duration INTEGER NOT NULL,
+  competency TEXT NOT NULL,
+  follow_up INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (owner_id) REFERENCES accounts(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS ai_interviews (
+  id TEXT PRIMARY KEY,
+  owner_id TEXT NOT NULL,
+  candidate_id TEXT NOT NULL,
+  job_title TEXT NOT NULL,
+  status TEXT NOT NULL,
+  score INTEGER,
+  duration_seconds INTEGER,
+  summary TEXT NOT NULL DEFAULT '',
+  completed_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (owner_id) REFERENCES accounts(id) ON DELETE CASCADE,
+  FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_account_expiry ON sessions(account_id, expires_at);
+CREATE INDEX IF NOT EXISTS idx_jobs_owner_created ON jobs(owner_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_candidates_owner_created ON candidates(owner_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_candidates_owner_stage ON candidates(owner_id, stage);
+CREATE INDEX IF NOT EXISTS idx_interviews_owner_schedule ON interviews(owner_id, scheduled_at);
+CREATE INDEX IF NOT EXISTS idx_offers_owner_created ON offers(owner_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_ai_questions_owner_created ON ai_questions(owner_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_ai_interviews_owner_status ON ai_interviews(owner_id, status);
+PRAGMA optimize;

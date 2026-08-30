@@ -2,14 +2,10 @@
 
 import { FormEvent, useState } from 'react';
 import {
-  LAST_REGISTERED_KEY,
-  hashPassword,
   isMainlandMobile,
   isStrongPassword,
   isValidEmail,
   normalizeIdentifier,
-  readAccounts,
-  writeAccounts,
 } from '../auth-rules';
 
 export default function RegisterPage() {
@@ -17,21 +13,6 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [phone, setPhone] = useState('');
-  const [sending, setSending] = useState(false);
-
-  function sendCode() {
-    setError('');
-    setNotice('');
-    if (!isMainlandMobile(phone)) {
-      setError('请输入正确的中国大陆手机号后再获取验证码。');
-      return;
-    }
-    setSending(true);
-    window.setTimeout(() => {
-      setSending(false);
-      setNotice('验证码已发送。本演示环境请填写 123456。');
-    }, 500);
-  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -41,7 +22,6 @@ export default function RegisterPage() {
     const contact = String(data.get('contact') || '').trim();
     const normalizedPhone = phone.trim();
     const email = normalizeIdentifier(String(data.get('email') || ''));
-    const code = String(data.get('code') || '').trim();
     const password = String(data.get('password') || '');
     const agreed = data.get('agreement') === 'on';
 
@@ -57,10 +37,6 @@ export default function RegisterPage() {
       setError('邮箱格式不正确，请检查邮箱名称和域名。');
       return;
     }
-    if (!/^\d{6}$/.test(code) || code !== '123456') {
-      setError('验证码错误，请输入演示验证码 123456。');
-      return;
-    }
     if (!isStrongPassword(password)) {
       setError('密码需为 8–20 位，且同时包含字母和数字，不能包含空格。');
       return;
@@ -70,18 +46,27 @@ export default function RegisterPage() {
       return;
     }
 
-    const accounts = readAccounts();
-    if (accounts.some(account => account.phone === normalizedPhone || account.email === email)) {
-      setError('该手机号或邮箱已注册，请直接登录。');
+    setDone(true);
+    let response: Response;
+    try {
+      response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contact, phone: normalizedPhone, email, password }),
+      });
+    } catch {
+      setDone(false);
+      setError('暂时无法连接账号服务，请稍后重试。');
       return;
     }
-
-    const passwordHash = await hashPassword(password);
-    writeAccounts([...accounts, {company: '', contact, phone: normalizedPhone, email, passwordHash, createdAt: new Date().toISOString()}]);
-    window.localStorage.setItem(LAST_REGISTERED_KEY, email);
-    setDone(true);
-    setNotice('注册成功，正在返回登录页…');
-    window.setTimeout(() => window.location.assign('/'), 900);
+    const result = await response.json().catch(() => ({})) as { message?: string };
+    if (!response.ok) {
+      setDone(false);
+      setError(result.message || '注册失败，请稍后重试。');
+      return;
+    }
+    setNotice('账号已安全保存，正在返回登录页…');
+    window.setTimeout(() => window.location.assign(`/?registered=${encodeURIComponent(email)}`), 900);
   }
 
   return (
@@ -89,9 +74,9 @@ export default function RegisterPage() {
       <a className="register-brand" href="/"><span>星</span> 星鉴人才</a>
       <section className="register-side">
         <span className="eyebrow">START SMART RECRUITING</span>
-        <h1>三分钟开启<br />智能招聘之旅</h1>
+        <h1>开启真实数据驱动的<br />智能招聘之旅</h1>
         <ul className="benefit-list">
-          <li><b>01</b><div><strong>AI 智能初筛</strong><p>自动识别高匹配候选人，节省 70% 简历筛选时间</p></div></li>
+          <li><b>01</b><div><strong>AI 智能初筛</strong><p>基于实际候选人记录统一管理筛选结果</p></div></li>
           <li><b>02</b><div><strong>全渠道人才管理</strong><p>职位、简历、面试与 Offer 进度统一管理</p></div></li>
           <li><b>03</b><div><strong>数据驱动决策</strong><p>实时洞察招聘转化率与团队效能</p></div></li>
         </ul>
@@ -100,19 +85,18 @@ export default function RegisterPage() {
         <div className="register-card">
           <div className="step-row"><span className="active">1</span><i /><span>2</span><i /><span>3</span></div>
           <h2>创建账号</h2>
-          <p className="register-sub">免费体验完整招聘工作台，无需绑定支付方式</p>
+          <p className="register-sub">账号信息安全保存，业务数据将按账号独立管理</p>
           <form noValidate onSubmit={submit}>
             <label>姓名<input name="contact" autoComplete="name" placeholder="请输入姓名" /></label>
             <div className="form-grid">
               <label>手机号<input name="phone" value={phone} onChange={event=>setPhone(event.target.value.replace(/\D/g,'').slice(0,11))} type="tel" inputMode="numeric" autoComplete="tel" placeholder="请输入 11 位大陆手机号" /></label>
               <label>邮箱<input name="email" type="email" inputMode="email" autoComplete="email" placeholder="name@example.com" /></label>
             </div>
-            <div className="code-row"><label>验证码<input name="code" inputMode="numeric" maxLength={6} placeholder="6 位验证码" /></label><button type="button" disabled={sending} onClick={sendCode}>{sending ? '正在发送…' : '获取验证码'}</button></div>
             <label>设置密码<input name="password" type="password" autoComplete="new-password" placeholder="8–20 位，同时包含字母和数字" /><small className="field-hint">支持字母、数字和符号，不能包含空格</small></label>
             <label className="check register-check"><input name="agreement" type="checkbox" /> 我已阅读并同意《用户协议》和《隐私政策》</label>
             {error && <div className="auth-error register-error" role="alert" aria-live="assertive"><span>!</span><div><b>无法完成注册</b><p>{error}</p></div></div>}
             {notice && <p className="auth-notice" role="status">✓ {notice}</p>}
-            <button className="primary-button" type="submit" disabled={done}>{done ? '注册成功，正在返回登录页…' : '免费注册并进入工作台'} <span>→</span></button>
+            <button className="primary-button" type="submit" disabled={done}>{done ? '注册成功，正在返回登录页…' : '创建账号'} <span>→</span></button>
           </form>
           <p className="switch-auth">已有账号？ <a href="/">直接登录</a></p>
         </div>

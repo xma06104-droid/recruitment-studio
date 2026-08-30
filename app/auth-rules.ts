@@ -1,20 +1,3 @@
-export type StoredAccount = {
-  company: string;
-  contact: string;
-  phone: string;
-  email: string;
-  passwordHash: string;
-  createdAt: string;
-};
-
-export const ACCOUNT_STORAGE_KEY = 'xingjian-accounts-v1';
-export const LAST_REGISTERED_KEY = 'xingjian-last-registered';
-export const DEMO_ACCOUNT = {
-  phone: '13800138000',
-  email: 'demo@xingjian.ai',
-  password: 'Xj2026demo',
-};
-
 export function normalizeIdentifier(value: string) {
   return value.trim().toLowerCase();
 }
@@ -35,23 +18,4 @@ export function isValidIdentifier(value: string) {
 
 export function isStrongPassword(value: string) {
   return /^(?=.*[A-Za-z])(?=.*\d)[^\s]{8,20}$/.test(value);
-}
-
-export function readAccounts(): StoredAccount[] {
-  try {
-    const stored = window.localStorage.getItem(ACCOUNT_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
-  } catch {
-    return [];
-  }
-}
-
-export function writeAccounts(accounts: StoredAccount[]) {
-  window.localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(accounts));
-}
-
-export async function hashPassword(value: string) {
-  const data = new TextEncoder().encode(value);
-  const digest = await window.crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
 }
