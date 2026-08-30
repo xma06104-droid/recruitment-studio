@@ -91,7 +91,6 @@ export default function Home() {
           <div className="auth-title">
             <span className="eyebrow purple">WELCOME BACK</span>
             <h2>欢迎登录</h2>
-            <p>登录你的企业招聘工作台</p>
           </div>
           <form noValidate onSubmit={submitLogin}>
             <label>手机号 / 邮箱<input name="identifier" value={identifier} onChange={event=>setIdentifier(event.target.value)} autoComplete="username" inputMode="email" aria-invalid={Boolean(error)} placeholder="请输入手机号或邮箱" /></label>
@@ -101,7 +100,6 @@ export default function Home() {
             <button className="primary-button" type="submit" disabled={submitting}>{submitting ? '正在验证…' : '登录工作台'} <span>→</span></button>
           </form>
           {message && <p className="success-message" role="status">{message}</p>}
-          <p className="demo-credentials"><span>测试账号</span> {DEMO_ACCOUNT.email} <i>/</i> {DEMO_ACCOUNT.password}</p>
           <div className="divider"><span>或</span></div>
           <button className="demo-button" onClick={() => window.location.assign('/workbench')}>直接查看演示工作台</button>
           <p className="switch-auth">还没有账号？ <a href="/register">免费注册</a></p>

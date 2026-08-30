@@ -436,7 +436,6 @@ body{background:#edf3fb}
 .auth-card input[aria-invalid="true"]{border-color:rgba(239,92,113,.52)}
 .primary-button:disabled,.code-row button:disabled{cursor:not-allowed;opacity:.58;transform:none;box-shadow:none}
 .success-message,.auth-notice{margin:12px 0 0;padding:9px 11px;border:1px solid rgba(69,211,167,.18);border-radius:10px;color:#89e7c5;background:rgba(31,119,94,.13);text-align:left;font-size:9px;line-height:1.5}
-.demo-credentials{display:flex;align-items:center;justify-content:center;gap:7px;margin:12px 0 0;color:#718099;font-size:8px}.demo-credentials span{padding:3px 6px;border:1px solid rgba(80,210,255,.16);border-radius:6px;color:#6fdfff;background:rgba(51,131,185,.12)}.demo-credentials i{color:#42516a;font-style:normal}
 .field-hint{display:block;margin-top:7px;color:#66758c;font-size:8px;font-weight:500}.register-error{margin-top:2px}.auth-notice{margin:0 0 14px}
 .register-card{max-width:570px}.register-form-wrap{padding-top:68px;padding-bottom:40px}
-@media(max-width:760px){.demo-credentials{flex-wrap:wrap}.auth-error{padding:10px}.register-form-wrap{padding-top:22px}.register-card{max-width:100%}}
+@media(max-width:760px){.auth-error{padding:10px}.register-form-wrap{padding-top:22px}.register-card{max-width:100%}}
