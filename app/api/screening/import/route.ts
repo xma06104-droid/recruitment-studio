@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { accountFromRequest, ensureSchema, getDb, getResumeBucket } from '@/app/server/db';
+import { parseResumeText, stripResumeHtml } from '@/app/server/resume-parser';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const allowedExtensions = ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'webp', 'txt', 'html', 'htm'];
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest) {
   let rawText = field(form, 'rawText', 50_000);
   if (file && ['txt', 'html', 'htm'].includes(extension(file.name))) {
     const extracted = await file.text();
-    rawText = extension(file.name).startsWith('htm') ? stripHtml(extracted).slice(0, 50_000) : extracted.slice(0, 50_000);
+    rawText = extension(file.name).startsWith('htm') ? stripResumeHtml(extracted).slice(0, 50_000) : extracted.slice(0, 50_000);
   }
   const parsed = parseResumeText(rawText);
   const db = getDb();
@@ -42,11 +43,13 @@ export async function POST(request: NextRequest) {
   const school = field(form, 'school', 120) || parsed.school;
   const age = numberField(form, 'age', 16, 80) ?? parsed.age;
   const workYears = decimalField(form, 'workYears', 0, 60) ?? parsed.workYears;
-  const industry = field(form, 'industry', 100);
-  const expectedSalary = numberField(form, 'expectedSalary', 1, 1_000_000);
-  const stabilityMonths = numberField(form, 'stabilityMonths', 1, 600);
-  const workHistory = splitLines(field(form, 'workHistory', 10_000));
-  const projectHistory = splitLines(field(form, 'projectHistory', 10_000));
+  const industry = field(form, 'industry', 100) || parsed.industry;
+  const expectedSalary = numberField(form, 'expectedSalary', 1, 1_000_000) ?? parsed.expectedSalary;
+  const stabilityMonths = numberField(form, 'stabilityMonths', 1, 600) ?? parsed.stabilityMonths;
+  const suppliedWorkHistory = splitLines(field(form, 'workHistory', 10_000));
+  const suppliedProjectHistory = splitLines(field(form, 'projectHistory', 10_000));
+  const workHistory = suppliedWorkHistory.length ? suppliedWorkHistory : parsed.workHistory;
+  const projectHistory = suppliedProjectHistory.length ? suppliedProjectHistory : parsed.projectHistory;
   const city = field(form, 'city', 80) || parsed.city;
   const company = field(form, 'company', 100) || parsed.company;
   const fileKey = file ? `${account.id}/${candidateId}/${crypto.randomUUID()}-${safeFileName(file.name)}` : null;
@@ -118,23 +121,6 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ ok: true, candidateId, duplicate: Boolean(existing), parsingStatus }, { status: 201 });
 }
 
-function parseResumeText(value: string) {
-  const phone = value.match(/(?<!\d)1[3-9]\d{9}(?!\d)/)?.[0] || '';
-  const email = value.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0]?.toLowerCase() || '';
-  const name = value.match(/(?:姓名|姓\s*名)\s*[：:]\s*([\u4e00-\u9fa5·]{2,12})/)?.[1] || '';
-  const role = value.match(/(?:应聘岗位|求职意向|目标岗位)\s*[：:]\s*([^\n\r]{2,40})/)?.[1]?.trim() || '';
-  const education = ['博士', '硕士', '本科', '大专', '中专', '高中'].find(item => value.includes(item)) || '';
-  const school = value.match(/([\u4e00-\u9fa5]{2,30}(?:大学|学院))/)?.[1] || '';
-  const major = value.match(/(?:专业)\s*[：:]\s*([^\n\r]{2,30})/)?.[1]?.trim() || '';
-  const ageText = value.match(/(?:年龄)\s*[：:]\s*(\d{2})/)?.[1];
-  const yearsText = value.match(/(?:工作经验|工作年限)\s*[：:]?\s*(\d+(?:\.\d+)?)\s*年/)?.[1];
-  const city = value.match(/(?:所在城市|现居地|工作地点)\s*[：:]\s*([^\n\r]{2,20})/)?.[1]?.trim() || '';
-  const company = value.match(/(?:最近公司|当前公司)\s*[：:]\s*([^\n\r]{2,50})/)?.[1]?.trim() || '';
-  const skillText = value.match(/(?:技能|专业技能)\s*[：:]\s*([^\n\r]{2,200})/)?.[1] || '';
-  const certificateText = value.match(/(?:证书|资格证书)\s*[：:]\s*([^\n\r]{2,200})/)?.[1] || '';
-  return { phone, email, name, role, education, school, major, age: ageText ? Number(ageText) : null, workYears: yearsText ? Number(yearsText) : null, city, company, skills: splitList(skillText), certificates: splitList(certificateText) };
-}
-
 function field(form: FormData, key: string, max: number) { const value = form.get(key); return typeof value === 'string' ? value.trim().slice(0, max) : ''; }
 function numberField(form: FormData, key: string, min: number, max: number) { const value = field(form, key, 40); if (!value) return null; const parsed = Number.parseInt(value, 10); return Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : null; }
 function decimalField(form: FormData, key: string, min: number, max: number) { const value = field(form, key, 40); if (!value) return null; const parsed = Number(value); return Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : null; }
@@ -143,5 +129,4 @@ function splitLines(value: string) { return value.split(/\n+/).map(item => item.
 function mergeLists(a: string[], b: string[]) { return [...new Set([...a, ...b])]; }
 function extension(name: string) { return name.split('.').pop()?.toLowerCase() || ''; }
 function safeFileName(name: string) { return name.replace(/[^\w.\-\u4e00-\u9fa5]/g, '_').slice(-120); }
-function stripHtml(value: string) { return value.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim(); }
 function invalid(message: string) { return NextResponse.json({ ok: false, message }, { status: 400 }); }

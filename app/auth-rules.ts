@@ -13,7 +13,11 @@ export function isValidEmail(value: string) {
 }
 
 export function isValidIdentifier(value: string) {
-  return isMainlandMobile(value) || isValidEmail(value);
+  return isTestAccountIdentifier(value) || isMainlandMobile(value) || isValidEmail(value);
+}
+
+export function isTestAccountIdentifier(value: string) {
+  return /^1000000000[1-5]$/.test(value.trim());
 }
 
 export function isStrongPassword(value: string) {

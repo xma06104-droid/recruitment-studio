@@ -95,7 +95,7 @@ export default function Home() {
           </div>
           <form noValidate onSubmit={submitLogin}>
             <label>手机号 / 邮箱<input name="identifier" value={identifier} onChange={event=>setIdentifier(event.target.value)} autoComplete="username" inputMode="email" aria-invalid={Boolean(error)} placeholder="请输入手机号或邮箱" /></label>
-            <label>密码<a href="#">忘记密码？</a><input name="password" value={password} onChange={event=>setPassword(event.target.value)} type="password" autoComplete="current-password" aria-invalid={Boolean(error)} placeholder="请输入登录密码" /></label>
+            <label>密码<a href="/forgot-password">忘记密码？</a><input name="password" value={password} onChange={event=>setPassword(event.target.value)} type="password" autoComplete="current-password" aria-invalid={Boolean(error)} placeholder="请输入登录密码" /></label>
             <div className="form-meta"><label className="check"><input type="checkbox" checked={remember} onChange={event=>setRemember(event.target.checked)} /> 记住我</label></div>
             {error && <div className="auth-error" role="alert" aria-live="assertive"><span>!</span><div><b>登录失败</b><p>{error}</p></div></div>}
             <button className="primary-button" type="submit" disabled={submitting}>{submitting ? '正在验证…' : '登录工作台'} <span>→</span></button>

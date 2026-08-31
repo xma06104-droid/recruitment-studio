@@ -71,17 +71,21 @@ export default function RegisterPage() {
 
   return (
     <main className="register-shell">
-      <a className="register-brand" href="/"><span>星</span> 星鉴人才</a>
       <section className="register-side">
-        <span className="eyebrow">START SMART RECRUITING</span>
-        <h1>开启真实数据驱动的<br />智能招聘之旅</h1>
-        <ul className="benefit-list">
-          <li><b>01</b><div><strong>AI 智能初筛</strong><p>基于实际候选人记录统一管理筛选结果</p></div></li>
-          <li><b>02</b><div><strong>全渠道人才管理</strong><p>职位、简历、面试与 Offer 进度统一管理</p></div></li>
-          <li><b>03</b><div><strong>数据驱动决策</strong><p>实时洞察招聘转化率与团队效能</p></div></li>
-        </ul>
+        <a className="register-brand" href="/"><span>星</span> 星鉴人才</a>
+        <div className="register-intro">
+          <span className="eyebrow">START SMART RECRUITING</span>
+          <h1>开启真实数据驱动的<br />智能招聘之旅</h1>
+          <ul className="benefit-list">
+            <li><b>01</b><div><strong>AI 智能初筛</strong><p>基于实际候选人记录统一管理筛选结果</p></div></li>
+            <li><b>02</b><div><strong>全渠道人才管理</strong><p>职位、简历、面试与 Offer 进度统一管理</p></div></li>
+            <li><b>03</b><div><strong>数据驱动决策</strong><p>实时洞察招聘转化率与团队效能</p></div></li>
+          </ul>
+        </div>
+        <p className="register-side-footer">星鉴人才 · AI 人才决策与智能招聘平台</p>
       </section>
       <section className="register-form-wrap">
+        <a className="mobile-brand register-mobile-brand" href="/"><span>星</span> 星鉴人才</a>
         <div className="register-card">
           <div className="step-row"><span className="active">1</span><i /><span>2</span><i /><span>3</span></div>
           <h2>创建账号</h2>
@@ -89,7 +93,7 @@ export default function RegisterPage() {
           <form noValidate onSubmit={submit}>
             <label>姓名<input name="contact" autoComplete="name" placeholder="请输入姓名" /></label>
             <div className="form-grid">
-              <label>手机号<input name="phone" value={phone} onChange={event=>setPhone(event.target.value.replace(/\D/g,'').slice(0,11))} type="tel" inputMode="numeric" autoComplete="tel" placeholder="请输入 11 位大陆手机号" /></label>
+              <label>手机号<input name="phone" value={phone} onChange={event=>setPhone(event.target.value.replace(/\D/g,'').slice(0,11))} type="tel" inputMode="numeric" autoComplete="tel" placeholder="请输入手机号" /></label>
               <label>邮箱<input name="email" type="email" inputMode="email" autoComplete="email" placeholder="name@example.com" /></label>
             </div>
             <label>设置密码<input name="password" type="password" autoComplete="new-password" placeholder="8–20 位，同时包含字母和数字" /><small className="field-hint">支持字母、数字和符号，不能包含空格</small></label>
