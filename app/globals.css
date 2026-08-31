@@ -664,3 +664,8 @@ button,input,select,textarea{font-family:inherit}
 /* Resume parsing feedback */
 .rs-import-modal details{position:relative}.rs-parse-button{width:100%;height:40px;margin-top:10px;border:1px solid rgba(82,105,168,.15);border-radius:11px;color:#5e73b2;background:#eef2f8;font-size:10px;font-weight:700;cursor:pointer}.rs-parse-button:hover{border-color:rgba(82,105,168,.28);background:#e9eef7}.rs-parse-button:disabled{cursor:not-allowed;opacity:.55}
 .rs-import-feedback{display:flex;align-items:flex-start;gap:12px;margin:14px 0;padding:13px 15px;border:1px solid;border-radius:13px;font-size:10px;line-height:1.65}.rs-import-feedback b{flex:0 0 auto}.rs-import-feedback.error{border-color:rgba(222,91,112,.22);color:#a94255;background:#fff3f5}.rs-import-feedback.notice{border-color:rgba(75,157,132,.2);color:#397d69;background:#eff9f5}.rs-import-feedback span{color:inherit}
+
+/* Position table readability */
+.manage-row select{width:98px;min-width:98px;height:32px;padding:0 9px;border-radius:9px;font-size:12px;font-weight:600}
+.manage-row small{margin-top:8px;font-size:11px;line-height:1.45}.manage-row button{font-size:12px;font-weight:650}
+.talent-tabs button{min-width:max-content;font-size:12px;font-weight:600}.talent-tabs b{min-width:21px;height:21px;margin-left:6px;font-size:9px}.real-empty h3{font-size:16px!important}.real-empty p{max-width:520px;font-size:12px!important;line-height:1.8}.real-empty>button{height:38px;padding:0 16px;font-size:11px;font-weight:650}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { accountFromRequest, ensureSchema, getDb, getResumeBucket } from '@/app/server/db';
-import { parseResumeText, stripResumeHtml } from '@/app/server/resume-parser';
+import { extractResumeFileText, ResumeFileExtraction } from '@/app/server/resume-file-text';
+import { matchResumeJob, parseResumeText, ResumeJob } from '@/app/server/resume-parser';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const allowedExtensions = ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'webp', 'txt', 'html', 'htm'];
@@ -17,19 +18,27 @@ export async function POST(request: NextRequest) {
   if (file && !allowedExtensions.includes(extension(file.name))) return invalid('仅支持 PDF、Word、图片、TXT 和 HTML 简历。');
 
   let rawText = field(form, 'rawText', 50_000);
-  if (file && ['txt', 'html', 'htm'].includes(extension(file.name))) {
-    const extracted = await file.text();
-    rawText = extension(file.name).startsWith('htm') ? stripResumeHtml(extracted).slice(0, 50_000) : extracted.slice(0, 50_000);
+  let extraction: ResumeFileExtraction | null = null;
+  if (file) {
+    extraction = await extractResumeFileText(file);
+    if (extraction.text) rawText = extraction.text;
   }
   const parsed = parseResumeText(rawText);
   const db = getDb();
-  const jobId = field(form, 'jobId', 80) || null;
-  const job = jobId ? await db.prepare('SELECT id, title FROM jobs WHERE id = ? AND owner_id = ?').bind(jobId, account.id).first<{ id: string; title: string }>() : null;
+  let jobId = field(form, 'jobId', 80) || null;
+  let job = jobId ? await db.prepare('SELECT id, title FROM jobs WHERE id = ? AND owner_id = ?').bind(jobId, account.id).first<ResumeJob>() : null;
   if (jobId && !job) return invalid('关联职位不存在。');
+  let matchedJob = null;
+  if (!jobId) {
+    const jobRows = await db.prepare('SELECT id, title FROM jobs WHERE owner_id = ? ORDER BY updated_at DESC').bind(account.id).all<ResumeJob>();
+    matchedJob = matchResumeJob(parsed.role, rawText, jobRows.results || []);
+    if (matchedJob) { jobId = matchedJob.id; job = matchedJob; }
+  }
   const name = field(form, 'name', 60) || parsed.name;
   const role = field(form, 'role', 100) || job?.title || parsed.role;
   const phone = field(form, 'phone', 30) || parsed.phone;
   const email = field(form, 'email', 120) || parsed.email;
+  if (file && extraction && !extraction.text && !rawText && (!name || !role)) return invalid(extraction.message);
   if (!name || !role) return invalid('解析未能识别姓名或应聘职位，请补充后再入库。');
   const channel = field(form, 'channel', 80) || '手动上传';
   const now = new Date().toISOString();
@@ -53,7 +62,7 @@ export async function POST(request: NextRequest) {
   const city = field(form, 'city', 80) || parsed.city;
   const company = field(form, 'company', 100) || parsed.company;
   const fileKey = file ? `${account.id}/${candidateId}/${crypto.randomUUID()}-${safeFileName(file.name)}` : null;
-  const parsingStatus = file && !['txt', 'html', 'htm'].includes(extension(file.name)) ? '解析待复核' : '结构化完成';
+  const parsingStatus = file && extraction?.status !== 'extracted' && !rawText ? '解析待复核' : '结构化完成';
 
   if (file && fileKey) {
     await getResumeBucket().put(fileKey, await file.arrayBuffer(), {
@@ -118,7 +127,7 @@ export async function POST(request: NextRequest) {
     ),
   ]);
 
-  return NextResponse.json({ ok: true, candidateId, duplicate: Boolean(existing), parsingStatus }, { status: 201 });
+  return NextResponse.json({ ok: true, candidateId, duplicate: Boolean(existing), parsingStatus, matchedJob }, { status: 201 });
 }
 
 function field(form: FormData, key: string, max: number) { const value = form.get(key); return typeof value === 'string' ? value.trim().slice(0, max) : ''; }
