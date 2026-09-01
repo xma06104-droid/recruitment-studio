@@ -887,3 +887,10 @@ select{color-scheme:dark}
 .rs-detail .rs-history article>b{font-size:14px}
 .rs-detail .rs-history article p{font-size:13px;line-height:1.8}
 .rs-detail .rs-history article i{font-size:11px}
+
+/* Rule guidance typography follows the main page scale */
+.rs-rule-help>span{font-size:12px}
+.rs-rule-help h3{font-size:18px}
+.rs-rule-help li{padding-bottom:26px}
+.rs-rule-help li b{font-size:14px}
+.rs-rule-help li p{margin-top:8px;font-size:13px;line-height:1.75}
