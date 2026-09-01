@@ -895,3 +895,18 @@ select{color-scheme:dark}
 .rs-rule-help li b{font-size:14px}
 .rs-rule-help li p{margin-top:8px;font-size:13px;line-height:1.75}
 .rs-rule-form fieldset legend{padding:0 10px;color:#9fc8dd;font-size:15px;font-weight:800}
+
+/* Screening log typography follows the main page scale */
+.rs-log-card>header>span{font-size:14px;font-weight:650}
+.rs-log-card header p{font-size:13px}
+.rs-log-head{height:48px;font-size:13px;font-weight:700}
+.rs-log-row{min-height:68px;font-size:14px}
+.rs-log-row>span small{font-size:11px}
+.rs-log-row em{font-size:12px}
+.rs-log-row p{font-size:14px;line-height:1.65}
+
+/* Candidate interview score uses the drawer's readable type scale */
+.candidate-profile>em{min-width:82px;color:#5fd7b0;font-size:16px;text-align:center}
+.candidate-profile>em b{display:block;font-size:30px;line-height:1}
+.candidate-profile>em small{margin-top:7px;color:#9eacbf;font-size:12px}
+.real-empty h3{color:#fff}
