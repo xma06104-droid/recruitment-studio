@@ -894,3 +894,4 @@ select{color-scheme:dark}
 .rs-rule-help li{padding-bottom:26px}
 .rs-rule-help li b{font-size:14px}
 .rs-rule-help li p{margin-top:8px;font-size:13px;line-height:1.75}
+.rs-rule-form fieldset legend{padding:0 10px;color:#9fc8dd;font-size:15px;font-weight:800}
