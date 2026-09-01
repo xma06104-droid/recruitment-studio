@@ -910,3 +910,20 @@ select{color-scheme:dark}
 .candidate-profile>em b{display:block;font-size:30px;line-height:1}
 .candidate-profile>em small{margin-top:7px;color:#9eacbf;font-size:12px}
 .real-empty h3{color:#fff}
+
+/* Review footer uses the same readable scale as the detail form */
+.rs-review-form footer{margin-top:10px}
+.rs-review-form footer small{font-size:13px}
+.rs-review-form footer button{height:44px;padding:0 20px;border-radius:11px;font-size:14px;font-weight:750}
+
+/* AI interview list stays dark in every interaction state */
+.flow-list-title{border-bottom:1px solid rgba(162,181,211,.09);background:#0e1829}
+.flow-list-title h3{color:#f4f8ff;font-size:16px}
+.flow-list-title .new-job{height:42px;padding:0 16px;font-size:13px}
+.flow-person-row{color:#c7d1df;background:#0f1929;transition:background-color .18s ease,box-shadow .18s ease}
+.flow-person-row:hover,.flow-person-row:focus-within,.flow-person-row.active,.flow-person-row.selected{background:linear-gradient(90deg,rgba(30,183,211,.16),rgba(34,102,181,.1));box-shadow:inset 4px 0 0 #43cfe7}
+
+/* AI question library uses the main page type scale */
+.ai-library-toolbar button{font-size:13px;font-weight:700}
+.ai-library-toolbar>div span{color:#aab7c9;font-size:13px;font-weight:650}
+.ai-question-head{font-size:13px;font-weight:700}
