@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { accountFromRequest, getDb } from '@/app/server/db';
+import { accountFromRequest } from '@/app/server/db';
 import { extractResumeFileText } from '@/app/server/resume-file-text';
-import { matchResumeJob, parseResumeText, ResumeJob } from '@/app/server/resume-parser';
+import { getResumeJobs } from '@/app/server/resume-jobs';
+import { matchResumeJob, parseResumeText, scoreResumeForJob } from '@/app/server/resume-parser';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const allowedExtensions = ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'webp', 'txt', 'html', 'htm'];
@@ -25,12 +26,20 @@ export async function POST(request: NextRequest) {
   }
   if (!rawText) return invalid('请选择简历文件，或粘贴需要解析的简历原文。');
 
-  const parsed = parseResumeText(rawText);
-  const recognized = Object.entries(parsed).filter(([, value]) => Array.isArray(value) ? value.length > 0 : value !== '' && value !== null).length;
-  if (!recognized) return invalid('未能从简历中识别有效信息，请检查文本内容后重试。');
-  const jobRows = await getDb().prepare('SELECT id, title FROM jobs WHERE owner_id = ? ORDER BY updated_at DESC').bind(account.id).all<ResumeJob>();
-  const suggestedJob = matchResumeJob(parsed.role, rawText, jobRows.results || []);
-  return NextResponse.json({ ok: true, parsed, recognized, suggestedJob });
+  let parsed = parseResumeText(rawText);
+  const initialRecognized = recognizedCount(parsed);
+  if (!initialRecognized) return invalid('未能从简历中识别有效信息，请检查文本内容后重试。');
+
+  const jobs = await getResumeJobs(account.id);
+  const selectedJobId = field(form, 'jobId', 80);
+  const selectedJob = selectedJobId ? jobs.find(job => job.id === selectedJobId) : null;
+  if (selectedJobId && !selectedJob) return invalid('所选关联岗位不存在，请刷新后重试。');
+  const suggestedJob = selectedJob
+    ? { ...selectedJob, confidence: 100, reason: '已选择关联岗位' }
+    : matchResumeJob(parsed.role, rawText, jobs);
+  if (!parsed.role && suggestedJob) parsed = { ...parsed, role: suggestedJob.title };
+  const match = suggestedJob ? scoreResumeForJob(parsed, rawText, suggestedJob) : null;
+  return NextResponse.json({ ok: true, parsed, recognized: recognizedCount(parsed), suggestedJob, match });
 }
 
 function field(form: FormData, key: string, max: number) {
@@ -39,3 +48,7 @@ function field(form: FormData, key: string, max: number) {
 }
 function extension(name: string) { return name.split('.').pop()?.toLowerCase() || ''; }
 function invalid(message: string) { return NextResponse.json({ ok: false, message }, { status: 400 }); }
+
+function recognizedCount(parsed: object) {
+  return Object.values(parsed).filter(value => Array.isArray(value) ? value.length > 0 : value !== '' && value !== null).length;
+}

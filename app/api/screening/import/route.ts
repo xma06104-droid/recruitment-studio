@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { accountFromRequest, ensureSchema, getDb, getResumeBucket } from '@/app/server/db';
 import { extractResumeFileText, ResumeFileExtraction } from '@/app/server/resume-file-text';
-import { matchResumeJob, parseResumeText, ResumeJob } from '@/app/server/resume-parser';
+import { getResumeJobs } from '@/app/server/resume-jobs';
+import { matchResumeJob, parseResumeText, ParsedResume, scoreResumeForJob } from '@/app/server/resume-parser';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const allowedExtensions = ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'webp', 'txt', 'html', 'htm'];
@@ -25,13 +26,13 @@ export async function POST(request: NextRequest) {
   }
   const parsed = parseResumeText(rawText);
   const db = getDb();
+  const jobs = await getResumeJobs(account.id);
   let jobId = field(form, 'jobId', 80) || null;
-  let job = jobId ? await db.prepare('SELECT id, title FROM jobs WHERE id = ? AND owner_id = ?').bind(jobId, account.id).first<ResumeJob>() : null;
+  let job = jobId ? jobs.find(item => item.id === jobId) || null : null;
   if (jobId && !job) return invalid('关联职位不存在。');
   let matchedJob = null;
   if (!jobId) {
-    const jobRows = await db.prepare('SELECT id, title FROM jobs WHERE owner_id = ? ORDER BY updated_at DESC').bind(account.id).all<ResumeJob>();
-    matchedJob = matchResumeJob(parsed.role, rawText, jobRows.results || []);
+    matchedJob = matchResumeJob(parsed.role, rawText, jobs);
     if (matchedJob) { jobId = matchedJob.id; job = matchedJob; }
   }
   const name = field(form, 'name', 60) || parsed.name;
@@ -61,6 +62,11 @@ export async function POST(request: NextRequest) {
   const projectHistory = suppliedProjectHistory.length ? suppliedProjectHistory : parsed.projectHistory;
   const city = field(form, 'city', 80) || parsed.city;
   const company = field(form, 'company', 100) || parsed.company;
+  const scoredResume: ParsedResume = {
+    ...parsed, name, role, phone, email, education, major, school, age, workYears, stabilityMonths,
+    city, company, industry, expectedSalary, skills, certificates, workHistory, projectHistory,
+  };
+  const match = job ? scoreResumeForJob(scoredResume, rawText, job) : null;
   const fileKey = file ? `${account.id}/${candidateId}/${crypto.randomUUID()}-${safeFileName(file.name)}` : null;
   const parsingStatus = file && extraction?.status !== 'extracted' && !rawText ? '解析待复核' : '结构化完成';
 
@@ -74,18 +80,18 @@ export async function POST(request: NextRequest) {
   if (!existing) {
     await db.prepare(`INSERT INTO candidates (
       id, owner_id, job_id, name, role, company, years, stage, source, skills_json, score, phone, email, city, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, '待初筛', ?, ?, NULL, ?, ?, ?, ?, ?)`).bind(
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, '待初筛', ?, ?, ?, ?, ?, ?, ?, ?)`).bind(
       candidateId, account.id, jobId, name, role, company, workYears === null ? '' : `${workYears} 年`, channel,
-      JSON.stringify(skills), phone, email, city, now, now,
+      JSON.stringify(skills), match?.score ?? null, phone, email, city, now, now,
     ).run();
   } else {
     await db.prepare(`UPDATE candidates SET job_id = COALESCE(?, job_id), role = CASE WHEN ? <> '' THEN ? ELSE role END,
       company = CASE WHEN ? <> '' THEN ? ELSE company END, years = CASE WHEN ? <> '' THEN ? ELSE years END,
-      source = ?, skills_json = CASE WHEN ? <> '[]' THEN ? ELSE skills_json END,
+      source = ?, skills_json = CASE WHEN ? <> '[]' THEN ? ELSE skills_json END, score = COALESCE(?, score),
       phone = CASE WHEN ? <> '' THEN ? ELSE phone END, email = CASE WHEN ? <> '' THEN ? ELSE email END,
       city = CASE WHEN ? <> '' THEN ? ELSE city END, updated_at = ? WHERE id = ? AND owner_id = ?`).bind(
       jobId, role, role, company, company, workYears === null ? '' : `${workYears} 年`, workYears === null ? '' : `${workYears} 年`,
-      channel, JSON.stringify(skills), JSON.stringify(skills), phone, phone, email, email, city, city, now, candidateId, account.id,
+      channel, JSON.stringify(skills), JSON.stringify(skills), match?.score ?? null, phone, phone, email, email, city, city, now, candidateId, account.id,
     ).run();
   }
 
@@ -93,8 +99,9 @@ export async function POST(request: NextRequest) {
     db.prepare(`INSERT INTO resume_profiles (
       candidate_id, owner_id, education, major, school, age, gender, industry, expected_salary, work_years, stability_months,
       work_history_json, project_history_json, certificates_json, highlights_json, risks_json, raw_text, parsing_status,
-      file_key, file_name, file_type, file_size, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', '[]', ?, ?, ?, ?, ?, ?, ?, ?)
+      file_key, file_name, file_type, file_size, keyword_score, experience_score, education_score, stability_score,
+      match_score, match_level, screened_at, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(candidate_id) DO UPDATE SET
       education = CASE WHEN excluded.education <> '' THEN excluded.education ELSE resume_profiles.education END,
       major = CASE WHEN excluded.major <> '' THEN excluded.major ELSE resume_profiles.major END,
@@ -107,27 +114,41 @@ export async function POST(request: NextRequest) {
       work_history_json = CASE WHEN excluded.work_history_json <> '[]' THEN excluded.work_history_json ELSE resume_profiles.work_history_json END,
       project_history_json = CASE WHEN excluded.project_history_json <> '[]' THEN excluded.project_history_json ELSE resume_profiles.project_history_json END,
       certificates_json = CASE WHEN excluded.certificates_json <> '[]' THEN excluded.certificates_json ELSE resume_profiles.certificates_json END,
+      highlights_json = CASE WHEN excluded.highlights_json <> '[]' THEN excluded.highlights_json ELSE resume_profiles.highlights_json END,
+      risks_json = CASE WHEN excluded.risks_json <> '[]' THEN excluded.risks_json ELSE resume_profiles.risks_json END,
       raw_text = CASE WHEN excluded.raw_text <> '' THEN excluded.raw_text ELSE resume_profiles.raw_text END,
       parsing_status = excluded.parsing_status,
       file_key = COALESCE(excluded.file_key, resume_profiles.file_key),
       file_name = CASE WHEN excluded.file_name <> '' THEN excluded.file_name ELSE resume_profiles.file_name END,
       file_type = CASE WHEN excluded.file_type <> '' THEN excluded.file_type ELSE resume_profiles.file_type END,
       file_size = CASE WHEN excluded.file_size > 0 THEN excluded.file_size ELSE resume_profiles.file_size END,
+      keyword_score = COALESCE(excluded.keyword_score, resume_profiles.keyword_score),
+      experience_score = COALESCE(excluded.experience_score, resume_profiles.experience_score),
+      education_score = COALESCE(excluded.education_score, resume_profiles.education_score),
+      stability_score = COALESCE(excluded.stability_score, resume_profiles.stability_score),
+      match_score = COALESCE(excluded.match_score, resume_profiles.match_score),
+      match_level = CASE WHEN excluded.match_level <> '' THEN excluded.match_level ELSE resume_profiles.match_level END,
+      screened_at = COALESCE(excluded.screened_at, resume_profiles.screened_at),
       updated_at = excluded.updated_at`).bind(
       candidateId, account.id, education, major, school, age, field(form, 'gender', 20), industry, expectedSalary, workYears, stabilityMonths,
-      JSON.stringify(workHistory), JSON.stringify(projectHistory), JSON.stringify(certificates), rawText, parsingStatus,
-      fileKey, file?.name || '', file?.type || '', file?.size || 0, now, now,
+      JSON.stringify(workHistory), JSON.stringify(projectHistory), JSON.stringify(certificates), JSON.stringify(match?.highlights || []),
+      JSON.stringify(match?.risks || []), rawText, parsingStatus, fileKey, file?.name || '', file?.type || '', file?.size || 0,
+      match?.keywordScore ?? null, match?.experienceScore ?? null, match?.educationScore ?? null, match?.stabilityScore ?? null,
+      match?.score ?? null, match?.level || '', null, now, now,
     ),
     db.prepare(`INSERT INTO resume_applications (id, owner_id, candidate_id, job_id, channel, applied_at, status, created_at)
       VALUES (?, ?, ?, ?, ?, ?, '待初筛', ?)`).bind(crypto.randomUUID(), account.id, candidateId, jobId, channel, now, now),
     db.prepare(`INSERT INTO screening_logs (id, owner_id, candidate_id, job_id, operator_name, action, detail, created_at)
       VALUES (?, ?, ?, ?, ?, '简历入库', ?, ?)`).bind(
       crypto.randomUUID(), account.id, candidateId, jobId, account.contact,
-      existing ? `识别重复投递并合并，来源：${channel}` : `新简历完成结构化入库，来源：${channel}`, now,
+      `${existing ? '识别重复投递并合并' : '新简历完成结构化入库'}，来源：${channel}${match ? `；${job?.title}匹配度 ${match.score} 分（${match.level}）` : ''}`, now,
     ),
   ]);
 
-  return NextResponse.json({ ok: true, candidateId, duplicate: Boolean(existing), parsingStatus, matchedJob }, { status: 201 });
+  return NextResponse.json({
+    ok: true, candidateId, duplicate: Boolean(existing), parsingStatus,
+    matchedJob: matchedJob || (job ? { ...job, confidence: 100, reason: '已选择关联岗位' } : null), match,
+  }, { status: 201 });
 }
 
 function field(form: FormData, key: string, max: number) { const value = form.get(key); return typeof value === 'string' ? value.trim().slice(0, max) : ''; }
