@@ -929,8 +929,8 @@ select{color-scheme:dark}
 .ai-question-head{font-size:13px;font-weight:700}
 
 /* Interactive dark rows never flash back to a light surface */
-.ai-question-row{color:#b5c0d0;background:#0f1929;transition:background-color .18s ease,box-shadow .18s ease}
-.ai-question-row:hover,.ai-question-row:focus-within,.ai-question-row.selected{background:linear-gradient(90deg,rgba(30,183,211,.15),rgba(34,102,181,.09));box-shadow:inset 4px 0 0 #43cfe7}
+.ai-question-row{color:#b5c0d0;background:#0f1929;outline:0;-webkit-tap-highlight-color:transparent;transition:background-color .18s ease,box-shadow .18s ease}
+.ai-question-row:hover,.ai-question-row:active,.ai-question-row:focus,.ai-question-row:focus-visible,.ai-question-row:focus-within,.ai-question-row.selected{background:linear-gradient(90deg,rgba(30,183,211,.15),rgba(34,102,181,.09));box-shadow:inset 4px 0 0 #43cfe7}
 .ai-question-row>div:last-child button{height:32px;padding:0 10px;border-color:rgba(162,181,211,.13);color:#b8c8d9;background:#162238;font-size:11px;font-weight:650}
 .ai-question-row>div:last-child button:hover{color:#fff;background:#1b2b46}
 .manage-row{transition:background-color .18s ease,box-shadow .18s ease}
