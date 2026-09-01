@@ -217,9 +217,10 @@ function labeledValue(lines: string[], labels: string[], maxLength: number) {
   const nextLabelPattern = fieldLabels.map(escapeRegExp).join('|');
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
-    const exact = line.match(new RegExp(`^(?:${pattern})\\s*[：:|｜-]?\\s*(.*)$`, 'i'));
-    if (!exact) continue;
-    let result = exact[1].trim();
+    const inline = line.match(new RegExp(`^(?:${pattern})(?:\\s*[：:|｜-]\\s*|\\s+)(.+)$`, 'i'));
+    const standalone = new RegExp(`^(?:${pattern})$`, 'i').test(line);
+    if (!inline && !standalone) continue;
+    let result = inline?.[1]?.trim() || '';
     if (!result && lines[index + 1]) result = lines[index + 1].trim();
     result = result.split(new RegExp(`\\s+(?=(?:${nextLabelPattern})\\s*[：:|｜-]?)`, 'i'))[0];
     return cleanField(result).slice(0, maxLength);
@@ -233,8 +234,21 @@ function cleanName(value: string) {
 }
 
 function inferName(lines: string[]) {
-  const blocked = /简历|求职|应聘|职位|岗位|工程师|经理|主管|总监|专员|顾问|学校|大学|学院|公司/;
-  return lines.slice(0, 8).map(line => line.replace(/个人简历|RESUME/gi, '').trim()).find(line => /^[\u4e00-\u9fa5·]{2,4}$/.test(line) && !blocked.test(line)) || '';
+  const blocked = /简历|求职|应聘|职位|岗位|工程师|经理|主管|总监|专员|顾问|学校|大学|学院|公司|介绍|目录|模板|人才|招聘|信息|资料/;
+  const candidates = lines.map((line, index) => {
+    const value = line.replace(/个人简历|RESUME/gi, '').trim();
+    if (!/^[\u4e00-\u9fa5·]{2,4}$/.test(value) || blocked.test(value)) return null;
+    const context = lines.slice(Math.max(0, index - 5), Math.min(lines.length, index + 6)).join(' ');
+    let score = 0;
+    if (/(?:姓名|个人信息|基本信息|个人资料)/.test(context)) score += 12;
+    if (/(?<!\d)1[3-9]\d{9}(?!\d)/.test(context)) score += 9;
+    if (/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(context)) score += 9;
+    if (/(?:性别|年龄|学历|现居地|所在城市)/.test(context)) score += 5;
+    if (index < 16) score += 1;
+    return { value, index, score };
+  }).filter((item): item is { value: string; index: number; score: number } => Boolean(item));
+  candidates.sort((a, b) => b.score - a.score || a.index - b.index);
+  return candidates[0]?.value || '';
 }
 
 function cleanRole(value: string) {
@@ -245,10 +259,7 @@ function cleanRole(value: string) {
 }
 
 function inferRole(lines: string[], text: string) {
-  const top = lines.slice(0, 28).join('\n').toLowerCase();
-  const known = commonRoles.find(role => top.includes(role.toLowerCase()));
-  if (known) return known;
-  const generic = lines.slice(0, 32).map(line => line.replace(/^(?:目标|意向|应聘|求职|期望)\s*(?:岗位|职位|工作|方向)?\s*[：:|｜-]?\s*/, '').trim()).find(line => line.length >= 2 && line.length <= 32 && /(?:工程师|经理|总监|主管|顾问|专员|设计师|分析师|架构师|会计|出纳|运营|开发|测试)$/.test(line));
+  const generic = lines.map(line => line.replace(/^(?:目标|意向|应聘|求职|期望)\s*(?:岗位|职位|工作|方向)?\s*[：:|｜-]?\s*/, '').trim()).find(line => line.length >= 2 && line.length <= 32 && /(?:工程师|经理|总监|主管|顾问|专员|设计师|分析师|架构师|会计|出纳|运营|开发|测试)$/.test(line));
   if (generic) return cleanRole(generic);
   const anywhere = commonRoles.find(role => text.toLowerCase().includes(role.toLowerCase()));
   if (anywhere) return anywhere;
@@ -274,8 +285,16 @@ function inferRecentCompany(lines: string[]) {
 
 function inferCity(lines: string[]) {
   const cities = ['北京', '上海', '广州', '深圳', '杭州', '南京', '苏州', '成都', '重庆', '武汉', '西安', '天津', '长沙', '郑州', '青岛', '厦门', '合肥', '宁波', '无锡', '福州', '济南'];
-  const top = lines.slice(0, 24).join(' ');
-  return cities.find(city => top.includes(city)) || '';
+  const candidates = cities.map(city => {
+    const index = lines.findIndex(line => line.includes(city));
+    if (index < 0) return null;
+    const context = lines.slice(Math.max(0, index - 4), Math.min(lines.length, index + 5)).join(' ');
+    const score = (/(?:现居地|所在城市|现居城市|工作地点|期望城市|个人信息|基本信息)/.test(context) ? 10 : 0)
+      + (/(?<!\d)1[3-9]\d{9}(?!\d)/.test(context) || /@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(context) ? 5 : 0);
+    return { city, index, score };
+  }).filter((item): item is { city: string; index: number; score: number } => Boolean(item));
+  candidates.sort((a, b) => b.score - a.score || a.index - b.index);
+  return candidates[0]?.city || '';
 }
 
 function inferIndustry(text: string) {

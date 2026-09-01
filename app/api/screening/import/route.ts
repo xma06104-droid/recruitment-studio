@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
   if (file && file.size > MAX_FILE_SIZE) return invalid('简历附件不能超过 10MB。');
   if (file && !allowedExtensions.includes(extension(file.name))) return invalid('仅支持 PDF、Word、图片、TXT 和 HTML 简历。');
 
-  let rawText = field(form, 'rawText', 50_000);
+  let rawText = field(form, 'rawText', 120_000);
   let extraction: ResumeFileExtraction | null = null;
   if (file) {
     extraction = await extractResumeFileText(file);

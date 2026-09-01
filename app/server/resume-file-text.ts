@@ -7,6 +7,8 @@ export type ResumeFileExtraction = {
 };
 
 const textExtensions = ['txt', 'html', 'htm'];
+const MAX_EXTRACTED_TEXT = 120_000;
+const MAX_PDF_STREAMS = 600;
 
 export async function extractResumeFileText(file: File): Promise<ResumeFileExtraction> {
   const ext = extension(file.name);
@@ -71,7 +73,7 @@ async function extractPdfText(buffer: ArrayBuffer) {
   const streams = [source];
   const streamPattern = /stream\r?\n/g;
   let match: RegExpExecArray | null;
-  while ((match = streamPattern.exec(source)) && streams.length < 180) {
+  while ((match = streamPattern.exec(source)) && streams.length < MAX_PDF_STREAMS) {
     const start = match.index + match[0].length;
     const end = source.indexOf('endstream', start);
     if (end < 0) break;
@@ -95,7 +97,7 @@ async function extractPdfText(buffer: ArrayBuffer) {
       if (line && /[A-Za-z0-9\u4e00-\u9fa5]/.test(line)) lines.push(line);
     }
   }
-  return [...new Set(lines)].join('\n').slice(0, 50_000);
+  return [...new Set(lines)].join('\n').slice(0, MAX_EXTRACTED_TEXT);
 }
 
 function buildPdfUnicodeMap(streams: string[]) {
@@ -176,6 +178,6 @@ function decodeUtf16Hex(value: string) { return decodeUtf16Bytes(hexToBytes(valu
 function decodeUtf16Bytes(bytes: Uint8Array) { let result = ''; for (let index = 0; index + 1 < bytes.length; index += 2) result += String.fromCharCode((bytes[index] << 8) | bytes[index + 1]); return result; }
 function printableText(value: string) { return value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').trim(); }
 function extension(name: string) { return name.split('.').pop()?.toLowerCase() || ''; }
-function extracted(text: string): ResumeFileExtraction { return { text: text.slice(0, 50_000), status: 'extracted', message: '已提取简历文字。' }; }
+function extracted(text: string): ResumeFileExtraction { return { text: text.slice(0, MAX_EXTRACTED_TEXT), status: 'extracted', message: '已扫描全部可识别页面并提取简历文字。' }; }
 function unsupported(message: string): ResumeFileExtraction { return { text: '', status: 'unsupported', message }; }
 function failed(message: string): ResumeFileExtraction { return { text: '', status: 'failed', message }; }
