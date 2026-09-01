@@ -864,3 +864,11 @@ select{color-scheme:dark}
 .rs-loading>span{color:#61d8e9;background:#111d30}
 .rs-loading>b{color:#f4f8ff;font-size:16px}
 .rs-loading button{height:40px;padding:0 15px;border-color:rgba(162,181,211,.13);color:#dce8f5;background:#111d30;font-size:13px}
+
+/* Resume selection uses a dark cyan state instead of a white checkbox/row */
+.rs-list-toolbar input[type="checkbox"],.rs-person-row>label input[type="checkbox"]{width:22px;height:22px;display:grid;place-items:center;margin:0;border:1px solid rgba(139,166,202,.32);border-radius:6px;appearance:none;color:#04131c;background:#0a1424;box-shadow:inset 0 0 0 1px rgba(255,255,255,.02);cursor:pointer}
+.rs-list-toolbar input[type="checkbox"]:checked,.rs-person-row>label input[type="checkbox"]:checked{border-color:#5bd8e9;background:linear-gradient(145deg,#4fd7e7,#3a95f2);box-shadow:0 0 0 3px rgba(67,207,231,.1)}
+.rs-list-toolbar input[type="checkbox"]:checked:after,.rs-person-row>label input[type="checkbox"]:checked:after{content:"✓";font-size:14px;font-weight:900;line-height:1}
+.rs-person-row{transition:background-color .18s ease,box-shadow .18s ease}
+.rs-person-row:hover{background:#121e31}
+.rs-person-row.selected,.rs-person-row.selected:hover{background:linear-gradient(90deg,rgba(30,183,211,.18),rgba(34,102,181,.1));box-shadow:inset 4px 0 0 #43cfe7}
