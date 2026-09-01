@@ -872,3 +872,18 @@ select{color-scheme:dark}
 .rs-person-row{transition:background-color .18s ease,box-shadow .18s ease}
 .rs-person-row:hover{background:#121e31}
 .rs-person-row.selected,.rs-person-row.selected:hover{background:linear-gradient(90deg,rgba(30,183,211,.18),rgba(34,102,181,.1));box-shadow:inset 4px 0 0 #43cfe7}
+
+/* Resume detail typography follows the main page scale */
+.rs-detail section>h3,.rs-detail .rs-section-title h3{font-size:16px}
+.rs-detail .rs-section-title a,.rs-detail .rs-section-title button{font-size:13px;font-weight:650}
+.rs-detail .rs-profile-grid p{gap:8px;padding:14px}
+.rs-detail .rs-profile-grid span{font-size:12px}
+.rs-detail .rs-profile-grid b{font-size:14px}
+.rs-detail .rs-dimension-grid>div>span{font-size:12px}
+.rs-detail .rs-dimension-grid>div>span b{font-size:13px}
+.rs-detail .rs-tag-groups b,.rs-detail .rs-tag-groups small{font-size:12px}
+.rs-detail .rs-tag-groups span{font-size:11px}
+.rs-detail .rs-history article{padding:15px}
+.rs-detail .rs-history article>b{font-size:14px}
+.rs-detail .rs-history article p{font-size:13px;line-height:1.8}
+.rs-detail .rs-history article i{font-size:11px}
