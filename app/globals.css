@@ -927,3 +927,42 @@ select{color-scheme:dark}
 .ai-library-toolbar button{font-size:13px;font-weight:700}
 .ai-library-toolbar>div span{color:#aab7c9;font-size:13px;font-weight:650}
 .ai-question-head{font-size:13px;font-weight:700}
+
+/* Interactive dark rows never flash back to a light surface */
+.ai-question-row{color:#b5c0d0;background:#0f1929;transition:background-color .18s ease,box-shadow .18s ease}
+.ai-question-row:hover,.ai-question-row:focus-within,.ai-question-row.selected{background:linear-gradient(90deg,rgba(30,183,211,.15),rgba(34,102,181,.09));box-shadow:inset 4px 0 0 #43cfe7}
+.ai-question-row>div:last-child button{height:32px;padding:0 10px;border-color:rgba(162,181,211,.13);color:#b8c8d9;background:#162238;font-size:11px;font-weight:650}
+.ai-question-row>div:last-child button:hover{color:#fff;background:#1b2b46}
+.manage-row{transition:background-color .18s ease,box-shadow .18s ease}
+.manage-row:hover,.manage-row:focus-within,.manage-row.selected{background:linear-gradient(90deg,rgba(30,183,211,.14),rgba(34,102,181,.08));box-shadow:inset 4px 0 0 #43cfe7}
+
+/* Native date and time controls remain visible and clickable on dark forms */
+input[type="date"],input[type="datetime-local"],input[type="time"]{color-scheme:dark;cursor:text}
+input[type="date"]::-webkit-calendar-picker-indicator,input[type="datetime-local"]::-webkit-calendar-picker-indicator,input[type="time"]::-webkit-calendar-picker-indicator{width:24px;height:24px;margin-left:10px;padding:6px;filter:invert(1) brightness(1.8);opacity:.9;cursor:pointer}
+
+/* Interview schedule card readability */
+.interview-card{min-height:108px;cursor:pointer}
+.interview-card time b{color:#f5f9ff;font-size:17px}
+.interview-card time small{margin-top:7px;color:#9aa8bc;font-size:12px}
+.interview-card h3{margin-bottom:7px;color:#f4f8ff;font-size:16px}
+.interview-card p{margin-bottom:7px;color:#9ba9bc;font-size:14px}
+.interview-card div>span{color:#aeb9c9;font-size:12px}
+.interview-card select{font-size:12px}
+
+/* Non-blocking screening refresh feedback */
+.rs-sync-note{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:-5px 0 14px;padding:11px 14px;border:1px solid rgba(67,207,231,.11);border-radius:12px;color:#a8c6d0;background:#0e1b2c;font-size:12px}
+.rs-sync-note:before{content:"";width:14px;height:14px;flex:0 0 auto;border:2px solid rgba(91,216,233,.22);border-top-color:#5bd8e9;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.rs-sync-note span{margin-right:auto}.rs-sync-note.error{color:#ffb0bc}.rs-sync-note.error:before{animation:none;border-color:#d96f81}.rs-sync-note button{height:30px;padding:0 10px;border:1px solid rgba(162,181,211,.13);border-radius:8px;color:#dce8f5;background:#152238;font-size:11px}
+
+/* Account menu follows the page's readable type scale */
+.account-menu{width:360px}
+.account-menu>header>span{width:52px;height:52px;font-size:18px}
+.account-menu>header b{font-size:16px}.account-menu>header small{font-size:12px}
+.account-menu>section{padding:14px 15px;background:#0d1728}.account-menu>section span{font-size:12px}.account-menu>section b{font-size:13px}
+.account-menu>button{grid-template-columns:40px 1fr 18px;gap:12px;padding:12px}
+.account-menu>button>i{width:38px;height:38px;font-size:15px}.account-menu>button b{font-size:14px}.account-menu>button small{margin-top:5px;font-size:12px}
+
+/* Saving buttons expose a clear in-flight state */
+button:disabled{cursor:wait}
+.primary-button:disabled,.rs-review-form footer button:disabled,.rs-template-save button:disabled{opacity:.72;filter:saturate(.75)}

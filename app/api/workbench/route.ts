@@ -16,13 +16,17 @@ export async function GET(request: NextRequest) {
     db.prepare('SELECT * FROM ai_questions WHERE owner_id = ? ORDER BY created_at DESC').bind(account.id).all<DataRow>(),
     db.prepare('SELECT * FROM ai_interviews WHERE owner_id = ? ORDER BY COALESCE(completed_at, created_at) DESC').bind(account.id).all<DataRow>(),
   ]);
+  const { unique: uniqueQuestions, duplicateIds } = deduplicateAiQuestions(aiQuestions.results);
+  if (duplicateIds.length) {
+    await db.batch(duplicateIds.map(id => db.prepare('DELETE FROM ai_questions WHERE id = ? AND owner_id = ?').bind(id, account.id)));
+  }
   return NextResponse.json({
     account,
     jobs: jobs.results.map(mapJob),
     candidates: candidates.results.map(mapCandidate),
     interviews: interviews.results.map(mapInterview),
     offers: offers.results.map(mapOffer),
-    aiQuestions: aiQuestions.results.map(mapAiQuestion),
+    aiQuestions: uniqueQuestions.map(mapAiQuestion),
     aiInterviews: aiInterviews.results.map(mapAiInterview),
   }, { headers: { 'Cache-Control': 'private, no-store' } });
 }
@@ -81,8 +85,18 @@ export async function POST(request: NextRequest) {
   } else if (resource === 'aiQuestion') {
     const title = text(payload.title, 500);
     if (!title) return invalid('请输入面试问题。');
+    const category = text(payload.category, 80) || '通用素质';
+    const questionType = text(payload.questionType, 40) || '语音提问';
+    const duration = integer(payload.duration, 30, 900, 120);
+    const competency = text(payload.competency, 80) || '综合能力';
+    const followUp = payload.followUp ? 1 : 0;
+    const duplicate = await db.prepare(`SELECT id FROM ai_questions WHERE owner_id = ?
+      AND title = ? COLLATE NOCASE AND category = ? COLLATE NOCASE AND question_type = ? COLLATE NOCASE
+      AND duration = ? AND competency = ? COLLATE NOCASE AND follow_up = ? LIMIT 1`
+    ).bind(account.id, title, category, questionType, duration, competency, followUp).first<{id:string}>();
+    if (duplicate) return NextResponse.json({ ok:false, message:'相同面试题已存在，无需重复保存。' }, { status:409 });
     await db.prepare(`INSERT INTO ai_questions (id, owner_id, title, category, question_type, duration, competency, follow_up, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(id, account.id, title, text(payload.category, 80) || '通用素质', text(payload.questionType, 40) || '语音提问', integer(payload.duration, 30, 900, 120), text(payload.competency, 80) || '综合能力', payload.followUp ? 1 : 0, now, now).run();
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(id, account.id, title, category, questionType, duration, competency, followUp, now, now).run();
   } else if (resource === 'aiInterview') {
     const candidateId = text(payload.candidateId, 80);
     const candidate = candidateId ? await db.prepare('SELECT role FROM candidates WHERE id = ? AND owner_id = ?').bind(candidateId, account.id).first<{ role: string }>() : null;
@@ -108,10 +122,45 @@ export async function PATCH(request: NextRequest) {
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   const resource = text(body?.resource, 40);
   const id = text(body?.id, 80);
+  const payload = body?.payload && typeof body.payload === 'object' ? body.payload as Record<string, unknown> : {};
   const value = text(body?.value, 80);
-  if (!id || !value) return invalid('缺少更新内容。');
+  if (!id) return invalid('缺少更新内容。');
   const now = new Date().toISOString();
   const db = getDb();
+
+  if (resource === 'aiQuestion') {
+    const owned = await db.prepare('SELECT id FROM ai_questions WHERE id = ? AND owner_id = ?').bind(id, account.id).first<{id:string}>();
+    if (!owned) return invalid('面试题不存在。');
+    const title = text(payload.title, 500);
+    if (!title) return invalid('请输入面试问题。');
+    const category = text(payload.category, 80) || '通用素质';
+    const questionType = text(payload.questionType, 40) || '语音提问';
+    const duration = integer(payload.duration, 30, 900, 120);
+    const competency = text(payload.competency, 80) || '综合能力';
+    const followUp = payload.followUp ? 1 : 0;
+    const duplicate = await db.prepare(`SELECT id FROM ai_questions WHERE owner_id = ? AND id <> ?
+      AND title = ? COLLATE NOCASE AND category = ? COLLATE NOCASE AND question_type = ? COLLATE NOCASE
+      AND duration = ? AND competency = ? COLLATE NOCASE AND follow_up = ? LIMIT 1`
+    ).bind(account.id, id, title, category, questionType, duration, competency, followUp).first<{id:string}>();
+    if (duplicate) return NextResponse.json({ ok:false, message:'相同面试题已存在，请直接使用现有题目。' }, { status:409 });
+    await db.prepare(`UPDATE ai_questions SET title = ?, category = ?, question_type = ?, duration = ?, competency = ?, follow_up = ?, updated_at = ?
+      WHERE id = ? AND owner_id = ?`).bind(title, category, questionType, duration, competency, followUp, now, id, account.id).run();
+    return NextResponse.json({ ok: true });
+  }
+
+  if (resource === 'interview') {
+    const owned = await db.prepare('SELECT id FROM interviews WHERE id = ? AND owner_id = ?').bind(id, account.id).first<{id:string}>();
+    if (!owned) return invalid('面试安排不存在。');
+    const candidateId = text(payload.candidateId, 80);
+    if (!candidateId || !(await ownedRecord('candidates', candidateId, account.id))) return invalid('请选择有效候选人。');
+    const scheduledAt = text(payload.scheduledAt, 80);
+    if (!scheduledAt || Number.isNaN(Date.parse(scheduledAt))) return invalid('请选择有效的面试日期和时间。');
+    await db.prepare(`UPDATE interviews SET candidate_id = ?, scheduled_at = ?, round = ?, mode = ?, updated_at = ?
+      WHERE id = ? AND owner_id = ?`).bind(candidateId, new Date(scheduledAt).toISOString(), text(payload.round, 80) || '业务一面', text(payload.mode, 100) || '待确认', now, id, account.id).run();
+    return NextResponse.json({ ok: true });
+  }
+
+  if (!value) return invalid('缺少更新内容。');
   const configs: Record<string, { table: string; field: string; allowed: string[] }> = {
     candidateStage: { table: 'candidates', field: 'stage', allowed: ['待初筛', '待复核', '面试待安排', 'AI 初面待发起', '初筛淘汰', '淘汰人才库', '待沟通', '一面', '技术面', '二面', 'Offer', '已入职', '已淘汰'] },
     jobStatus: { table: 'jobs', field: 'status', allowed: ['草稿', '招聘中', '急聘', '已暂停', '已关闭'] },
@@ -148,6 +197,19 @@ function mapOffer(row: DataRow) {
 
 function mapAiQuestion(row: DataRow) {
   return { id: row.id, title: row.title, category: row.category, questionType: row.question_type, duration: row.duration, competency: row.competency, followUp: Boolean(row.follow_up), createdAt: row.created_at, updatedAt: row.updated_at };
+}
+
+function deduplicateAiQuestions(rows: DataRow[]) {
+  const seen = new Set<string>();
+  const unique: DataRow[] = [];
+  const duplicateIds: string[] = [];
+  for (const row of rows) {
+    const key = [row.title, row.category, row.question_type, row.duration, row.competency, row.follow_up]
+      .map(value => String(value ?? '').trim().toLowerCase()).join('\u0000');
+    if (seen.has(key)) duplicateIds.push(String(row.id));
+    else { seen.add(key); unique.push(row); }
+  }
+  return { unique, duplicateIds };
 }
 
 function mapAiInterview(row: DataRow) {
