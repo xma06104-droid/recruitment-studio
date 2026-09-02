@@ -240,6 +240,7 @@ function AiInterviewSession({candidate,questions,flash,close,complete}:{candidat
   const streamRef=useRef<MediaStream|null>(null);
   const recognitionRef=useRef<SpeechRecognitionLike|null>(null);
   const startedAt=useRef(Date.now());
+  const submittingQuestionRef=useRef('');
   const [cameraState,setCameraState]=useState<'requesting'|'ready'|'denied'>('requesting');
   const [index,setIndex]=useState(0);
   const [answers,setAnswers]=useState<Record<string,string>>({});
@@ -249,7 +250,6 @@ function AiInterviewSession({candidate,questions,flash,close,complete}:{candidat
   const [secondsLeft,setSecondsLeft]=useState(questions[0]?.duration||120);
   const question=questions[index];
   const answer=question?answers[question.id]||'':'';
-  const result=question?scores[question.id]:undefined;
 
   async function requestCamera(){
     setCameraState('requesting');
@@ -273,8 +273,11 @@ function AiInterviewSession({candidate,questions,flash,close,complete}:{candidat
   },[]);
 
   useEffect(()=>{
+    recognitionRef.current?.abort();
+    setListening(false);
     setSecondsLeft(question?.duration||120);
-    if(question)window.setTimeout(()=>speakQuestion(question.title),350);
+    const timer=question?window.setTimeout(()=>speakQuestion(question.title,startListening),350):undefined;
+    return()=>{if(timer)window.clearTimeout(timer)};
   },[question?.id]);
 
   useEffect(()=>{
@@ -283,39 +286,57 @@ function AiInterviewSession({candidate,questions,flash,close,complete}:{candidat
     return()=>window.clearInterval(timer);
   },[question?.id,secondsLeft<=0]);
 
-  function speakQuestion(text:string){
-    if(!('speechSynthesis'in window)){flash('当前浏览器不支持语音播放');return}
+  useEffect(()=>{
+    if(secondsLeft!==0||saving||submittingQuestionRef.current===question.id)return;
+    submittingQuestionRef.current=question.id;
+    void submitCurrent(true);
+  },[secondsLeft,question.id,saving]);
+
+  function speakQuestion(text:string,after?:()=>void){
+    if(!('speechSynthesis'in window)){after?.();return}
     window.speechSynthesis.cancel();
     const utterance=new SpeechSynthesisUtterance(text);utterance.lang='zh-CN';utterance.rate=.95;
+    if(after)utterance.onend=after;
     window.speechSynthesis.speak(utterance);
   }
 
-  function toggleListening(){
-    if(listening){recognitionRef.current?.stop();setListening(false);return}
+  function startListening(){
     const speechWindow=window as unknown as {SpeechRecognition?:SpeechRecognitionConstructor;webkitSpeechRecognition?:SpeechRecognitionConstructor};
     const Recognition=speechWindow.SpeechRecognition||speechWindow.webkitSpeechRecognition;
-    if(!Recognition){flash('当前浏览器不支持语音转写，请使用文字输入作答');return}
+    if(!Recognition)return;
+    recognitionRef.current?.abort();
     const recognition=new Recognition();
+    const questionId=question.id;
     recognition.lang='zh-CN';recognition.continuous=true;recognition.interimResults=true;
     recognition.onresult=event=>{
       const transcript=Array.from(event.results).map(item=>item[0]?.transcript||'').join('');
-      setAnswers(current=>({...current,[question.id]:transcript}));
-      setScores(current=>{const next={...current};delete next[question.id];return next});
+      setAnswers(current=>({...current,[questionId]:transcript}));
+      setScores(current=>{const next={...current};delete next[questionId];return next});
     };
     recognition.onend=()=>setListening(false);
-    recognition.onerror=()=>{setListening(false);flash('语音识别已停止，可继续使用文字输入')};
-    recognitionRef.current=recognition;recognition.start();setListening(true);
+    recognition.onerror=()=>setListening(false);
+    recognitionRef.current=recognition;
+    try{recognition.start();setListening(true)}catch{setListening(false)}
   }
 
-  function scoreCurrent(){
-    if(!answer.trim()){flash('请先回答当前问题');return}
+  function submitCurrent(auto=false){
+    if(saving)return;
+    if(!answer.trim()&&!auto){submittingQuestionRef.current='';flash('请先回答当前问题');return}
+    recognitionRef.current?.stop();setListening(false);
     const next=scoreInterviewAnswer(answer,question,candidate);
     setScores(current=>({...current,[question.id]:next}));
+    submittingQuestionRef.current=question.id;
+    if(index<questions.length-1){
+      const nextIndex=index+1;
+      setSecondsLeft(questions[nextIndex].duration);
+      setIndex(nextIndex);
+      return;
+    }
+    void finishInterview(next);
   }
 
-  async function finishInterview(){
-    const finalScores=questions.map(item=>scores[item.id]||scoreInterviewAnswer(answers[item.id]||'',item,candidate));
-    if(!answers[question.id]?.trim()){flash('请先回答并提交当前问题');return}
+  async function finishInterview(currentScore:AnswerScore){
+    const finalScores=questions.map(item=>item.id===question.id?currentScore:scores[item.id]||scoreInterviewAnswer(answers[item.id]||'',item,candidate));
     const overall=Math.round(finalScores.reduce((sum,item)=>sum+item.score,0)/Math.max(1,finalScores.length));
     const details=questions.map((item,itemIndex)=>{
       const itemScore=finalScores[itemIndex];
@@ -325,7 +346,7 @@ function AiInterviewSession({candidate,questions,flash,close,complete}:{candidat
     const summary=[`AI 关键词自动评分：综合 ${overall} 分。评分关键词来自题目“考察能力”配置，并结合题意与候选人技能生成。`,...details].join('\n\n').slice(0,4000);
     setSaving(true);
     const saved=await complete({candidateId:candidate.id,jobTitle:candidate.role,score:overall,durationMinutes:Math.max(1,Math.ceil((Date.now()-startedAt.current)/60000)),summary});
-    if(!saved)setSaving(false);
+    if(!saved){setSaving(false);submittingQuestionRef.current=''}
   }
 
   const progress=Math.round((index+1)/questions.length*100);
@@ -342,12 +363,10 @@ function AiInterviewSession({candidate,questions,flash,close,complete}:{candidat
       <section className="ai-answer-card">
         <div className="ai-question-step"><span>QUESTION {String(index+1).padStart(2,'0')}</span><b>{formatCountdown(secondsLeft)}</b></div>
         <h2>{question.title}</h2>
-        <p className="ai-question-note">考察：{question.competency} · 建议回答时长 {question.duration} 秒</p>
-        <div className="ai-keyword-row"><span>评分关键词</span>{interviewKeywords(question,candidate).map(keyword=><i key={keyword}>{keyword}</i>)}</div>
-        <label className="ai-answer-input">回答内容<textarea value={answer} onChange={event=>{setAnswers(current=>({...current,[question.id]:event.target.value}));setScores(current=>{const next={...current};delete next[question.id];return next})}} placeholder="点击“开始语音作答”，或在这里输入回答…"/></label>
-        <div className="ai-answer-actions"><button type="button" className={listening?'recording':''} onClick={toggleListening}>{listening?'■ 停止语音':'● 开始语音作答'}</button><button type="button" onClick={()=>speakQuestion(question.title)}>▶ 重播题目</button><button type="button" className="primary" onClick={scoreCurrent}>提交本题并评分</button></div>
-        {result&&<div className="ai-score-result"><strong>{result.score}<small>分</small></strong><div><b>{result.matched.length?`命中 ${result.matched.length}/${result.keywords.length} 个关键词`:'暂未命中评分关键词'}</b><p>{result.matched.length?result.matched.join('、'):'可补充与题目考察能力直接相关的具体经历和结果。'}</p></div></div>}
-        <footer className="ai-question-nav"><button type="button" disabled={index===0||saving} onClick={()=>setIndex(value=>value-1)}>← 上一题</button>{index<questions.length-1?<button type="button" className="primary" disabled={!result||saving} onClick={()=>setIndex(value=>value+1)}>下一题 →</button>:<button type="button" className="primary" disabled={!result||saving} onClick={()=>void finishInterview()}>{saving?'正在生成并保存报告…':'完成面试并保存评分'}</button>}</footer>
+        <p className="ai-question-note">建议回答时长 {question.duration} 秒 · 倒计时结束后自动提交</p>
+        <label className="ai-answer-input">回答内容<textarea value={answer} onChange={event=>{setAnswers(current=>({...current,[question.id]:event.target.value}));setScores(current=>{const next={...current};delete next[question.id];return next})}} placeholder="可直接口述回答，系统会自动转写；也可以在这里输入回答…"/></label>
+        <div className="ai-answer-actions"><span className={listening?'ai-listening-status active':'ai-listening-status'}>{listening?'● 正在自动识别语音':'可直接口述或输入回答'}</span><button type="button" onClick={()=>speakQuestion(question.title)}>▶ 重播题目</button><button type="button" className="primary" disabled={saving} onClick={()=>submitCurrent(false)}>{saving?'正在保存…':'提交'}</button></div>
+        <footer className="ai-question-nav"><button type="button" disabled={index===0||saving} onClick={()=>{const previous=index-1;submittingQuestionRef.current='';setSecondsLeft(questions[previous].duration);setIndex(previous)}}>← 上一题</button><span>评分结果将在面试结束后提供给后台工作人员</span></footer>
       </section>
     </div>
   </section>;
