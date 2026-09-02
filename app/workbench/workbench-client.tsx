@@ -10,6 +10,14 @@ type Interview = { id:string; candidateId:string; scheduledAt:string; round:stri
 type Offer = { id:string; candidateId:string; jobTitle:string; salary:string; ownerName:string; status:string; deadline:string; createdAt:string; updatedAt:string };
 type AiQuestion = { id:string; title:string; category:string; questionType:string; duration:number; competency:string; followUp:boolean; createdAt:string; updatedAt:string };
 type AiInterview = { id:string; candidateId:string; jobTitle:string; status:string; score:number|null; durationSeconds:number|null; summary:string; completedAt:string|null; createdAt:string; updatedAt:string };
+type AnswerScore = { score:number; keywords:string[]; matched:string[] };
+type SpeechRecognitionLike = {
+  lang:string; continuous:boolean; interimResults:boolean;
+  start:()=>void; stop:()=>void; abort:()=>void;
+  onresult:((event:{results:ArrayLike<{0:{transcript:string}}>} )=>void)|null;
+  onend:(()=>void)|null; onerror:(()=>void)|null;
+};
+type SpeechRecognitionConstructor = new()=>SpeechRecognitionLike;
 type Dataset = { account:Account; jobs:Job[]; candidates:Candidate[]; interviews:Interview[]; offers:Offer[]; aiQuestions:AiQuestion[]; aiInterviews:AiInterview[] };
 type ModalName = 'job'|'candidate'|'interview'|'offer'|'question'|'aiResult'|'profile'|'password'|null;
 
@@ -71,6 +79,19 @@ export default function WorkbenchClient() {
       if(!response.ok){flash(result.message||'题目更新失败，请稍后重试。');return}
       setModal(null);setEditingQuestion(null);await loadData();flash('面试题已更新');
     }catch{flash('题目更新失败，请检查网络后重试。')}finally{saveInFlight.current=false;setModalSaving(false)}
+  }
+
+  async function saveAiInterview(payload:Record<string,unknown>){
+    if(saveInFlight.current)return false;
+    saveInFlight.current=true;
+    try{
+      const response=await fetch('/api/workbench',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({resource:'aiInterview',payload})});
+      const result=await response.json().catch(()=>({})) as {message?:string};
+      if(response.status===401){window.location.assign('/');return false}
+      if(!response.ok){flash(result.message||'AI 面试结果保存失败，请稍后重试。');return false}
+      await loadData();flash('AI 面试已完成，关键词评分和逐题回答已保存');return true;
+    }catch{flash('AI 面试结果保存失败，请检查网络后重试。');return false}
+    finally{saveInFlight.current=false}
   }
 
   async function updateInterview(id:string,payload:Record<string,unknown>){
@@ -138,7 +159,7 @@ export default function WorkbenchClient() {
         {active==='职位管理'&&<Jobs jobs={filteredJobs} candidates={data.candidates} interviews={data.interviews} onNew={()=>setModal('job')} onPick={id=>setDrawer({type:'job',id})} updateStatus={(id,value)=>void update('jobStatus',id,value,'职位状态已更新')}/>}
         {active==='人才库'&&<Talent people={filteredCandidates} onNew={()=>setModal('candidate')} onPick={id=>setDrawer({type:'candidate',id})}/>}
         {active==='简历筛选'&&<ScreeningWorkspace people={filteredCandidates} jobs={data.jobs} account={data.account} reload={loadData} openCandidate={id=>setDrawer({type:'candidate',id})} flash={flash}/>}
-        {active==='AI 面试'&&<AiStudio data={data} openQuestion={question=>{setEditingQuestion(question||null);setModal('question')}} openResult={()=>setModal('aiResult')} flash={flash}/>}
+        {active==='AI 面试'&&<AiStudio data={data} openQuestion={question=>{setEditingQuestion(question||null);setModal('question')}} openResult={()=>setModal('aiResult')} saveResult={saveAiInterview} flash={flash}/>}
         {active==='面试管理'&&<Interviews items={data.interviews} people={data.candidates} onNew={()=>{setEditingInterview(null);setModal('interview')}} onPick={id=>{setEditingInterview(data.interviews.find(item=>item.id===id)||null);setModal('interview')}} updateStatus={(id,value)=>void update('interviewStatus',id,value,'面试状态已更新')}/>}
         {active==='Offer 管理'&&<Offers items={data.offers} people={data.candidates} onNew={()=>setModal('offer')} updateStatus={(id,value)=>void update('offerStatus',id,value,'Offer 状态已更新')}/>}
         {active==='招聘数据'&&<Analytics data={data}/>}
@@ -172,12 +193,22 @@ function Jobs({jobs,candidates,interviews,onNew,onPick,updateStatus}:{jobs:Job[]
 
 function Talent({people,onNew,onPick}:{people:Candidate[];onNew:()=>void;onPick:(id:string)=>void}){const [stage,setStage]=useState('全部');const visible=stage==='全部'?people:people.filter(item=>item.stage===stage);return <section><Head path="人才库" title="人才库" sub="候选人信息来自你实际录入的业务记录" action="添加候选人" click={onNew}/><div className="talent-tabs"><button className={stage==='全部'?'active':''} onClick={()=>setStage('全部')}>全部<b>{people.length}</b></button>{stages.map(item=><button className={stage===item?'active':''} onClick={()=>setStage(item)} key={item}>{item}<b>{people.filter(person=>person.stage===item).length}</b></button>)}</div>{visible.length===0?<Empty icon="♙" title={people.length?'该阶段暂无候选人':'还没有候选人记录'} text="添加候选人后，简历筛选、面试和 Offer 模块会同步使用同一份数据。" action="添加候选人" click={onNew}/>:<div className="candidate-grid">{visible.map(person=><button className="candidate-card" key={person.id} onClick={()=>onPick(person.id)}><div className="candidate-top"><span>{person.name.slice(0,1)}</span><div><b>{person.name}</b><small>{person.company||'未填写最近公司'}{person.years?` · ${person.years}`:''}</small></div><em>{person.score===null?'未评估':`${person.score}%`}</em></div><h3>{person.role}</h3><div className="skill-row">{person.skills.length?person.skills.map(skill=><i key={skill}>{skill}</i>):<i>未添加技能标签</i>}</div><footer><span>{person.stage}</span><small>{person.source?`来自 ${person.source}`:'来源未填写'}</small><b>查看档案 →</b></footer></button>)}</div>}</section>}
 
-function AiStudio({data,openQuestion,openResult,flash}:{data:Dataset;openQuestion:(question?:AiQuestion)=>void;openResult:()=>void;flash:(text:string)=>void}){
+function AiStudio({data,openQuestion,openResult,saveResult,flash}:{data:Dataset;openQuestion:(question?:AiQuestion)=>void;openResult:()=>void;saveResult:(payload:Record<string,unknown>)=>Promise<boolean>;flash:(text:string)=>void}){
   const [tab,setTab]=useState<'candidates'|'library'|'summary'>('candidates');
   const [current,setCurrent]=useState(data.aiInterviews[0]?.id||'');
   const [selectedQuestion,setSelectedQuestion]=useState('');
+  const [sessionCandidate,setSessionCandidate]=useState<Candidate|null>(null);
   const selected=data.aiInterviews.find(item=>item.id===current)||data.aiInterviews[0];
   const questions=data.aiQuestions.filter((question,index,items)=>items.findIndex(item=>questionKey(item)===questionKey(question))===index);
+  function startInterview(person:Candidate){
+    if(!questions.length){setTab('library');flash('请先在 AI 面试题库中创建至少一道题目');return}
+    setSessionCandidate(person);
+  }
+  if(sessionCandidate)return <AiInterviewSession candidate={sessionCandidate} questions={questions} flash={flash} close={()=>setSessionCandidate(null)} complete={async payload=>{
+    const saved=await saveResult(payload);
+    if(saved){setSessionCandidate(null);setCurrent('');setTab('summary')}
+    return saved;
+  }}/>;
   return <section>
     <Head path="AI 面试" title="AI 面试" sub="题库与总结仅展示当前账号真实保存的内容"/>
     <div className="ai-studio-tabs">
@@ -189,7 +220,7 @@ function AiStudio({data,openQuestion,openResult,flash}:{data:Dataset;openQuestio
       <div className="flow-list-title"><h3>候选人面试记录</h3><button className="new-job" disabled={!data.candidates.length} onClick={openResult}>＋ 录入已完成面试</button></div>
       {data.candidates.length===0?<Empty icon="◎" title="暂无候选人" text="先录入候选人，才能关联真实 AI 面试记录。"/>:<div className="flow-person-list">{data.candidates.map(person=>{
         const report=data.aiInterviews.find(item=>item.candidateId===person.id);
-        return <div className="flow-person-row" key={person.id}><span/><div className="flow-person-profile"><span>{person.name.slice(0,1)}</span><div><h3>{person.name}<small>{person.role}</small></h3><p>{person.company||'公司未填写'}</p><small>候选人创建于 {formatDate(person.createdAt)}</small></div></div><div className="flow-person-owner"><span>报告状态</span><b>{report?'已录入':'暂无记录'}</b><small>{report?.completedAt?formatDate(report.completedAt):'—'}</small></div><div className="flow-person-status"><span>综合得分</span><b className={report?'completed':''}>{report?.score??'—'}</b></div><button className="flow-more" onClick={report?()=>{setCurrent(report.id);setTab('summary')}:openResult}>{report?'查看总结':'录入结果'}</button></div>
+        return <div className="flow-person-row" key={person.id}><span/><div className="flow-person-profile"><span>{person.name.slice(0,1)}</span><div><h3>{person.name}<small>{person.role}</small></h3><p>{person.company||'公司未填写'}</p><small>候选人创建于 {formatDate(person.createdAt)}</small></div></div><div className="flow-person-owner"><span>报告状态</span><b>{report?'已录入':'暂无记录'}</b><small>{report?.completedAt?formatDate(report.completedAt):'—'}</small></div><div className="flow-person-status"><span>综合得分</span><b className={report?'completed':''}>{report?.score??'—'}</b></div><button className="flow-more" onClick={report?()=>{setCurrent(report.id);setTab('summary')}:()=>startInterview(person)}>{report?'查看总结':'开始 AI 面试'}</button></div>
       })}</div>}
     </div>}
     {tab==='library'&&<div className="ai-library-shell">
@@ -204,7 +235,125 @@ function AiStudio({data,openQuestion,openResult,flash}:{data:Dataset;openQuestio
   </section>
 }
 
-function AiSummary({report,person}:{report:AiInterview;person?:Candidate}){return <article className="ai-summary-report"><header><div><span>{person?.name.slice(0,1)||'候'}</span><div><h2>{person?.name||'候选人'} · AI 面试总结</h2><p>{report.jobTitle} · 用时 {durationText(report.durationSeconds)} · {report.completedAt?formatDate(report.completedAt):'时间未记录'}</p></div></div><div><button className="primary" onClick={()=>window.print()}>导出报告</button></div></header><section className="ai-summary-overview"><div className="ai-score-ring"><strong>{report.score??'—'}</strong><small>综合得分</small></div><div><span>真实录入结果</span><h3>{report.status}</h3><p>{report.summary}</p><em>记录已保存</em></div></section><section className="ai-followup-advice"><span>✓</span><div><h3>数据说明</h3><p>本报告展示的是当前账号实际录入的面试得分、用时与总结，没有自动补充或虚构未提供的回答证据。</p></div></section></article>}
+function AiInterviewSession({candidate,questions,flash,close,complete}:{candidate:Candidate;questions:AiQuestion[];flash:(text:string)=>void;close:()=>void;complete:(payload:Record<string,unknown>)=>Promise<boolean>}){
+  const videoRef=useRef<HTMLVideoElement>(null);
+  const streamRef=useRef<MediaStream|null>(null);
+  const recognitionRef=useRef<SpeechRecognitionLike|null>(null);
+  const startedAt=useRef(Date.now());
+  const [cameraState,setCameraState]=useState<'requesting'|'ready'|'denied'>('requesting');
+  const [index,setIndex]=useState(0);
+  const [answers,setAnswers]=useState<Record<string,string>>({});
+  const [scores,setScores]=useState<Record<string,AnswerScore>>({});
+  const [listening,setListening]=useState(false);
+  const [saving,setSaving]=useState(false);
+  const [secondsLeft,setSecondsLeft]=useState(questions[0]?.duration||120);
+  const question=questions[index];
+  const answer=question?answers[question.id]||'':'';
+  const result=question?scores[question.id]:undefined;
+
+  async function requestCamera(){
+    setCameraState('requesting');
+    try{
+      if(!navigator.mediaDevices?.getUserMedia)throw new Error('unsupported');
+      streamRef.current?.getTracks().forEach(track=>track.stop());
+      const stream=await navigator.mediaDevices.getUserMedia({video:true,audio:true});
+      streamRef.current=stream;
+      if(videoRef.current){videoRef.current.srcObject=stream;await videoRef.current.play().catch(()=>undefined)}
+      setCameraState('ready');
+    }catch{setCameraState('denied')}
+  }
+
+  useEffect(()=>{
+    void requestCamera();
+    return()=>{
+      streamRef.current?.getTracks().forEach(track=>track.stop());
+      recognitionRef.current?.abort();
+      if('speechSynthesis'in window)window.speechSynthesis.cancel();
+    };
+  },[]);
+
+  useEffect(()=>{
+    setSecondsLeft(question?.duration||120);
+    if(question)window.setTimeout(()=>speakQuestion(question.title),350);
+  },[question?.id]);
+
+  useEffect(()=>{
+    if(secondsLeft<=0)return;
+    const timer=window.setInterval(()=>setSecondsLeft(value=>Math.max(0,value-1)),1000);
+    return()=>window.clearInterval(timer);
+  },[question?.id,secondsLeft<=0]);
+
+  function speakQuestion(text:string){
+    if(!('speechSynthesis'in window)){flash('当前浏览器不支持语音播放');return}
+    window.speechSynthesis.cancel();
+    const utterance=new SpeechSynthesisUtterance(text);utterance.lang='zh-CN';utterance.rate=.95;
+    window.speechSynthesis.speak(utterance);
+  }
+
+  function toggleListening(){
+    if(listening){recognitionRef.current?.stop();setListening(false);return}
+    const speechWindow=window as unknown as {SpeechRecognition?:SpeechRecognitionConstructor;webkitSpeechRecognition?:SpeechRecognitionConstructor};
+    const Recognition=speechWindow.SpeechRecognition||speechWindow.webkitSpeechRecognition;
+    if(!Recognition){flash('当前浏览器不支持语音转写，请使用文字输入作答');return}
+    const recognition=new Recognition();
+    recognition.lang='zh-CN';recognition.continuous=true;recognition.interimResults=true;
+    recognition.onresult=event=>{
+      const transcript=Array.from(event.results).map(item=>item[0]?.transcript||'').join('');
+      setAnswers(current=>({...current,[question.id]:transcript}));
+      setScores(current=>{const next={...current};delete next[question.id];return next});
+    };
+    recognition.onend=()=>setListening(false);
+    recognition.onerror=()=>{setListening(false);flash('语音识别已停止，可继续使用文字输入')};
+    recognitionRef.current=recognition;recognition.start();setListening(true);
+  }
+
+  function scoreCurrent(){
+    if(!answer.trim()){flash('请先回答当前问题');return}
+    const next=scoreInterviewAnswer(answer,question,candidate);
+    setScores(current=>({...current,[question.id]:next}));
+  }
+
+  async function finishInterview(){
+    const finalScores=questions.map(item=>scores[item.id]||scoreInterviewAnswer(answers[item.id]||'',item,candidate));
+    if(!answers[question.id]?.trim()){flash('请先回答并提交当前问题');return}
+    const overall=Math.round(finalScores.reduce((sum,item)=>sum+item.score,0)/Math.max(1,finalScores.length));
+    const details=questions.map((item,itemIndex)=>{
+      const itemScore=finalScores[itemIndex];
+      const itemAnswer=(answers[item.id]||'未作答').replace(/\s+/g,' ').slice(0,360);
+      return `${itemIndex+1}. ${item.title}（${itemScore.score}分）\n命中关键词：${itemScore.matched.join('、')||'无'}\n回答：${itemAnswer}`;
+    });
+    const summary=[`AI 关键词自动评分：综合 ${overall} 分。评分关键词来自题目“考察能力”配置，并结合题意与候选人技能生成。`,...details].join('\n\n').slice(0,4000);
+    setSaving(true);
+    const saved=await complete({candidateId:candidate.id,jobTitle:candidate.role,score:overall,durationMinutes:Math.max(1,Math.ceil((Date.now()-startedAt.current)/60000)),summary});
+    if(!saved)setSaving(false);
+  }
+
+  const progress=Math.round((index+1)/questions.length*100);
+  return <section className="ai-live-page">
+    <header className="ai-live-header"><div><span>AI LIVE INTERVIEW</span><h1>{candidate.name} · {candidate.role}</h1><p>摄像头面试进行中 · 第 {index+1}/{questions.length} 题</p></div><button type="button" onClick={close} disabled={saving}>退出面试 ×</button></header>
+    <div className="ai-live-progress"><i style={{width:`${progress}%`}}/></div>
+    <div className="ai-live-grid">
+      <section className="ai-camera-card">
+        <video ref={videoRef} autoPlay playsInline muted/>
+        <div className={`ai-camera-status ${cameraState}`}><i/>{cameraState==='ready'?'摄像头与麦克风已连接':cameraState==='requesting'?'正在请求摄像头权限…':'未获得摄像头权限'}</div>
+        {cameraState==='denied'&&<div className="ai-camera-help"><b>无法显示视频画面</b><p>请在浏览器地址栏允许摄像头和麦克风权限，然后重新连接。文字作答仍可继续。</p><button type="button" onClick={()=>void requestCamera()}>重新连接设备</button></div>}
+        <footer><span>{candidate.name.slice(0,1)}</span><div><b>{candidate.name}</b><small>{candidate.role}</small></div><em>● 面试中</em></footer>
+      </section>
+      <section className="ai-answer-card">
+        <div className="ai-question-step"><span>QUESTION {String(index+1).padStart(2,'0')}</span><b>{formatCountdown(secondsLeft)}</b></div>
+        <h2>{question.title}</h2>
+        <p className="ai-question-note">考察：{question.competency} · 建议回答时长 {question.duration} 秒</p>
+        <div className="ai-keyword-row"><span>评分关键词</span>{interviewKeywords(question,candidate).map(keyword=><i key={keyword}>{keyword}</i>)}</div>
+        <label className="ai-answer-input">回答内容<textarea value={answer} onChange={event=>{setAnswers(current=>({...current,[question.id]:event.target.value}));setScores(current=>{const next={...current};delete next[question.id];return next})}} placeholder="点击“开始语音作答”，或在这里输入回答…"/></label>
+        <div className="ai-answer-actions"><button type="button" className={listening?'recording':''} onClick={toggleListening}>{listening?'■ 停止语音':'● 开始语音作答'}</button><button type="button" onClick={()=>speakQuestion(question.title)}>▶ 重播题目</button><button type="button" className="primary" onClick={scoreCurrent}>提交本题并评分</button></div>
+        {result&&<div className="ai-score-result"><strong>{result.score}<small>分</small></strong><div><b>{result.matched.length?`命中 ${result.matched.length}/${result.keywords.length} 个关键词`:'暂未命中评分关键词'}</b><p>{result.matched.length?result.matched.join('、'):'可补充与题目考察能力直接相关的具体经历和结果。'}</p></div></div>}
+        <footer className="ai-question-nav"><button type="button" disabled={index===0||saving} onClick={()=>setIndex(value=>value-1)}>← 上一题</button>{index<questions.length-1?<button type="button" className="primary" disabled={!result||saving} onClick={()=>setIndex(value=>value+1)}>下一题 →</button>:<button type="button" className="primary" disabled={!result||saving} onClick={()=>void finishInterview()}>{saving?'正在生成并保存报告…':'完成面试并保存评分'}</button>}</footer>
+      </section>
+    </div>
+  </section>;
+}
+
+function AiSummary({report,person}:{report:AiInterview;person?:Candidate}){return <article className="ai-summary-report"><header><div><span>{person?.name.slice(0,1)||'候'}</span><div><h2>{person?.name||'候选人'} · AI 面试总结</h2><p>{report.jobTitle} · 用时 {durationText(report.durationSeconds)} · {report.completedAt?formatDate(report.completedAt):'时间未记录'}</p></div></div><div><button className="primary" onClick={()=>window.print()}>导出报告</button></div></header><section className="ai-summary-overview"><div className="ai-score-ring"><strong>{report.score??'—'}</strong><small>综合得分</small></div><div><span>面试结果</span><h3>{report.status}</h3><p>{report.summary}</p><em>记录已保存</em></div></section><section className="ai-followup-advice"><span>✓</span><div><h3>评分说明</h3><p>自动面试按题目配置的考察能力与关键词进行匹配评分，并保留候选人的实际回答；人工录入的历史结果继续按原样展示。</p></div></section></article>}
 
 function Interviews({items,people,onNew,onPick,updateStatus}:{items:Interview[];people:Candidate[];onNew:()=>void;onPick:(id:string)=>void;updateStatus:(id:string,value:string)=>void}){const week=weekDays(new Date());return <section><Head path="面试管理" title="面试管理" sub="日程来自实际保存的面试安排" action="安排面试" click={onNew}/><div className="week-strip">{week.map(date=><button className={sameDay(date,new Date())?'active':''} key={date.toISOString()}><span>{weekLabel(date)}</span><b>{date.getDate()}</b>{items.some(item=>sameDay(new Date(item.scheduledAt),date))&&<i/>}</button>)}</div><div className="interview-layout"><div className="interview-list"><div className="list-title"><h3>面试日程</h3><span>{items.length} 场真实面试</span></div>{items.length===0?<Empty icon="◴" title="还没有面试安排" text="选择真实候选人并安排面试后，日程会保存到这里。" action="安排面试" click={onNew}/>:items.map(item=><article className="interview-card clickable" role="button" tabIndex={0} key={item.id} onClick={()=>onPick(item.id)} onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();onPick(item.id)}}}><time><b>{formatTime(item.scheduledAt)}</b><small>{formatMonthDay(item.scheduledAt)}</small></time><i className="interview-color"/><div><h3>{candidateName(item.candidateId,people)} · {item.round}</h3><p>{people.find(person=>person.id===item.candidateId)?.role||'职位未关联'}</p><span>{item.mode}　面试官：{item.interviewer}</span></div><select value={item.status} onClick={event=>event.stopPropagation()} onChange={event=>updateStatus(item.id,event.target.value)}>{interviewStatuses.map(status=><option key={status}>{status}</option>)}</select></article>)}</div><aside className="interview-side"><h3>面试协同提醒</h3><div><b>{items.filter(item=>new Date(item.scheduledAt)<new Date()&&item.status!=='已完成'&&item.status!=='已取消').length}</b><span>待补充面试结果<small>基于已过期且未完成的真实日程</small></span></div><div><b>{items.filter(item=>item.status==='待确认').length}</b><span>候选人待确认<small>来自当前实际安排</small></span></div></aside></div></section>}
 
@@ -217,7 +366,7 @@ function JobModal({close,submit,submitting}:{close:()=>void;submit:(data:FormDat
 function CandidateModal({jobs,close,submit,submitting}:{jobs:Job[];close:()=>void;submit:(data:FormData)=>void;submitting:boolean}){return <FormModal close={close} submit={submit} submitting={submitting} kicker="REAL CANDIDATE" title="添加候选人" description="请录入真实候选人信息；未填写的字段会明确显示为未填写。"><div className="form-grid"><label>姓名<input required name="name" placeholder="候选人姓名"/></label><label>应聘职位<input required name="role" placeholder="实际应聘职位"/></label></div><label>关联职位<select name="jobId" defaultValue=""><option value="">暂不关联</option>{jobs.map(job=><option key={job.id} value={job.id}>{job.title}</option>)}</select></label><div className="form-grid"><label>最近公司<input name="company" placeholder="可选"/></label><label>工作经验<input name="years" placeholder="例如：5 年"/></label></div><div className="form-grid"><label>来源<input name="source" placeholder="例如：内部推荐"/></label><label>所在城市<input name="city" placeholder="可选"/></label></div><label>技能标签<input name="skills" placeholder="多个技能请用逗号分隔"/></label><div className="form-grid"><label>手机号<input name="phone" type="tel" placeholder="可选"/></label><label>邮箱<input name="email" type="email" placeholder="可选"/></label></div></FormModal>}
 function InterviewModal({interview,people,close,submit,submitting}:{interview:Interview|null;people:Candidate[];close:()=>void;submit:(data:FormData)=>void;submitting:boolean}){return <FormModal close={close} submit={submit} submitting={submitting} kicker="SCHEDULE" title={interview?'查看与修改面试':'安排面试'} description="面试日程会按实际日期和候选人保存。" submitLabel={interview?'保存面试修改':'保存真实记录'}><label>候选人<select required name="candidateId" defaultValue={interview?.candidateId||''}><option value="" disabled>请选择真实候选人</option>{people.map(person=><option key={person.id} value={person.id}>{person.name} · {person.role}</option>)}</select></label><label>面试日期与时间<input required name="scheduledAt" type="datetime-local" defaultValue={interview?dateTimeLocalValue(interview.scheduledAt):''}/></label><div className="form-grid"><label>面试轮次<input name="round" defaultValue={interview?.round||''} placeholder="例如：业务一面"/></label><label>面试方式<input name="mode" defaultValue={interview?.mode||''} placeholder="例如：线下面试"/></label></div></FormModal>}
 function OfferModal({people,close,submit,submitting}:{people:Candidate[];close:()=>void;submit:(data:FormData)=>void;submitting:boolean}){return <FormModal close={close} submit={submit} submitting={submitting} kicker="NEW OFFER" title="新建 Offer" description="薪资、截止日期和后续状态都将作为真实记录保存。"><label>候选人<select required name="candidateId" defaultValue=""><option value="" disabled>请选择真实候选人</option>{people.map(person=><option key={person.id} value={person.id}>{person.name} · {person.role}</option>)}</select></label><div className="form-grid"><label>职位名称<input name="jobTitle" placeholder="留空则使用应聘职位"/></label><label>薪资方案<input required name="salary" placeholder="例如：20K × 14"/></label></div><label>有效截止日期<input required name="deadline" type="date"/></label></FormModal>}
-function QuestionModal({question,close,submit,submitting}:{question:AiQuestion|null;close:()=>void;submit:(data:FormData)=>void;submitting:boolean}){return <FormModal close={close} submit={submit} submitting={submitting} kicker="QUESTION BANK" title={question?'修改面试题':'新建面试题'} description="题目内容、能力项和时长都将作为真实题库记录保存。" submitLabel={question?'保存题目修改':'保存真实记录'}><label>面试问题<textarea required name="title" defaultValue={question?.title||''} placeholder="请输入实际需要使用的面试问题"/></label><div className="form-grid"><label>分类<input name="category" defaultValue={question?.category||''} placeholder="例如：行为面试"/></label><label>考察能力<input name="competency" defaultValue={question?.competency||''} placeholder="例如：沟通协作"/></label></div><div className="form-grid"><label>提问方式<select name="questionType" defaultValue={question?.questionType||'语音提问'}><option>语音提问</option><option>视频提问</option></select></label><label>回答时长（秒）<input name="duration" type="number" min="30" max="900" defaultValue={question?.duration||120}/></label></div><label className="check"><input name="followUp" type="checkbox" defaultChecked={question?.followUp||false}/> 允许根据回答继续追问</label></FormModal>}
+function QuestionModal({question,close,submit,submitting}:{question:AiQuestion|null;close:()=>void;submit:(data:FormData)=>void;submitting:boolean}){return <FormModal close={close} submit={submit} submitting={submitting} kicker="QUESTION BANK" title={question?'修改面试题':'新建面试题'} description="题目、评分关键词和时长都会保存，并在自动面试中逐题使用。" submitLabel={question?'保存题目修改':'保存真实记录'}><label>面试问题<textarea required name="title" defaultValue={question?.title||''} placeholder="请输入实际需要使用的面试问题"/></label><div className="form-grid"><label>分类<input name="category" defaultValue={question?.category||''} placeholder="例如：行为面试"/></label><label>考察能力 / 评分关键词<input name="competency" defaultValue={question?.competency||''} placeholder="例如：沟通协作，项目推进，结果复盘"/></label></div><div className="form-grid"><label>提问方式<select name="questionType" defaultValue={question?.questionType||'语音提问'}><option>语音提问</option><option>视频提问</option></select></label><label>回答时长（秒）<input name="duration" type="number" min="30" max="900" defaultValue={question?.duration||120}/></label></div><label className="check"><input name="followUp" type="checkbox" defaultChecked={question?.followUp||false}/> 允许根据回答继续追问</label></FormModal>}
 function AiResultModal({people,close,submit,submitting}:{people:Candidate[];close:()=>void;submit:(data:FormData)=>void;submitting:boolean}){return <FormModal close={close} submit={submit} submitting={submitting} kicker="COMPLETED INTERVIEW" title="录入已完成面试" description="只填写实际完成的面试结果；系统不会自动生成未发生的答题证据。"><label>候选人<select required name="candidateId" defaultValue=""><option value="" disabled>请选择真实候选人</option>{people.map(person=><option key={person.id} value={person.id}>{person.name} · {person.role}</option>)}</select></label><div className="form-grid"><label>面试得分<input required name="score" type="number" min="0" max="100"/></label><label>实际用时（分钟）<input required name="durationMinutes" type="number" min="1" max="600"/></label></div><label>岗位名称<input name="jobTitle" placeholder="留空则使用应聘职位"/></label><label>面试总结<textarea required name="summary" placeholder="请输入真实面试结论、优势、风险和后续建议"/></label></FormModal>}
 function ProfileModal({account,close,submit,error,submitting}:{account:Account;close:()=>void;submit:(data:FormData)=>void;error:string;submitting:boolean}){return <FormModal close={close} submit={submit} kicker="ACCOUNT PROFILE" title="个人资料" description="更新后，工作台头像、负责人和面试官姓名会保持一致。" submitLabel="保存个人资料" error={error} submitting={submitting}><label>姓名<input required name="contact" defaultValue={account.contact} maxLength={40} placeholder="请输入姓名"/></label><div className="account-readonly-grid"><label>手机号<input value={account.phone||'未绑定'} readOnly/></label><label>邮箱<input value={account.email||'未绑定'} readOnly/></label></div><p className="account-security-note">手机号和邮箱用于账号登录，暂不支持在工作台内直接变更。</p></FormModal>}
 function PasswordModal({close,submit,error,submitting}:{close:()=>void;submit:(data:FormData)=>void;error:string;submitting:boolean}){return <FormModal close={close} submit={submit} kicker="LOGIN SECURITY" title="修改登录密码" description="需要先验证当前密码。更新成功后，下次登录请使用新密码。" submitLabel="更新登录密码" error={error} submitting={submitting}><label>当前密码<input required name="currentPassword" type="password" autoComplete="current-password" placeholder="请输入当前密码"/></label><label>新密码<input required name="newPassword" type="password" autoComplete="new-password" minLength={8} maxLength={20} placeholder="8-20 位，同时包含字母和数字"/></label><label>确认新密码<input required name="confirmPassword" type="password" autoComplete="new-password" minLength={8} maxLength={20} placeholder="请再次输入新密码"/></label><p className="account-security-note">密码不得包含空格，并需同时包含字母和数字。</p></FormModal>}
@@ -247,4 +396,30 @@ function daysUntil(value:string){return Math.ceil((new Date(value).getTime()-Dat
 function durationText(seconds:number|null){if(!seconds)return '用时未记录';return `${Math.floor(seconds/60)} 分 ${seconds%60} 秒`}
 function groupCount(items:string[]){return items.reduce<Record<string,number>>((result,item)=>{result[item]=(result[item]||0)+1;return result},{})}
 function recentDays(count:number){const today=new Date();today.setHours(0,0,0,0);return Array.from({length:count},(_,index)=>{const day=new Date(today);day.setDate(today.getDate()-(count-1-index));return day})}
+function interviewKeywords(question:AiQuestion,candidate:Candidate){
+  const configured=question.competency.split(/[,，、;；/|]/).map(item=>item.trim()).filter(item=>item.length>=2);
+  const text=`${question.title}${question.category}${question.competency}`;
+  const inferred:[RegExp,string[]][]=[
+    [/项目|经验|案例/,['项目管理','职责','结果','复盘']],
+    [/沟通|协作|冲突/,['沟通协作','跨部门','推进','解决']],
+    [/数据|分析|指标/,['数据分析','指标','转化率','决策']],
+    [/产品|需求|用户/,['用户需求','需求分析','产品规划','迭代']],
+    [/技术|开发|系统/,['技术方案','系统设计','性能','稳定性']],
+    [/管理|团队|领导/,['团队管理','目标','分工','绩效']],
+    [/采购|供应商|成本/,['供应商','谈判','成本','交付']],
+  ];
+  const related=inferred.flatMap(([pattern,items])=>pattern.test(text+candidate.role)?items:[]);
+  const skills=candidate.skills.filter(skill=>skill.length>=2).slice(0,3);
+  return Array.from(new Set([...configured,...related,...skills])).slice(0,8).length?Array.from(new Set([...configured,...related,...skills])).slice(0,8):['具体职责','行动过程','量化结果','复盘改进'];
+}
+function scoreInterviewAnswer(answer:string,question:AiQuestion,candidate:Candidate):AnswerScore{
+  const keywords=interviewKeywords(question,candidate);
+  const normalized=answer.toLowerCase().replace(/\s+/g,'');
+  const matched=keywords.filter(keyword=>normalized.includes(keyword.toLowerCase().replace(/\s+/g,'')));
+  if(!answer.trim())return{score:0,keywords,matched:[]};
+  const coverage=matched.length/Math.max(1,keywords.length);
+  const detail=Math.min(15,Math.floor(answer.trim().length/45)*3);
+  return{score:Math.min(100,Math.round(coverage*85+detail)),keywords,matched};
+}
+function formatCountdown(seconds:number){const minutes=Math.floor(seconds/60);return `${String(minutes).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`}
 function speak(text:string,flash:(text:string)=>void){if(!('speechSynthesis'in window)){flash('当前浏览器不支持语音播放');return}window.speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(text);utterance.lang='zh-CN';utterance.rate=.95;window.speechSynthesis.speak(utterance);flash('正在播放真实题目')}
