@@ -88,6 +88,7 @@ export const SCHEMA_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS ai_questions (
     id TEXT PRIMARY KEY,
     owner_id TEXT NOT NULL,
+    job_id TEXT,
     title TEXT NOT NULL,
     category TEXT NOT NULL,
     question_type TEXT NOT NULL,
@@ -96,7 +97,8 @@ export const SCHEMA_STATEMENTS = [
     follow_up INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    FOREIGN KEY (owner_id) REFERENCES accounts(id) ON DELETE CASCADE
+    FOREIGN KEY (owner_id) REFERENCES accounts(id) ON DELETE CASCADE,
+    FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE SET NULL
   )`,
   `CREATE TABLE IF NOT EXISTS ai_interviews (
     id TEXT PRIMARY KEY,
@@ -280,6 +282,7 @@ export const SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_interviews_owner_schedule ON interviews(owner_id, scheduled_at)`,
   `CREATE INDEX IF NOT EXISTS idx_offers_owner_created ON offers(owner_id, created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_ai_questions_owner_created ON ai_questions(owner_id, created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_ai_questions_owner_job ON ai_questions(owner_id, job_id, created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_ai_interviews_owner_status ON ai_interviews(owner_id, status)`,
   `CREATE INDEX IF NOT EXISTS idx_resume_profiles_owner_status ON resume_profiles(owner_id, parsing_status)`,
   `CREATE INDEX IF NOT EXISTS idx_resume_applications_owner_job ON resume_applications(owner_id, job_id, applied_at)`,

@@ -1008,3 +1008,19 @@ button:disabled{cursor:wait}
 .ai-question-nav{display:flex;justify-content:space-between;gap:12px;margin-top:18px;padding-top:18px;border-top:1px solid rgba(162,181,211,.09)}.ai-question-nav button:last-child{margin-left:auto}.ai-question-nav button:disabled{opacity:.46}
 @media(max-width:1050px){.ai-live-grid{grid-template-columns:1fr}.ai-camera-card,.ai-camera-card video{min-height:420px}.ai-answer-card{min-height:auto}}
 @media(max-width:760px){.ai-live-header{align-items:flex-start}.ai-live-header h1{font-size:24px}.ai-live-header p{font-size:12px}.ai-live-grid{display:block}.ai-camera-card{margin-bottom:14px}.ai-camera-card,.ai-camera-card video{min-height:330px}.ai-answer-card{padding:20px}.ai-answer-card h2{font-size:21px}.ai-answer-actions button.primary{width:100%;margin-left:0}.ai-question-nav{flex-wrap:wrap}.ai-question-nav button{flex:1}}
+
+/* Every selectable dashboard row keeps a dark interaction state */
+.job-row,.ranking-row,.offer-row,.schedule-item,.rs-intake-row,.rs-log-row{transition:background-color .18s ease,box-shadow .18s ease}
+.job-row:hover,.job-row:active,.job-row:focus,.job-row:focus-within,.job-row.selected,
+.ranking-row:hover,.ranking-row:active,.ranking-row:focus,.ranking-row:focus-visible,.ranking-row.selected,
+.offer-row:hover,.offer-row:active,.offer-row:focus-within,.offer-row.selected,
+.schedule-item:hover,.schedule-item:active,.schedule-item:focus-within,
+.rs-intake-row:hover,.rs-intake-row:active,.rs-intake-row:focus-within,.rs-intake-row.selected,
+.rs-log-row:hover,.rs-log-row:active,.rs-log-row:focus-within,.rs-log-row.selected{
+  outline:0;background:linear-gradient(90deg,rgba(30,183,211,.15),rgba(34,102,181,.09));box-shadow:inset 4px 0 0 #43cfe7
+}
+.ai-ranking,.ranking-row{border-color:rgba(162,181,211,.09);color:#c5cfdd;background:#111a2b}.ranking-row strong{color:#f4f8ff}.ranking-row small,.rank-num{color:#8998ad}
+.week-strip{border-color:rgba(162,181,211,.11);background:#111a2b}.week-strip button{border-color:rgba(162,181,211,.09);color:#96a4b8;background:#111a2b}.week-strip button:hover,.week-strip button:focus-visible{outline:0;color:#eaf4ff;background:#16243a}.week-strip button.active{color:#fff;background:linear-gradient(110deg,#168da8,#347ce4)}
+.interview-side>div{background:#0d1728}
+.manage-row:active,.manage-row:focus,.flow-person-row:active,.ai-question-row:active,.rs-person-row:active{background:linear-gradient(90deg,rgba(30,183,211,.15),rgba(34,102,181,.09));box-shadow:inset 4px 0 0 #43cfe7}
+.candidate-card:active,.candidate-card:focus-visible,.interview-card:active,.interview-card:focus-visible,.kpi-grid article.clickable:active,.kpi-grid article.clickable:focus-visible{outline:0;border-color:rgba(67,207,231,.3);background:#15243a;box-shadow:0 18px 42px rgba(0,8,24,.28),inset 0 0 0 1px rgba(67,207,231,.07)}

@@ -85,18 +85,20 @@ export async function POST(request: NextRequest) {
   } else if (resource === 'aiQuestion') {
     const title = text(payload.title, 500);
     if (!title) return invalid('请输入面试问题。');
+    const jobId = text(payload.jobId, 80) || null;
+    if (jobId && !(await ownedRecord('jobs', jobId, account.id))) return invalid('所选适用岗位不存在。');
     const category = text(payload.category, 80) || '通用素质';
     const questionType = text(payload.questionType, 40) || '语音提问';
     const duration = integer(payload.duration, 30, 900, 120);
     const competency = text(payload.competency, 80) || '综合能力';
     const followUp = payload.followUp ? 1 : 0;
-    const duplicate = await db.prepare(`SELECT id FROM ai_questions WHERE owner_id = ?
+    const duplicate = await db.prepare(`SELECT id FROM ai_questions WHERE owner_id = ? AND COALESCE(job_id, '') = ?
       AND title = ? COLLATE NOCASE AND category = ? COLLATE NOCASE AND question_type = ? COLLATE NOCASE
       AND duration = ? AND competency = ? COLLATE NOCASE AND follow_up = ? LIMIT 1`
-    ).bind(account.id, title, category, questionType, duration, competency, followUp).first<{id:string}>();
+    ).bind(account.id, jobId || '', title, category, questionType, duration, competency, followUp).first<{id:string}>();
     if (duplicate) return NextResponse.json({ ok:false, message:'相同面试题已存在，无需重复保存。' }, { status:409 });
-    await db.prepare(`INSERT INTO ai_questions (id, owner_id, title, category, question_type, duration, competency, follow_up, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(id, account.id, title, category, questionType, duration, competency, followUp, now, now).run();
+    await db.prepare(`INSERT INTO ai_questions (id, owner_id, job_id, title, category, question_type, duration, competency, follow_up, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(id, account.id, jobId, title, category, questionType, duration, competency, followUp, now, now).run();
   } else if (resource === 'aiInterview') {
     const candidateId = text(payload.candidateId, 80);
     const candidate = candidateId ? await db.prepare('SELECT role FROM candidates WHERE id = ? AND owner_id = ?').bind(candidateId, account.id).first<{ role: string }>() : null;
@@ -133,18 +135,20 @@ export async function PATCH(request: NextRequest) {
     if (!owned) return invalid('面试题不存在。');
     const title = text(payload.title, 500);
     if (!title) return invalid('请输入面试问题。');
+    const jobId = text(payload.jobId, 80) || null;
+    if (jobId && !(await ownedRecord('jobs', jobId, account.id))) return invalid('所选适用岗位不存在。');
     const category = text(payload.category, 80) || '通用素质';
     const questionType = text(payload.questionType, 40) || '语音提问';
     const duration = integer(payload.duration, 30, 900, 120);
     const competency = text(payload.competency, 80) || '综合能力';
     const followUp = payload.followUp ? 1 : 0;
-    const duplicate = await db.prepare(`SELECT id FROM ai_questions WHERE owner_id = ? AND id <> ?
+    const duplicate = await db.prepare(`SELECT id FROM ai_questions WHERE owner_id = ? AND id <> ? AND COALESCE(job_id, '') = ?
       AND title = ? COLLATE NOCASE AND category = ? COLLATE NOCASE AND question_type = ? COLLATE NOCASE
       AND duration = ? AND competency = ? COLLATE NOCASE AND follow_up = ? LIMIT 1`
-    ).bind(account.id, id, title, category, questionType, duration, competency, followUp).first<{id:string}>();
+    ).bind(account.id, id, jobId || '', title, category, questionType, duration, competency, followUp).first<{id:string}>();
     if (duplicate) return NextResponse.json({ ok:false, message:'相同面试题已存在，请直接使用现有题目。' }, { status:409 });
-    await db.prepare(`UPDATE ai_questions SET title = ?, category = ?, question_type = ?, duration = ?, competency = ?, follow_up = ?, updated_at = ?
-      WHERE id = ? AND owner_id = ?`).bind(title, category, questionType, duration, competency, followUp, now, id, account.id).run();
+    await db.prepare(`UPDATE ai_questions SET job_id = ?, title = ?, category = ?, question_type = ?, duration = ?, competency = ?, follow_up = ?, updated_at = ?
+      WHERE id = ? AND owner_id = ?`).bind(jobId, title, category, questionType, duration, competency, followUp, now, id, account.id).run();
     return NextResponse.json({ ok: true });
   }
 
@@ -196,7 +200,7 @@ function mapOffer(row: DataRow) {
 }
 
 function mapAiQuestion(row: DataRow) {
-  return { id: row.id, title: row.title, category: row.category, questionType: row.question_type, duration: row.duration, competency: row.competency, followUp: Boolean(row.follow_up), createdAt: row.created_at, updatedAt: row.updated_at };
+  return { id: row.id, jobId: row.job_id, title: row.title, category: row.category, questionType: row.question_type, duration: row.duration, competency: row.competency, followUp: Boolean(row.follow_up), createdAt: row.created_at, updatedAt: row.updated_at };
 }
 
 function deduplicateAiQuestions(rows: DataRow[]) {
@@ -204,7 +208,7 @@ function deduplicateAiQuestions(rows: DataRow[]) {
   const unique: DataRow[] = [];
   const duplicateIds: string[] = [];
   for (const row of rows) {
-    const key = [row.title, row.category, row.question_type, row.duration, row.competency, row.follow_up]
+    const key = [row.job_id, row.title, row.category, row.question_type, row.duration, row.competency, row.follow_up]
       .map(value => String(value ?? '').trim().toLowerCase()).join('\u0000');
     if (seen.has(key)) duplicateIds.push(String(row.id));
     else { seen.add(key); unique.push(row); }

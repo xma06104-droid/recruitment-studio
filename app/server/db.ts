@@ -35,7 +35,13 @@ export function getResumeBucket(): R2Bucket {
 export async function ensureSchema() {
   if (!schemaReady) {
     const db = getDb();
-    schemaReady = db.batch(SCHEMA_STATEMENTS.map(statement => db.prepare(statement))).then(() => undefined).catch(error => {
+    schemaReady = (async()=>{
+      const columns=await db.prepare('PRAGMA table_info(ai_questions)').all<{name:string}>();
+      if(columns.results.length&&!columns.results.some(column=>column.name==='job_id')){
+        await db.prepare('ALTER TABLE ai_questions ADD COLUMN job_id TEXT REFERENCES jobs(id) ON DELETE SET NULL').run();
+      }
+      await db.batch(SCHEMA_STATEMENTS.map(statement => db.prepare(statement)));
+    })().catch(error => {
       schemaReady = null;
       throw error;
     });
