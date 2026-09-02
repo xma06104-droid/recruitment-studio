@@ -977,3 +977,15 @@ button:disabled{cursor:wait}
 .rs-compare-grid>header b{font-size:14px}
 .rs-compare-grid>header small{margin-top:4px;font-size:12px}
 @media(max-width:760px){.rs-compare-grid>*{min-height:54px;padding:10px 12px;font-size:12px}.rs-compare-grid>header b{font-size:13px}.rs-compare-grid>header small{font-size:11px}}
+
+/* Resume intake channels enlarge as a complete module on hover */
+.rs-channel-grid{gap:18px;margin-bottom:18px}
+.rs-channel-grid article{position:relative;z-index:1;min-height:98px;grid-template-columns:46px minmax(0,1fr) auto;gap:14px;padding:20px 22px;transform-origin:center;transition:transform .2s ease,background-color .2s ease,border-color .2s ease,box-shadow .2s ease}
+.rs-channel-grid article:hover,.rs-channel-grid article:focus-within{z-index:3;transform:translateY(-2px) scale(1.035);border-color:rgba(67,207,231,.34);background:#15243a;box-shadow:0 18px 42px rgba(0,8,24,.34),0 0 0 1px rgba(67,207,231,.08)}
+.rs-channel-grid article>i{width:44px;height:44px;border-radius:13px;font-size:16px}
+.rs-channel-grid b{font-size:15px;line-height:1.35}
+.rs-channel-grid small{margin-top:6px;font-size:12px;line-height:1.35}
+.rs-channel-grid article>span{padding:7px 10px;border:1px solid rgba(162,181,211,.12);border-radius:8px;color:#c5d4e2;background:#19273a;font-size:11px;font-weight:700;white-space:nowrap}
+.rs-intake-row>b{color:#fff;font-size:14px}
+.rs-intake-row>b small{margin-top:6px;color:#9cabc0;font-size:11px}
+@media(max-width:760px){.rs-channel-grid article:hover,.rs-channel-grid article:focus-within{transform:translateY(-2px) scale(1.02)}}
