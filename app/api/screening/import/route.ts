@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { accountFromRequest, ensureSchema, getDb, getResumeBucket } from '@/app/server/db';
 import { extractResumeFileText, ResumeFileExtraction } from '@/app/server/resume-file-text';
 import { getResumeJobs } from '@/app/server/resume-jobs';
-import { matchResumeJob, parseResumeText, ParsedResume, scoreResumeForJob } from '@/app/server/resume-parser';
+import { matchResumeJob, parseResumeFileName, parseResumeText, ParsedResume, scoreResumeForJob } from '@/app/server/resume-parser';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const allowedExtensions = ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'webp', 'txt', 'html', 'htm'];
@@ -24,7 +24,11 @@ export async function POST(request: NextRequest) {
     extraction = await extractResumeFileText(file);
     if (extraction.text) rawText = extraction.text;
   }
-  const parsed = parseResumeText(rawText);
+  let parsed = parseResumeText(rawText);
+  if (file) {
+    const fallback = parseResumeFileName(file.name);
+    parsed = { ...parsed, name: fallback.name || parsed.name, role: fallback.role || parsed.role };
+  }
   const db = getDb();
   const jobs = await getResumeJobs(account.id);
   let jobId = field(form, 'jobId', 80) || null;

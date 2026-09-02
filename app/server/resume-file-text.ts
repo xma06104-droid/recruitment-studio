@@ -1,4 +1,5 @@
 import { stripResumeHtml } from '@/app/server/resume-parser';
+import { extractText } from 'unpdf';
 
 export type ResumeFileExtraction = {
   text: string;
@@ -69,8 +70,18 @@ async function extractDocxText(buffer: ArrayBuffer) {
 
 async function extractPdfText(buffer: ArrayBuffer) {
   const bytes = new Uint8Array(buffer);
+  try {
+    const result = await extractText(bytes, { mergePages: true });
+    const text = String(result.text || '').trim();
+    if (isUsefulPdfText(text)) return text.slice(0, MAX_EXTRACTED_TEXT);
+  } catch {}
+  return extractPdfTextFallback(buffer);
+}
+
+async function extractPdfTextFallback(buffer: ArrayBuffer) {
+  const bytes = new Uint8Array(buffer);
   const source = latin1(bytes);
-  const streams = [source];
+  const streams: string[] = [];
   const streamPattern = /stream\r?\n/g;
   let match: RegExpExecArray | null;
   while ((match = streamPattern.exec(source)) && streams.length < MAX_PDF_STREAMS) {
@@ -98,6 +109,11 @@ async function extractPdfText(buffer: ArrayBuffer) {
     }
   }
   return [...new Set(lines)].join('\n').slice(0, MAX_EXTRACTED_TEXT);
+}
+
+function isUsefulPdfText(value: string) {
+  const meaningful = value.match(/[A-Za-z0-9\u4e00-\u9fa5]/g)?.length || 0;
+  return meaningful >= 12 && meaningful / Math.max(value.length, 1) >= 0.18;
 }
 
 function buildPdfUnicodeMap(streams: string[]) {

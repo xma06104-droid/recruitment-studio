@@ -84,6 +84,15 @@ const fieldLabels = [
   '期望薪资', '期望月薪', '技能', '专业技能', '核心技能', '证书', '资格证书',
 ];
 
+export function parseResumeFileName(value: string) {
+  const stem = value.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').trim();
+  const parts = stem.split(/\s*[-—–_|｜]\s*/).map(item => item.trim()).filter(Boolean);
+  const name = parts.find(item => /^[\u4e00-\u9fa5·]{2,4}$/.test(item) && !/(?:简历|求职|应聘|职位|岗位)/.test(item)) || '';
+  const role = commonRoles.find(item => stem.toLowerCase().includes(item.toLowerCase()))
+    || cleanRole(parts.find(item => /(?:求职|应聘|职位|岗位)/.test(item))?.replace(/^(?:求职|应聘|职位|岗位)\s*/, '') || '');
+  return { name, role };
+}
+
 export function parseResumeText(value: string): ParsedResume {
   const text = normalizeResumeText(value);
   const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
@@ -234,7 +243,7 @@ function cleanName(value: string) {
 }
 
 function inferName(lines: string[]) {
-  const blocked = /简历|求职|应聘|职位|岗位|工程师|经理|主管|总监|专员|顾问|学校|大学|学院|公司|介绍|目录|模板|人才|招聘|信息|资料/;
+  const blocked = /简历|求职|应聘|职位|岗位|工程师|经理|主管|总监|专员|顾问|学校|大学|学院|公司|介绍|目录|模板|人才|招聘|信息|资料|此致|敬礼|您好/;
   const candidates = lines.map((line, index) => {
     const value = line.replace(/个人简历|RESUME/gi, '').trim();
     if (!/^[\u4e00-\u9fa5·]{2,4}$/.test(value) || blocked.test(value)) return null;

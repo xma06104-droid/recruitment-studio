@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { accountFromRequest } from '@/app/server/db';
 import { extractResumeFileText } from '@/app/server/resume-file-text';
 import { getResumeJobs } from '@/app/server/resume-jobs';
-import { matchResumeJob, parseResumeText, scoreResumeForJob } from '@/app/server/resume-parser';
+import { matchResumeJob, parseResumeFileName, parseResumeText, scoreResumeForJob } from '@/app/server/resume-parser';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const allowedExtensions = ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'webp', 'txt', 'html', 'htm'];
@@ -27,6 +27,10 @@ export async function POST(request: NextRequest) {
   if (!rawText) return invalid('请选择简历文件，或粘贴需要解析的简历原文。');
 
   let parsed = parseResumeText(rawText);
+  if (file) {
+    const fallback = parseResumeFileName(file.name);
+    parsed = { ...parsed, name: fallback.name || parsed.name, role: fallback.role || parsed.role };
+  }
   const initialRecognized = recognizedCount(parsed);
   if (!initialRecognized) return invalid('未能从简历中识别有效信息，请检查文本内容后重试。');
 

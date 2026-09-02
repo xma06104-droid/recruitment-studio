@@ -141,7 +141,8 @@ function ImportModal({jobs,busy,close,done}:{jobs:Job[];busy:boolean;close:()=>v
       if(roleField instanceof HTMLInputElement&&!roleField.value.trim())roleField.value=result.suggestedJob.title;
     }
     setMatchPreview(result.match||null);
-    setNotice(result.suggestedJob&&result.match?`已识别并填充 ${result.recognized||0} 项信息，关联「${result.suggestedJob.title}」并生成 ${result.match.score} 分匹配度。请确认后提交。`:`已自动识别并回填 ${result.recognized||0} 项信息；暂未匹配现有职位，请选择关联岗位后重新分析。`);
+    const parsedRole=typeof parsed.role==='string'?parsed.role:'';
+    setNotice(result.suggestedJob&&result.match?`已识别并填充 ${result.recognized||0} 项信息，关联「${result.suggestedJob.title}」并生成 ${result.match.score} 分匹配度。请确认后提交。`:`已自动识别并回填 ${result.recognized||0} 项信息；${parsedRole?`已保留简历求职职位「${parsedRole}」。`:''}当前系统暂无对应岗位，可直接进入共享人才库。`);
   }
 
   async function submit(event:FormEvent<HTMLFormElement>){
