@@ -966,3 +966,14 @@ input[type="date"]::-webkit-calendar-picker-indicator,input[type="datetime-local
 /* Saving buttons expose a clear in-flight state */
 button:disabled{cursor:wait}
 .primary-button:disabled,.rs-review-form footer button:disabled,.rs-template-save button:disabled{opacity:.72;filter:saturate(.75)}
+
+/* Resume comparison uses the same readable type scale as the main pages */
+.rs-compare>.eyebrow{font-size:13px;letter-spacing:.16em}
+.rs-compare>p{font-size:14px}
+.rs-compare-grid>*{min-height:58px;padding:12px 16px;font-size:13px;line-height:1.55}
+.rs-compare-grid>strong{font-size:13px;font-weight:750}
+.rs-compare-grid>header{gap:12px}
+.rs-compare-grid>header>span{width:36px;height:36px;font-size:12px}
+.rs-compare-grid>header b{font-size:14px}
+.rs-compare-grid>header small{margin-top:4px;font-size:12px}
+@media(max-width:760px){.rs-compare-grid>*{min-height:54px;padding:10px 12px;font-size:12px}.rs-compare-grid>header b{font-size:13px}.rs-compare-grid>header small{font-size:11px}}
