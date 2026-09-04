@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { env } from 'cloudflare:workers';
 import { ensureSchema, getDb, hashToken } from '@/app/server/db';
 import { contextualizeSpeechTranscript } from '@/app/speech-context';
 
@@ -36,6 +37,7 @@ export async function GET(_request:NextRequest, context:{ params:Promise<{ token
     ok:true,
     invitation:{ id:invitation.id, candidateName:invitation.name, jobTitle:invitation.job_title, status:invitation.status, expiresAt:invitation.expires_at },
     questions,
+    serverTranscription:Boolean((env as unknown as { OPENAI_API_KEY?:string }).OPENAI_API_KEY),
   }, { headers:{ 'Cache-Control':'private, no-store' } });
 }
 
