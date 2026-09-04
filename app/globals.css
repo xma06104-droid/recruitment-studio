@@ -830,6 +830,7 @@ select{color-scheme:dark}
 .kpi-icon.green-bg{color:#62dbad;background:linear-gradient(145deg,#142b2d,#0d1b26)}
 .real-empty>button{border-color:rgba(85,214,232,.2);color:#67dce9;background:linear-gradient(145deg,#14263b,#0b1728);box-shadow:0 10px 24px rgba(0,5,18,.22)}
 .real-empty>button:hover{border-color:rgba(85,214,232,.38);color:#e9fbff;background:#172b43}
+.dashboard-toast.success{border:1px solid rgba(81,218,171,.28);color:#9cf0d1;background:#102820}.dashboard-toast.error{border:1px solid rgba(255,115,137,.3);color:#ffb4c0;background:#321823}
 
 /* Authentication and registration use the same visual language */
 .auth-shell,.register-shell{background:radial-gradient(circle at 12% 10%,rgba(31,147,192,.14),transparent 30%),radial-gradient(circle at 86% 84%,rgba(41,76,177,.13),transparent 28%),#050b16}

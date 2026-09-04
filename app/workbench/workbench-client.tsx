@@ -50,7 +50,7 @@ export default function WorkbenchClient() {
   const [editingQuestion,setEditingQuestion]=useState<AiQuestion|null>(null);
   const [editingInterview,setEditingInterview]=useState<Interview|null>(null);
   const [editingOffer,setEditingOffer]=useState<Offer|null>(null);
-  const [toast,setToast]=useState('');
+  const [toast,setToast]=useState<{text:string;tone:'success'|'error'|'info'}|null>(null);
   const [error,setError]=useState('');
   const saveInFlight=useRef(false);
 
@@ -74,16 +74,16 @@ export default function WorkbenchClient() {
   },[]);
   useEffect(()=>{const closeAccount=(event:MouseEvent)=>{if(!(event.target instanceof Element)||!event.target.closest('.account-area'))setAccountOpen(false)};document.addEventListener('mousedown',closeAccount);return()=>document.removeEventListener('mousedown',closeAccount)},[]);
 
-  async function create(resource:string,payload:Record<string,unknown>,success:string) {
+  async function create(resource:string,payload:Record<string,unknown>) {
     if(saveInFlight.current)return;
     saveInFlight.current=true;setModalSaving(true);
     try{
       const response=await fetch('/api/workbench',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({resource,payload})});
       const result=await response.json().catch(()=>({})) as {message?:string};
       if(response.status===401){window.location.assign('/');return}
-      if(!response.ok){flash(result.message||'保存失败，请稍后重试。');return}
-      setModal(null);await loadData();flash(success);
-    }catch{flash('保存失败，请检查网络后重试。')}finally{saveInFlight.current=false;setModalSaving(false)}
+      if(!response.ok){flash('保存失败');return}
+      setModal(null);await loadData();flash('保存成功');
+    }catch{flash('保存失败')}finally{saveInFlight.current=false;setModalSaving(false)}
   }
 
   async function updateQuestion(id:string,payload:Record<string,unknown>){
@@ -93,9 +93,9 @@ export default function WorkbenchClient() {
       const response=await fetch('/api/workbench',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({resource:'aiQuestion',id,payload})});
       const result=await response.json().catch(()=>({})) as {message?:string};
       if(response.status===401){window.location.assign('/');return}
-      if(!response.ok){flash(result.message||'题目更新失败，请稍后重试。');return}
-      setModal(null);setEditingQuestion(null);await loadData();flash('面试题已更新');
-    }catch{flash('题目更新失败，请检查网络后重试。')}finally{saveInFlight.current=false;setModalSaving(false)}
+      if(!response.ok){flash('保存失败');return}
+      setModal(null);setEditingQuestion(null);await loadData();flash('保存成功');
+    }catch{flash('保存失败')}finally{saveInFlight.current=false;setModalSaving(false)}
   }
 
   async function generateQuestions(payload:Record<string,unknown>){
@@ -130,9 +130,9 @@ export default function WorkbenchClient() {
       const response=await fetch('/api/workbench',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({resource:'job',id,payload})});
       const result=await response.json().catch(()=>({})) as {message?:string};
       if(response.status===401){window.location.assign('/');return}
-      if(!response.ok){flash(result.message||'职位更新失败，请稍后重试。');return}
-      setModal(null);setEditingJob(null);await loadData();flash('职位信息已更新');
-    }catch{flash('职位更新失败，请检查网络后重试。')}finally{saveInFlight.current=false;setModalSaving(false)}
+      if(!response.ok){flash('保存失败');return}
+      setModal(null);setEditingJob(null);await loadData();flash('保存成功');
+    }catch{flash('保存失败')}finally{saveInFlight.current=false;setModalSaving(false)}
   }
 
   async function saveAiInterview(payload:Record<string,unknown>){
@@ -142,9 +142,9 @@ export default function WorkbenchClient() {
       const response=await fetch('/api/workbench',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({resource:'aiInterview',payload})});
       const result=await response.json().catch(()=>({})) as {message?:string};
       if(response.status===401){window.location.assign('/');return false}
-      if(!response.ok){flash(result.message||'AI 面试结果保存失败，请稍后重试。');return false}
-      await loadData();flash('AI 面试已完成，关键词评分和逐题回答已保存');return true;
-    }catch{flash('AI 面试结果保存失败，请检查网络后重试。');return false}
+      if(!response.ok){flash('保存失败');return false}
+      await loadData();flash('保存成功');return true;
+    }catch{flash('保存失败');return false}
     finally{saveInFlight.current=false}
   }
 
@@ -172,9 +172,9 @@ export default function WorkbenchClient() {
       const response=await fetch('/api/workbench',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({resource:'interview',id,payload})});
       const result=await response.json().catch(()=>({})) as {message?:string};
       if(response.status===401){window.location.assign('/');return}
-      if(!response.ok){flash(result.message||'面试安排更新失败，请稍后重试。');return}
-      setModal(null);setEditingInterview(null);await loadData();flash('面试安排已更新');
-    }catch{flash('面试安排更新失败，请检查网络后重试。')}finally{saveInFlight.current=false;setModalSaving(false)}
+      if(!response.ok){flash('保存失败');return}
+      setModal(null);setEditingInterview(null);await loadData();flash('保存成功');
+    }catch{flash('保存失败')}finally{saveInFlight.current=false;setModalSaving(false)}
   }
 
   async function updateOffer(id:string,payload:Record<string,unknown>){
@@ -184,9 +184,9 @@ export default function WorkbenchClient() {
       const response=await fetch('/api/workbench',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({resource:'offer',id,payload})});
       const result=await response.json().catch(()=>({})) as {message?:string};
       if(response.status===401){window.location.assign('/');return}
-      if(!response.ok){flash(result.message||'Offer 更新失败，请稍后重试。');return}
-      setModal(null);setEditingOffer(null);await loadData();flash('Offer 已更新');
-    }catch{flash('Offer 更新失败，请检查网络后重试。')}finally{saveInFlight.current=false;setModalSaving(false)}
+      if(!response.ok){flash('保存失败');return}
+      setModal(null);setEditingOffer(null);await loadData();flash('保存成功');
+    }catch{flash('保存失败')}finally{saveInFlight.current=false;setModalSaving(false)}
   }
 
   async function deleteOffer(offer:Offer){
@@ -209,10 +209,10 @@ export default function WorkbenchClient() {
     await loadData();flash(success);
   }
 
-  function flash(text:string){setToast(text);window.setTimeout(()=>setToast(''),2300)}
+  function flash(text:string){const tone=text.includes('失败')||text.includes('错误')?'error':text.includes('成功')?'success':'info';setToast({text,tone});window.setTimeout(()=>setToast(null),2300)}
   async function logout(){await fetch('/api/auth/logout',{method:'POST'});window.location.assign('/')}
   function openAccountModal(name:'profile'|'password'){setAccountError('');setAccountOpen(false);setModal(name)}
-  async function updateAccount(action:'profile'|'password',payload:Record<string,unknown>,success:string){
+  async function updateAccount(action:'profile'|'password',payload:Record<string,unknown>){
     if(saveInFlight.current)return;
     saveInFlight.current=true;
     setAccountSaving(true);setAccountError('');
@@ -220,7 +220,7 @@ export default function WorkbenchClient() {
       const response=await fetch('/api/auth/account',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,...payload})});
       const result=await response.json().catch(()=>({})) as {message?:string;account?:Account};
       if(response.status===401){window.location.assign('/');return}
-      if(!response.ok){setAccountError(result.message||'账号信息更新失败，请稍后重试。');return}
+      if(!response.ok){setAccountError(result.message||'账号信息更新失败，请稍后重试。');flash('保存失败');return}
       if(result.account)setData(current=>current?{
         ...current,
         account:result.account as Account,
@@ -229,8 +229,8 @@ export default function WorkbenchClient() {
         offers:action==='profile'?current.offers.map(offer=>({...offer,ownerName:result.account!.contact})):current.offers,
       }:current);
       if(action==='profile')await loadData();
-      setModal(null);flash(success);
-    }catch{setAccountError('账号信息更新失败，请检查网络后重试。')}finally{saveInFlight.current=false;setAccountSaving(false)}
+      setModal(null);flash('保存成功');
+    }catch{setAccountError('账号信息更新失败，请检查网络后重试。');flash('保存失败')}finally{saveInFlight.current=false;setAccountSaving(false)}
   }
 
   const filteredJobs=useMemo(()=>data?[...data.jobs.filter(item=>(item.title+item.department+item.city).toLowerCase().includes(search.toLowerCase()))].sort(compareJobs):[],[data,search]);
@@ -274,18 +274,18 @@ export default function WorkbenchClient() {
         {active==='招聘数据'&&<Analytics data={data}/>}
       </div>
     </section>
-    {modal==='job'&&<JobModal job={editingJob} close={()=>{if(!modalSaving){setModal(null);setEditingJob(null)}}} submitting={modalSaving} submit={form=>editingJob?void updateJob(editingJob.id,formObject(form)):void create('job',formObject(form),'职位已创建并保存')}/>}
-    {modal==='candidate'&&<CandidateModal jobs={data.jobs} close={()=>setModal(null)} submitting={modalSaving} submit={form=>void create('candidate',formObject(form),'候选人已加入人才库')}/>}
-    {modal==='interview'&&<InterviewModal interview={editingInterview} people={activeCandidates} close={()=>{if(!modalSaving){setModal(null);setEditingInterview(null)}}} submitting={modalSaving} submit={form=>editingInterview?void updateInterview(editingInterview.id,formObject(form)):void create('interview',formObject(form),'面试安排已保存')}/>}
-    {modal==='offer'&&<OfferModal offer={editingOffer} people={data.candidates} close={()=>{if(!modalSaving){setModal(null);setEditingOffer(null)}}} submitting={modalSaving} submit={form=>editingOffer?void updateOffer(editingOffer.id,formObject(form)):void create('offer',formObject(form),'Offer 已创建')}/>}
-    {modal==='question'&&<QuestionModal question={editingQuestion} jobs={data.jobs} close={()=>{if(!modalSaving){setModal(null);setEditingQuestion(null)}}} submitting={modalSaving} submit={form=>editingQuestion?void updateQuestion(editingQuestion.id,formObject(form)):void create('aiQuestion',formObject(form),'面试题已保存到题库')}/>}
+    {modal==='job'&&<JobModal job={editingJob} close={()=>{if(!modalSaving){setModal(null);setEditingJob(null)}}} submitting={modalSaving} submit={form=>editingJob?void updateJob(editingJob.id,formObject(form)):void create('job',formObject(form))}/>}
+    {modal==='candidate'&&<CandidateModal jobs={data.jobs} close={()=>setModal(null)} submitting={modalSaving} submit={form=>void create('candidate',formObject(form))}/>}
+    {modal==='interview'&&<InterviewModal interview={editingInterview} people={activeCandidates} close={()=>{if(!modalSaving){setModal(null);setEditingInterview(null)}}} submitting={modalSaving} submit={form=>editingInterview?void updateInterview(editingInterview.id,formObject(form)):void create('interview',formObject(form))}/>}
+    {modal==='offer'&&<OfferModal offer={editingOffer} people={data.candidates} close={()=>{if(!modalSaving){setModal(null);setEditingOffer(null)}}} submitting={modalSaving} submit={form=>editingOffer?void updateOffer(editingOffer.id,formObject(form)):void create('offer',formObject(form))}/>}
+    {modal==='question'&&<QuestionModal question={editingQuestion} jobs={data.jobs} close={()=>{if(!modalSaving){setModal(null);setEditingQuestion(null)}}} submitting={modalSaving} submit={form=>editingQuestion?void updateQuestion(editingQuestion.id,formObject(form)):void create('aiQuestion',formObject(form))}/>}
     {modal==='questionGenerator'&&<QuestionGeneratorModal jobs={data.jobs} close={()=>{if(!modalSaving)setModal(null)}} submitting={modalSaving} submit={form=>void generateQuestions(formObject(form))}/>}
-    {modal==='aiResult'&&<AiResultModal people={activeCandidates} close={()=>setModal(null)} submitting={modalSaving} submit={form=>void create('aiInterview',formObject(form),'真实面试结果已录入')}/>}
-    {modal==='profile'&&<ProfileModal account={data.account} close={()=>setModal(null)} error={accountError} submitting={accountSaving} submit={form=>void updateAccount('profile',formObject(form),'个人资料已更新')}/>}
-    {modal==='password'&&<PasswordModal close={()=>setModal(null)} error={accountError} submitting={accountSaving} submit={form=>void updateAccount('password',formObject(form),'登录密码已更新')}/>}
+    {modal==='aiResult'&&<AiResultModal people={activeCandidates} close={()=>setModal(null)} submitting={modalSaving} submit={form=>void create('aiInterview',formObject(form))}/>}
+    {modal==='profile'&&<ProfileModal account={data.account} close={()=>setModal(null)} error={accountError} submitting={accountSaving} submit={form=>void updateAccount('profile',formObject(form))}/>}
+    {modal==='password'&&<PasswordModal close={()=>setModal(null)} error={accountError} submitting={accountSaving} submit={form=>void updateAccount('password',formObject(form))}/>}
     {selectedJob&&<JobDrawer job={selectedJob} candidates={data.candidates} interviews={visibleInterviews} offers={data.offers} close={()=>setDrawer(null)} edit={()=>{setDrawer(null);setEditingJob(selectedJob);setModal('job')}}/>}
     {selectedCandidate&&<CandidateDrawer person={selectedCandidate} aiInterview={data.aiInterviews.find(item=>item.candidateId===selectedCandidate.id)} close={()=>setDrawer(null)} advance={value=>void update('candidateStage',selectedCandidate.id,value,'候选人阶段已更新')}/>}
-    {toast&&<div className="dashboard-toast">{toast}</div>}
+    {toast&&<div className={`dashboard-toast ${toast.tone}`} role="status" aria-live="polite">{toast.tone==='success'?'✓ ':toast.tone==='error'?'! ':''}{toast.text}</div>}
   </main>
 }
 
