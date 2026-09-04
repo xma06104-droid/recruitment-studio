@@ -92,6 +92,27 @@ export async function hashToken(token: string) {
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
+export async function createInvitationShareToken(invitationId:string) {
+  const key = await invitationLinkKey(['sign']);
+  if (!key || !invitationId) return '';
+  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(invitationId));
+  return `${invitationId}.${toBase64Url(new Uint8Array(signature))}`;
+}
+
+export async function invitationIdFromShareToken(value:string) {
+  const separator = value.lastIndexOf('.');
+  if (separator <= 0) return null;
+  const invitationId = value.slice(0, separator);
+  const signature = value.slice(separator + 1);
+  if (!invitationId || !signature) return null;
+  const key = await invitationLinkKey(['verify']);
+  if (!key) return null;
+  try {
+    const valid = await crypto.subtle.verify('HMAC', key, fromBase64Url(signature), new TextEncoder().encode(invitationId));
+    return valid ? invitationId : null;
+  } catch { return null; }
+}
+
 export async function accountFromRequest(request: NextRequest): Promise<AppAccount | null> {
   const token = request.cookies.get(SESSION_COOKIE)?.value;
   if (!token) return null;
@@ -145,4 +166,17 @@ function fromBase64(value: string) {
 
 function toBase64Url(bytes: Uint8Array) {
   return toBase64(bytes).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+}
+
+function fromBase64Url(value:string) {
+  const base64 = value.replaceAll('-', '+').replaceAll('_', '/');
+  const binary = atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, '='));
+  return Uint8Array.from(binary, character => character.charCodeAt(0));
+}
+
+async function invitationLinkKey(usages:KeyUsage[]) {
+  const value = String((env as unknown as { INTERVIEW_LINK_KEY?:string }).INTERVIEW_LINK_KEY || '');
+  if (!value) return null;
+  try { return await crypto.subtle.importKey('raw', fromBase64Url(value), { name:'HMAC', hash:'SHA-256' }, false, usages); }
+  catch { return null; }
 }

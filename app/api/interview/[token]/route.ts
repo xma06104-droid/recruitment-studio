@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { env } from 'cloudflare:workers';
-import { ensureSchema, getDb, hashToken } from '@/app/server/db';
+import { ensureSchema, getDb, hashToken, invitationIdFromShareToken } from '@/app/server/db';
 import { contextualizeSpeechTranscript } from '@/app/speech-context';
 
 type Question = {
@@ -86,6 +86,10 @@ export async function POST(request:NextRequest, context:{ params:Promise<{ token
 async function invitationForToken(token:string) {
   const value = token.trim().slice(0, 200);
   if (!value) return null;
+  const invitationId = await invitationIdFromShareToken(value);
+  if (invitationId) return getDb().prepare(`SELECT i.*, c.name, c.role, c.skills_json
+    FROM ai_interview_invitations i JOIN candidates c ON c.id = i.candidate_id AND c.owner_id = i.owner_id
+    WHERE i.id = ? LIMIT 1`).bind(invitationId).first<InvitationRow>();
   return getDb().prepare(`SELECT i.*, c.name, c.role, c.skills_json
     FROM ai_interview_invitations i JOIN candidates c ON c.id = i.candidate_id AND c.owner_id = i.owner_id
     WHERE i.token_hash = ? LIMIT 1`).bind(await hashToken(value)).first<InvitationRow>();

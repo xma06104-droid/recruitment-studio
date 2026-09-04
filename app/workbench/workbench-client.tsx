@@ -11,7 +11,7 @@ type Interview = { id:string; candidateId:string; scheduledAt:string; round:stri
 type Offer = { id:string; candidateId:string; jobTitle:string; salary:string; recipientEmail:string; content:string; ownerName:string; status:string; deadline:string; createdAt:string; updatedAt:string };
 type AiQuestion = { id:string; jobId:string|null; title:string; category:string; questionType:string; duration:number; competency:string; keywords:string; referenceAnswer:string; followUp:boolean; createdAt:string; updatedAt:string };
 type AiInterview = { id:string; candidateId:string; jobTitle:string; status:string; score:number|null; durationSeconds:number|null; summary:string; completedAt:string|null; createdAt:string; updatedAt:string };
-type AiInvitation = { id:string; candidateId:string; recipientEmail:string; jobTitle:string; status:string; sentAt:string; openedAt:string|null; completedAt:string|null; expiresAt:string; createdAt:string; updatedAt:string };
+type AiInvitation = { id:string; candidateId:string; recipientEmail:string; jobTitle:string; status:string; sentAt:string; openedAt:string|null; completedAt:string|null; expiresAt:string; interviewUrl:string; createdAt:string; updatedAt:string };
 type AnswerScore = { score:number; keywords:string[]; matched:string[] };
 type SpeechAlternativeLike = { transcript:string;confidence?:number };
 type SpeechResultLike = { [index:number]:SpeechAlternativeLike;length:number;isFinal?:boolean };
@@ -334,10 +334,10 @@ function AiStudio({data,openQuestion,openGenerator,deleteQuestion,openResult,sen
     setSendingId(inviteTarget.id);
     try{const result=await sendInvite(inviteTarget.id,validityHours);if(result)setInterviewUrl(result.interviewUrl)}finally{setSendingId('')}
   }
-  async function copyInterviewUrl(){
-    if(!interviewUrl)return;
-    try{await navigator.clipboard.writeText(interviewUrl);flash('面试邀请地址已复制')}
-    catch{const input=document.createElement('textarea');input.value=interviewUrl;input.style.position='fixed';input.style.opacity='0';document.body.appendChild(input);input.select();document.execCommand('copy');input.remove();flash('面试邀请地址已复制')}
+  async function copyInterviewUrl(value=interviewUrl){
+    if(!value){flash('复制失败，请重新发送面试邀请');return}
+    try{await navigator.clipboard.writeText(value);flash('AI 面试地址已复制')}
+    catch{const input=document.createElement('textarea');input.value=value;input.style.position='fixed';input.style.opacity='0';document.body.appendChild(input);input.select();const copied=document.execCommand('copy');input.remove();flash(copied?'AI 面试地址已复制':'复制失败，请手动复制')}
   }
   return <section>
     <Head path="AI 面试" title="AI 面试" sub="题库与总结仅展示当前账号真实保存的内容"/>
@@ -356,7 +356,7 @@ function AiStudio({data,openQuestion,openGenerator,deleteQuestion,openResult,sen
         const statusLabel=report||reportGenerating?'报告状态':'邀请状态';
         const statusText=report?'已生成':reportGenerating?'生成中':timedOut?'已超时':invitation?'已发送':'待发送';
         const statusTime=report?.completedAt?`生成于 ${formatDateTime(report.completedAt)}`:reportGenerating&&invitation?.openedAt?`面试开始于 ${formatDateTime(invitation.openedAt)}`:timedOut&&invitation?`已于 ${formatDateTime(invitation.expiresAt)} 超时`:invitation?.sentAt?`发送于 ${formatDateTime(invitation.sentAt)}`:'—';
-        return <div className="flow-person-row" key={person.id}><span/><div className="flow-person-profile"><span>{person.name.slice(0,1)}</span><div><h3>{person.name}<small>{person.role}</small></h3><p>{person.company||'公司未填写'}</p><small>{person.email||'邮箱未填写'}</small></div></div><div className="flow-person-owner"><span>{statusLabel}</span><b className={timedOut?'timeout':report?'completed':''}>{statusText}</b><small>{statusTime}</small></div><div className="flow-person-status"><span>综合得分</span><b className={report?'completed':''}>{report?.score??'—'}</b></div><div className="ai-invite-row-actions">{report?<button className="flow-more" onClick={()=>{setCurrent(report.id);setTab('summary')}}>查看总结</button>:reportGenerating?<button className="invite-waiting" disabled>报告生成中</button>:timedOut?<button className="flow-more timeout-action" disabled={sendingId===person.id} onClick={()=>prepareInvitation(person)}>{sendingId===person.id?'正在生成邮件…':'重新邀请'}</button>:invitation?<><button className="invite-waiting" disabled>待确认</button><small>剩余 {remainingTime(invitation.expiresAt,clock)}</small><button className="flow-more resend-link" disabled={sendingId===person.id} onClick={()=>prepareInvitation(person)}>{sendingId===person.id?'正在生成邮件…':'重新发送链接'}</button></>:<button className="flow-more" disabled={sendingId===person.id} onClick={()=>prepareInvitation(person)}>发送面试邀请</button>}</div></div>
+        return <div className="flow-person-row" key={person.id}><span/><div className="flow-person-profile"><span>{person.name.slice(0,1)}</span><div><h3>{person.name}<small>{person.role}</small></h3><p>{person.company||'公司未填写'}</p><small>{person.email||'邮箱未填写'}</small></div></div><div className="flow-person-owner"><span>{statusLabel}</span><b className={timedOut?'timeout':report?'completed':''}>{statusText}</b><small>{statusTime}</small></div><div className="flow-person-status"><span>综合得分</span><b className={report?'completed':''}>{report?.score??'—'}</b></div><div className="ai-invite-row-actions">{report?<button className="flow-more" onClick={()=>{setCurrent(report.id);setTab('summary')}}>查看总结</button>:reportGenerating?<button className="invite-waiting" disabled>报告生成中</button>:timedOut?<button className="flow-more timeout-action" disabled={sendingId===person.id} onClick={()=>prepareInvitation(person)}>{sendingId===person.id?'正在生成邮件…':'重新邀请'}</button>:invitation?<><button className="invite-waiting" disabled>待确认</button><small>剩余 {remainingTime(invitation.expiresAt,clock)}</small>{invitation.status==='已发送'&&invitation.interviewUrl&&<button className="flow-more copy-link" onClick={()=>void copyInterviewUrl(invitation.interviewUrl)}>复制链接</button>}<button className="flow-more resend-link" disabled={sendingId===person.id} onClick={()=>prepareInvitation(person)}>{sendingId===person.id?'正在生成邮件…':'重新发送链接'}</button></>:<button className="flow-more" disabled={sendingId===person.id} onClick={()=>prepareInvitation(person)}>发送面试邀请</button>}</div></div>
       })}</div>}
     </div>}
     {tab==='library'&&<div className="ai-generator-bar"><div><b>岗位面试题智能生成</b><span>根据岗位名称与部门生成问题、评分关键词和参考回答</span></div><button type="button" disabled={!data.jobs.length} onClick={openGenerator}>✦ AI 生成面试题</button></div>}

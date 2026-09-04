@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { NextRequest, NextResponse } from 'next/server';
-import { ensureSchema, getDb, hashToken } from '@/app/server/db';
+import { ensureSchema, getDb, hashToken, invitationIdFromShareToken } from '@/app/server/db';
 import { contextualizeSpeechTranscript } from '@/app/speech-context';
 
 type InvitationRow = { job_title:string;questions_json:string;status:string;expires_at:string };
@@ -13,9 +13,10 @@ export async function POST(request:NextRequest, context:{ params:Promise<{ token
   const {token}=await context.params;
   const tokenValue=token.trim().slice(0,200);
   if(!tokenValue)return failure('面试地址无效。',404);
-  const invitation=await getDb().prepare(`SELECT job_title, questions_json, status, expires_at
-    FROM ai_interview_invitations WHERE token_hash = ? LIMIT 1`
-  ).bind(await hashToken(tokenValue)).first<InvitationRow>();
+  const invitationId=await invitationIdFromShareToken(tokenValue);
+  const invitation=invitationId
+    ?await getDb().prepare(`SELECT job_title, questions_json, status, expires_at FROM ai_interview_invitations WHERE id = ? LIMIT 1`).bind(invitationId).first<InvitationRow>()
+    :await getDb().prepare(`SELECT job_title, questions_json, status, expires_at FROM ai_interview_invitations WHERE token_hash = ? LIMIT 1`).bind(await hashToken(tokenValue)).first<InvitationRow>();
   if(!invitation)return failure('面试地址无效或已被重新发送。',404);
   if(Date.parse(invitation.expires_at)<Date.now()||['已超时','已过期','已失效','已完成'].includes(invitation.status))return failure('本次面试已结束，无法继续转写。',410);
 

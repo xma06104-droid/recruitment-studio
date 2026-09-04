@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { env } from 'cloudflare:workers';
-import { accountFromRequest, ensureSchema, getDb, hashToken } from '@/app/server/db';
+import { accountFromRequest, createInvitationShareToken, ensureSchema, getDb, hashToken } from '@/app/server/db';
 import { repairResumeProfiles } from '@/app/server/resume-repair';
 
 type DataRow = Record<string, string | number | null>;
@@ -45,6 +45,9 @@ export async function GET(request: NextRequest) {
   if (duplicateIds.length) {
     await db.batch(duplicateIds.map(id => db.prepare('DELETE FROM ai_questions WHERE id = ? AND owner_id = ?').bind(id, account.id)));
   }
+  const requestOrigin = validHttpOrigin(new URL(request.url).origin);
+  const configuredOrigin = validHttpOrigin((env as unknown as { INTERVIEW_PUBLIC_ORIGIN?:string }).INTERVIEW_PUBLIC_ORIGIN);
+  const mappedInvitations = await Promise.all(aiInvitations.results.map(row => mapAiInvitation(row, configuredOrigin || requestOrigin)));
   return NextResponse.json({
     account,
     jobs: jobs.results.map(mapJob),
@@ -53,7 +56,7 @@ export async function GET(request: NextRequest) {
     offers: offers.results.map(mapOffer),
     aiQuestions: uniqueQuestions.map(mapAiQuestion),
     aiInterviews: aiInterviews.results.map(mapAiInterview),
-    aiInvitations: aiInvitations.results.map(mapAiInvitation),
+    aiInvitations: mappedInvitations,
   }, { headers: { 'Cache-Control': 'private, no-store' } });
 }
 
@@ -382,8 +385,10 @@ function mapAiInterview(row: DataRow) {
   return { id: row.id, candidateId: row.candidate_id, jobTitle: row.job_title, status: row.status, score: row.score, durationSeconds: row.duration_seconds, summary: row.summary, completedAt: row.completed_at, createdAt: row.created_at, updatedAt: row.updated_at };
 }
 
-function mapAiInvitation(row: DataRow) {
-  return { id:row.id, candidateId:row.candidate_id, recipientEmail:row.recipient_email, jobTitle:row.job_title, status:row.status, sentAt:row.sent_at, openedAt:row.opened_at, completedAt:row.completed_at, expiresAt:row.expires_at, createdAt:row.created_at, updatedAt:row.updated_at };
+async function mapAiInvitation(row: DataRow, origin:string) {
+  const token = await createInvitationShareToken(String(row.id || ''));
+  const interviewUrl = token && origin ? `${origin}/interview/${encodeURIComponent(token)}` : '';
+  return { id:row.id, candidateId:row.candidate_id, recipientEmail:row.recipient_email, jobTitle:row.job_title, status:row.status, sentAt:row.sent_at, openedAt:row.opened_at, completedAt:row.completed_at, expiresAt:row.expires_at, interviewUrl, createdAt:row.created_at, updatedAt:row.updated_at };
 }
 
 function generateInterviewQuestions(jobTitle:string,department:string){
