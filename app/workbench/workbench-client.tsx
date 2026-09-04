@@ -157,9 +157,9 @@ export default function WorkbenchClient() {
       if(response.status===401){window.location.assign('/');return false}
       if(!response.ok){flash(result.message||'面试邀请生成失败，请稍后重试。');return false}
       await loadData();
-      if(result.testMode&&result.interviewUrl)flash('测试面试地址已生成，可一键复制');
-      else if(result.sent)flash(`AI 面试邀请已发送至 ${result.recipientEmail}`);
-      else if(result.mailtoUrl){window.location.href=result.mailtoUrl;flash('邀请邮件已生成，请在邮箱中确认发送');}
+      if(result.mailtoUrl)window.location.href=result.mailtoUrl;
+      if(result.sent&&result.interviewUrl)flash(`AI 面试邀请已发送至 ${result.recipientEmail}，地址可一键复制`);
+      else if(result.interviewUrl)flash(result.mailtoUrl?'邀请邮件已生成，请在邮箱中确认发送；地址也可一键复制':'AI 面试邀请地址已生成，可一键复制');
       return result.interviewUrl?{interviewUrl:result.interviewUrl,testMode:Boolean(result.testMode)}:false;
     }catch{flash('面试邀请生成失败，请检查网络后重试。');return false}
     finally{saveInFlight.current=false}
@@ -312,7 +312,7 @@ function AiStudio({data,openQuestion,openGenerator,deleteQuestion,openResult,sen
   const [sendingId,setSendingId]=useState('');
   const [inviteTarget,setInviteTarget]=useState<Candidate|null>(null);
   const [validityHours,setValidityHours]=useState(24);
-  const [testInterviewUrl,setTestInterviewUrl]=useState('');
+  const [interviewUrl,setInterviewUrl]=useState('');
   const [clock,setClock]=useState(Date.now());
   useEffect(()=>{const timer=window.setInterval(()=>setClock(Date.now()),30000);return()=>window.clearInterval(timer)},[]);
   const selected=data.aiInterviews.find(item=>item.id===current)||data.aiInterviews[0];
@@ -327,17 +327,17 @@ function AiStudio({data,openQuestion,openGenerator,deleteQuestion,openResult,sen
     const interviewQuestions=specific.length?specific:general;
     if(!interviewQuestions.length){setJobFilter(job?.id||'general');setTab('library');flash(job?`请先为“${job.title}”配置面试题`:'请先创建通用 AI 面试题');return}
     if(!person.email){flash('请先在候选人档案中补充有效邮箱');return}
-    setValidityHours(24);setTestInterviewUrl('');setInviteTarget(person);
+    setValidityHours(24);setInterviewUrl('');setInviteTarget(person);
   }
   async function confirmInvitation(){
     if(!inviteTarget)return;
     setSendingId(inviteTarget.id);
-    try{const result=await sendInvite(inviteTarget.id,validityHours);if(result){if(result.testMode)setTestInterviewUrl(result.interviewUrl);else setInviteTarget(null)}}finally{setSendingId('')}
+    try{const result=await sendInvite(inviteTarget.id,validityHours);if(result)setInterviewUrl(result.interviewUrl)}finally{setSendingId('')}
   }
   async function copyInterviewUrl(){
-    if(!testInterviewUrl)return;
-    try{await navigator.clipboard.writeText(testInterviewUrl);flash('面试地址已复制')}
-    catch{const input=document.createElement('textarea');input.value=testInterviewUrl;input.style.position='fixed';input.style.opacity='0';document.body.appendChild(input);input.select();document.execCommand('copy');input.remove();flash('面试地址已复制')}
+    if(!interviewUrl)return;
+    try{await navigator.clipboard.writeText(interviewUrl);flash('面试邀请地址已复制')}
+    catch{const input=document.createElement('textarea');input.value=interviewUrl;input.style.position='fixed';input.style.opacity='0';document.body.appendChild(input);input.select();document.execCommand('copy');input.remove();flash('面试邀请地址已复制')}
   }
   return <section>
     <Head path="AI 面试" title="AI 面试" sub="题库与总结仅展示当前账号真实保存的内容"/>
@@ -369,7 +369,7 @@ function AiStudio({data,openQuestion,openGenerator,deleteQuestion,openResult,sen
       </section>
     </div>}
     {tab==='summary'&&(selected?<div className="ai-summary-shell"><aside><div className="ai-summary-list-title"><div><h3>已完成面试</h3><p>共 {data.aiInterviews.length} 份真实总结</p></div></div>{data.aiInterviews.map(report=>{const person=data.candidates.find(item=>item.id===report.candidateId);return <button key={report.id} className={report.id===selected.id?'active':''} onClick={()=>setCurrent(report.id)}><span>{person?.name.slice(0,1)||'候'}</span><div><b>{person?.name||'候选人已删除'}</b><small>{report.jobTitle}</small></div><em>{report.score??'—'}</em></button>})}</aside><AiSummary report={selected} person={data.candidates.find(item=>item.id===selected.candidateId)}/></div>:<Empty icon="✦" title="暂无 AI 面试总结" text="完成真实面试后，可通过“录入已完成面试”保存得分、用时与总结；系统不会生成虚构报告。" action={data.candidates.length?'录入面试结果':undefined} click={data.candidates.length?openResult:undefined}/>)}
-    {inviteTarget&&<div className="flow-modal-backdrop" onMouseDown={()=>{if(!sendingId)setInviteTarget(null)}}><section className="ai-invite-dialog" onMouseDown={event=>event.stopPropagation()}><button type="button" className="flow-overlay-close" onClick={()=>setInviteTarget(null)}>×</button><span>AI INTERVIEW INVITATION</span><h2>{testInterviewUrl?'测试面试地址已生成':'发送面试邀请'}</h2><p>候选人：<b>{inviteTarget.name}</b> · {inviteTarget.role}</p>{testInterviewUrl?<div className="ai-test-interview-url"><label>测试面试地址</label><code>{testInterviewUrl}</code><button type="button" onClick={()=>void copyInterviewUrl()}>复制面试地址</button></div>:<><label>面试链接有效期</label><div className="ai-validity-options">{[12,24,72].map(hours=><button type="button" key={hours} className={validityHours===hours?'active':''} onClick={()=>setValidityHours(hours)}><b>{hours}</b><span>小时</span><small>{hours===12?'半天内完成':hours===24?'一天内完成':'三天内完成'}</small></button>)}</div><div className="ai-invite-note"><i>⌁</i><p>超过有效期后，邮件中的专属链接将立即失效；重新发送邀请会使旧链接失效。</p></div></>}<footer><button type="button" onClick={()=>setInviteTarget(null)}>{testInterviewUrl?'完成':'取消'}</button>{!testInterviewUrl&&<button type="button" className="primary" disabled={Boolean(sendingId)} onClick={()=>void confirmInvitation()}>{sendingId?'正在生成邮件…':`发送 ${validityHours} 小时邀请`}</button>}</footer></section></div>}
+    {inviteTarget&&<div className="flow-modal-backdrop" onMouseDown={()=>{if(!sendingId)setInviteTarget(null)}}><section className="ai-invite-dialog" onMouseDown={event=>event.stopPropagation()}><button type="button" className="flow-overlay-close" onClick={()=>setInviteTarget(null)}>×</button><span>AI INTERVIEW INVITATION</span><h2>{interviewUrl?'面试邀请地址已生成':'发送面试邀请'}</h2><p>候选人：<b>{inviteTarget.name}</b> · {inviteTarget.role}</p>{interviewUrl?<div className="ai-test-interview-url"><label>面试邀请地址</label><code>{interviewUrl}</code><button type="button" onClick={()=>void copyInterviewUrl()}>复制邀请地址</button></div>:<><label>面试链接有效期</label><div className="ai-validity-options">{[12,24,72].map(hours=><button type="button" key={hours} className={validityHours===hours?'active':''} onClick={()=>setValidityHours(hours)}><b>{hours}</b><span>小时</span><small>{hours===12?'半天内完成':hours===24?'一天内完成':'三天内完成'}</small></button>)}</div><div className="ai-invite-note"><i>⌁</i><p>超过有效期后，邮件中的专属链接将立即失效；重新发送邀请会使旧链接失效。</p></div></>}<footer><button type="button" onClick={()=>setInviteTarget(null)}>{interviewUrl?'完成':'取消'}</button>{!interviewUrl&&<button type="button" className="primary" disabled={Boolean(sendingId)} onClick={()=>void confirmInvitation()}>{sendingId?'正在生成邮件…':`发送 ${validityHours} 小时邀请`}</button>}</footer></section></div>}
   </section>
 }
 
