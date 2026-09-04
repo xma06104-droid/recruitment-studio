@@ -248,7 +248,7 @@ export default function WorkbenchClient() {
   return <main className="dashboard-shell">
     <aside className="dashboard-sidebar">
       <a className="dash-logo" href="/workbench"><span>星</span><b>星鉴人才</b></a>
-      <nav><p>招聘管理</p>{nav.map(([icon,label])=><button key={label} className={active===label?'active':''} onClick={()=>{setActive(label);setSearch('')}}><i>{icon}</i><span>{label}</span>{label==='AI 面试'&&<em>AI</em>}</button>)}<p>协作与设置</p><button onClick={()=>flash('团队协作尚未配置数据源')}><i>♧</i><span>团队协作</span></button><button onClick={()=>flash('企业设置尚未配置')}><i>⚙</i><span>企业设置</span></button></nav>
+      <nav><p>招聘管理</p>{nav.map(([icon,label])=><button key={label} className={active===label?'active':''} onClick={()=>{setActive(label);setSearch('')}}><i>{icon}</i><span>{label}</span>{label==='AI 面试'&&<em>AI</em>}</button>)}</nav>
       <div className="sidebar-help"><b>真实数据模式</b><p>仅展示当前账号实际保存的记录</p><button onClick={()=>setActive('招聘数据')}>查看数据来源</button></div>
       <button className="back-login sidebar-logout" onClick={()=>void logout()}>← 安全退出</button>
     </aside>
