@@ -1222,12 +1222,13 @@ button:disabled{cursor:wait}
 @media(max-width:760px){.ai-answer-breakdown>header{display:none}.ai-answer-breakdown>article{grid-template-columns:1fr}.ai-answer-question{border-right:0;border-bottom:1px solid rgba(162,181,211,.11)}}
 
 /* Resume intake keeps five essential columns and uses readable status badges. */
-.rs-intake-head,.rs-intake-row{grid-template-columns:minmax(180px,1.35fr) minmax(150px,1fr) 130px minmax(180px,1.25fr) 105px}
+.rs-intake-head,.rs-intake-row{grid-template-columns:minmax(180px,1.35fr) minmax(150px,1fr) 130px minmax(180px,1.25fr) 105px 92px}
 .rs-intake-status em{padding:8px 11px;border:1px solid transparent;border-radius:9px;font-size:11px;font-weight:800;line-height:1}
 .rs-intake-status em.ok{border-color:rgba(91,219,180,.2);color:#91e6ca;background:#13302d}
 .rs-intake-status em.warn{border-color:rgba(239,176,112,.2);color:#ffc48d;background:#30231e}
 .rs-intake-status button{font-size:11px;font-weight:700}
-@media(max-width:1100px){.rs-intake-head,.rs-intake-row{min-width:760px}}
+.rs-delete-resume{justify-self:start;padding:7px 10px;border:1px solid rgba(228,102,124,.22);border-radius:8px;color:#ffabb8;background:#2b1823;cursor:pointer;font-size:11px;font-weight:750}.rs-delete-resume:hover{color:#ffd7dd;background:#3a1b29}.rs-delete-resume:disabled{cursor:wait;opacity:.55}
+@media(max-width:1100px){.rs-intake-head,.rs-intake-row{min-width:880px}}
 
 /* Native date and time affordances stay visible on every dark form. */
 input[type="date"],input[type="time"],input[type="datetime-local"]{color-scheme:dark}

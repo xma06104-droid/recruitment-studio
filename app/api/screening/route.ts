@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { accountFromRequest, ensureSchema, getDb } from '@/app/server/db';
+import { accountFromRequest, ensureSchema, getDb, getResumeBucket } from '@/app/server/db';
 import { repairResumeProfiles } from '@/app/server/resume-repair';
 import { getResumeJobs } from '@/app/server/resume-jobs';
 import { buildSystemResumeJob, matchResumeJob, parseResumeText, ResumeJob } from '@/app/server/resume-parser';
@@ -242,6 +242,38 @@ export async function POST(request: NextRequest) {
       WHERE candidate_id = ? AND owner_id = ?`).bind(now, candidateId, account.id).run();
     await insertLog(account.id, candidateId, candidate.job_id ? String(candidate.job_id) : null, account.contact, '解析核验', '原始简历与结构化字段已完成人工核验，进入筛选池');
     return NextResponse.json({ ok: true });
+  }
+
+  if (action === 'deleteResume') {
+    const candidateId = text(body?.candidateId, 80);
+    if (!candidateId) return invalid('请选择需要删除的简历。');
+    const resume = await db.prepare(`SELECT c.id, c.name, p.file_key
+      FROM candidates c
+      JOIN resume_profiles p ON p.candidate_id = c.id AND p.owner_id = c.owner_id
+      WHERE c.id = ? AND c.owner_id = ? LIMIT 1`
+    ).bind(candidateId, account.id).first<{ id: string; name: string; file_key: string | null }>();
+    if (!resume) return invalid('简历不存在或已被删除。');
+
+    await db.batch([
+      db.prepare('DELETE FROM ai_interview_invitations WHERE candidate_id = ? AND owner_id = ?').bind(candidateId, account.id),
+      db.prepare('DELETE FROM ai_interviews WHERE candidate_id = ? AND owner_id = ?').bind(candidateId, account.id),
+      db.prepare('DELETE FROM interviews WHERE candidate_id = ? AND owner_id = ?').bind(candidateId, account.id),
+      db.prepare('DELETE FROM offers WHERE candidate_id = ? AND owner_id = ?').bind(candidateId, account.id),
+      db.prepare('DELETE FROM screening_logs WHERE candidate_id = ? AND owner_id = ?').bind(candidateId, account.id),
+      db.prepare('DELETE FROM screening_reviews WHERE candidate_id = ? AND owner_id = ?').bind(candidateId, account.id),
+      db.prepare('DELETE FROM resume_applications WHERE candidate_id = ? AND owner_id = ?').bind(candidateId, account.id),
+      db.prepare('DELETE FROM resume_profiles WHERE candidate_id = ? AND owner_id = ?').bind(candidateId, account.id),
+      db.prepare('DELETE FROM candidates WHERE id = ? AND owner_id = ?').bind(candidateId, account.id),
+    ]);
+
+    if (resume.file_key) {
+      try {
+        await getResumeBucket().delete(resume.file_key);
+      } catch (error) {
+        console.error('Failed to remove deleted resume object', { candidateId, error });
+      }
+    }
+    return NextResponse.json({ ok: true, candidateId, candidateName: resume.name });
   }
 
   if (action === 'batchTransition') {
