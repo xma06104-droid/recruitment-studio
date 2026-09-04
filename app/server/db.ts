@@ -40,6 +40,23 @@ export async function ensureSchema() {
       if(columns.results.length&&!columns.results.some(column=>column.name==='job_id')){
         await db.prepare('ALTER TABLE ai_questions ADD COLUMN job_id TEXT REFERENCES jobs(id) ON DELETE SET NULL').run();
       }
+      if(columns.results.length&&!columns.results.some(column=>column.name==='keywords')){
+        await db.prepare("ALTER TABLE ai_questions ADD COLUMN keywords TEXT NOT NULL DEFAULT ''").run();
+      }
+      if(columns.results.length&&!columns.results.some(column=>column.name==='reference_answer')){
+        await db.prepare("ALTER TABLE ai_questions ADD COLUMN reference_answer TEXT NOT NULL DEFAULT ''").run();
+      }
+      const ruleColumns=await db.prepare('PRAGMA table_info(screening_rules)').all<{name:string}>();
+      if(ruleColumns.results.length&&!ruleColumns.results.some(column=>column.name==='custom_conditions_json')){
+        await db.prepare("ALTER TABLE screening_rules ADD COLUMN custom_conditions_json TEXT NOT NULL DEFAULT '[]'").run();
+      }
+      const offerColumns=await db.prepare('PRAGMA table_info(offers)').all<{name:string}>();
+      if(offerColumns.results.length&&!offerColumns.results.some(column=>column.name==='recipient_email')){
+        await db.prepare("ALTER TABLE offers ADD COLUMN recipient_email TEXT NOT NULL DEFAULT ''").run();
+      }
+      if(offerColumns.results.length&&!offerColumns.results.some(column=>column.name==='content')){
+        await db.prepare("ALTER TABLE offers ADD COLUMN content TEXT NOT NULL DEFAULT ''").run();
+      }
       await db.batch(SCHEMA_STATEMENTS.map(statement => db.prepare(statement)));
     })().catch(error => {
       schemaReady = null;

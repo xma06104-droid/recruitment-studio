@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { accountFromRequest, ensureSchema, getDb } from '@/app/server/db';
+import { repairResumeProfiles } from '@/app/server/resume-repair';
+import { getResumeJobs } from '@/app/server/resume-jobs';
+import { buildSystemResumeJob, matchResumeJob, parseResumeText, ResumeJob } from '@/app/server/resume-parser';
 
 type DataRow = Record<string, string | number | null>;
 type RuleRow = DataRow & {
@@ -13,12 +16,15 @@ type RuleRow = DataRow & {
   cities_json: string;
   salary_max: number | null;
   industries_json: string;
+  custom_conditions_json: string;
   keywords_json: string;
   keyword_weight: number;
   experience_weight: number;
   education_weight: number;
   stability_weight: number;
 };
+
+type CustomCondition = { field: string; operator: string; value: string };
 
 const transitionStages = ['面试待安排', '待复核', '初筛淘汰', '淘汰人才库', 'AI 初面待发起'];
 const educationRanks: Record<string, number> = { '高中': 1, '中专': 1, '大专': 2, '本科': 3, '硕士': 4, '博士': 5 };
@@ -27,6 +33,7 @@ export async function GET(request: NextRequest) {
   const account = await accountFromRequest(request);
   if (!account) return unauthorized();
   await ensureSchema();
+  await repairResumeProfiles(account.id);
   const db = getDb();
   await db.prepare(`INSERT OR IGNORE INTO resume_profiles (
     candidate_id, owner_id, parsing_status, created_at, updated_at
@@ -81,27 +88,29 @@ export async function POST(request: NextRequest) {
       cities: list(body?.cities),
       salaryMax: optionalInteger(body?.salaryMax, 1, 1_000_000),
       industries: list(body?.industries),
+      customConditions: customConditions(body?.customConditions),
       keywords: list(body?.keywords),
     };
     if (values.ageMin !== null && values.ageMax !== null && values.ageMin > values.ageMax) return invalid('最低年龄不能大于最高年龄。');
     await db.prepare(`INSERT INTO screening_rules (
       id, owner_id, job_id, name, logic, min_education, majors_json, min_years, certificates_json,
-      age_min, age_max, cities_json, salary_max, industries_json, keywords_json,
+      age_min, age_max, cities_json, salary_max, industries_json, custom_conditions_json, keywords_json,
       keyword_weight, experience_weight, education_weight, stability_weight, enabled, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
     ON CONFLICT(owner_id, job_id) DO UPDATE SET
       name = excluded.name, logic = excluded.logic, min_education = excluded.min_education,
       majors_json = excluded.majors_json, min_years = excluded.min_years,
       certificates_json = excluded.certificates_json, age_min = excluded.age_min,
       age_max = excluded.age_max, cities_json = excluded.cities_json,
       salary_max = excluded.salary_max, industries_json = excluded.industries_json,
+      custom_conditions_json = excluded.custom_conditions_json,
       keywords_json = excluded.keywords_json, keyword_weight = excluded.keyword_weight,
       experience_weight = excluded.experience_weight, education_weight = excluded.education_weight,
       stability_weight = excluded.stability_weight, enabled = 1, updated_at = excluded.updated_at`).bind(
       crypto.randomUUID(), account.id, jobId, values.name, values.logic, values.minEducation,
       JSON.stringify(values.majors), values.minYears, JSON.stringify(values.certificates), values.ageMin,
       values.ageMax, JSON.stringify(values.cities), values.salaryMax, JSON.stringify(values.industries),
-      JSON.stringify(values.keywords), ...weights, now, now,
+      JSON.stringify(values.customConditions), JSON.stringify(values.keywords), ...weights, now, now,
     ).run();
     await insertLog(account.id, null, jobId || null, account.contact, '规则配置', `保存“${values.name}”，硬性条件采用${values.logic === 'AND' ? '且' : '或'}逻辑`);
     return NextResponse.json({ ok: true });
@@ -109,7 +118,26 @@ export async function POST(request: NextRequest) {
 
   if (action === 'runScreening') {
     const jobId = text(body?.jobId, 80);
-    const rule = await db.prepare('SELECT * FROM screening_rules WHERE owner_id = ? AND job_id = ? AND enabled = 1').bind(account.id, jobId).first<RuleRow>();
+    let rule = await db.prepare('SELECT * FROM screening_rules WHERE owner_id = ? AND job_id = ? AND enabled = 1').bind(account.id, jobId).first<RuleRow>();
+    if (!rule && jobId) {
+      const jobRow = await db.prepare('SELECT id, title, city FROM jobs WHERE id = ? AND owner_id = ?').bind(jobId, account.id).first<{id:string;title:string;city:string}>();
+      if (jobRow) {
+        const generated = buildSystemResumeJob(jobRow.title, jobRow.id, jobRow.city || '');
+        await db.prepare(`INSERT OR IGNORE INTO screening_rules (
+          id, owner_id, job_id, name, logic, min_education, majors_json, min_years, certificates_json,
+          age_min, age_max, cities_json, salary_max, industries_json, custom_conditions_json, keywords_json,
+          keyword_weight, experience_weight, education_weight, stability_weight, enabled, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, 'AND', ?, ?, ?, ?, NULL, NULL, ?, NULL, ?, '[]', ?, ?, ?, ?, ?, 1, ?, ?)`
+        ).bind(
+          crypto.randomUUID(), account.id, jobId, `${jobRow.title}初筛规则`, generated.minEducation || '', JSON.stringify(generated.majors || []),
+          generated.minYears ?? null, JSON.stringify(generated.certificates || []), JSON.stringify(generated.city && generated.city !== '待设置' ? [generated.city] : []),
+          JSON.stringify(generated.industries || []), JSON.stringify(generated.keywords || []), generated.keywordWeight ?? 45,
+          generated.experienceWeight ?? 25, generated.educationWeight ?? 18, generated.stabilityWeight ?? 12, now, now,
+        ).run();
+        await insertLog(account.id, null, jobId, account.contact, '系统规则配置', `岗位“${jobRow.title}”尚无初筛规则，重新筛选时已自动生成系统规则`);
+        rule = await db.prepare('SELECT * FROM screening_rules WHERE owner_id = ? AND job_id = ? AND enabled = 1').bind(account.id, jobId).first<RuleRow>();
+      }
+    }
     if (!rule) return invalid('请先保存该岗位的初筛规则。');
     const selectedIds = list(body?.candidateIds).slice(0, 100);
     const candidates = await db.prepare(`SELECT c.*, p.* FROM candidates c
@@ -121,6 +149,7 @@ export async function POST(request: NextRequest) {
     const statements: D1PreparedStatement[] = [];
     for (const row of target) {
       const outcome = scoreCandidate(row, rule);
+      const stage = outcome.knockout ? '初筛淘汰' : '面试待安排';
       statements.push(db.prepare(`UPDATE resume_profiles SET keyword_score = ?, experience_score = ?, education_score = ?,
         stability_score = ?, match_score = ?, match_level = ?, highlights_json = ?, risks_json = ?, screened_at = ?, updated_at = ?
         WHERE candidate_id = ? AND owner_id = ?`).bind(
@@ -128,19 +157,64 @@ export async function POST(request: NextRequest) {
         outcome.total, outcome.level, JSON.stringify(outcome.highlights), JSON.stringify(outcome.risks), now, now, row.id, account.id,
       ));
       statements.push(db.prepare('UPDATE candidates SET score = ?, stage = ?, updated_at = ? WHERE id = ? AND owner_id = ?').bind(
-        outcome.total, outcome.knockout ? '初筛淘汰' : '待复核', now, row.id, account.id,
+        outcome.total, stage, now, row.id, account.id,
       ));
       statements.push(db.prepare('UPDATE resume_applications SET status = ? WHERE candidate_id = ? AND owner_id = ?').bind(
-        outcome.knockout ? '初筛淘汰' : '待复核', row.id, account.id,
+        stage, row.id, account.id,
       ));
       statements.push(db.prepare(`INSERT INTO screening_logs (id, owner_id, candidate_id, job_id, operator_name, action, detail, created_at)
         VALUES (?, ?, ?, ?, ?, '自动初筛', ?, ?)`).bind(
         crypto.randomUUID(), account.id, row.id, row.job_id, account.contact,
         outcome.knockout ? `命中硬性淘汰：${outcome.failures.join('、')}` : `匹配度 ${outcome.total} 分，标记${outcome.level}`, now,
       ));
+      if (!outcome.knockout) statements.push(autoInterviewStatement(db, account.id, account.contact, String(row.id), now));
     }
     await executeBatches(db, statements);
     return NextResponse.json({ ok: true, count: target.length });
+  }
+
+  if (action === 'rescreenCandidate') {
+    const candidateId = text(body?.candidateId, 80);
+    if (!candidateId) return invalid('请选择需要重新筛选的简历。');
+    const row = await db.prepare(`SELECT c.*, p.* FROM candidates c
+      JOIN resume_profiles p ON p.candidate_id = c.id AND p.owner_id = c.owner_id
+      WHERE c.id = ? AND c.owner_id = ? AND p.parsing_status = '结构化完成' LIMIT 1`
+    ).bind(candidateId, account.id).first<DataRow>();
+    if (!row) return invalid('简历不存在或尚未完成结构化解析。');
+
+    const resolved = await ensureCandidateJob(account.id, account.contact, row, now);
+    if (!resolved) return invalid('无法识别应聘岗位，请先在简历中补充岗位名称。');
+    const rule = await ensureScreeningRule(account.id, account.contact, resolved.job.id, now);
+    if (!rule) return invalid('系统未能生成该岗位的初筛规则，请稍后重试。');
+
+    row.job_id = resolved.job.id;
+    const outcome = scoreCandidate(row, rule);
+    const stage = outcome.knockout ? '初筛淘汰' : '面试待安排';
+    const statements: D1PreparedStatement[] = [
+      db.prepare(`UPDATE resume_profiles SET keyword_score = ?, experience_score = ?, education_score = ?,
+        stability_score = ?, match_score = ?, match_level = ?, highlights_json = ?, risks_json = ?, screened_at = ?, updated_at = ?
+        WHERE candidate_id = ? AND owner_id = ?`).bind(
+        outcome.keywordScore, outcome.experienceScore, outcome.educationScore, outcome.stabilityScore,
+        outcome.total, outcome.level, JSON.stringify(outcome.highlights), JSON.stringify(outcome.risks), now, now, candidateId, account.id,
+      ),
+      db.prepare('UPDATE candidates SET job_id = ?, score = ?, stage = ?, updated_at = ? WHERE id = ? AND owner_id = ?').bind(
+        resolved.job.id, outcome.total, stage, now, candidateId, account.id,
+      ),
+      db.prepare('UPDATE resume_applications SET job_id = ?, status = ? WHERE candidate_id = ? AND owner_id = ?').bind(
+        resolved.job.id, stage, candidateId, account.id,
+      ),
+      db.prepare(`INSERT INTO screening_logs (id, owner_id, candidate_id, job_id, operator_name, action, detail, created_at)
+        VALUES (?, ?, ?, ?, ?, '自动初筛', ?, ?)`).bind(
+        crypto.randomUUID(), account.id, candidateId, resolved.job.id, account.contact,
+        outcome.knockout ? `岗位“${resolved.job.title}”命中硬性淘汰：${outcome.failures.join('、')}` : `岗位“${resolved.job.title}”匹配度 ${outcome.total} 分，已自动关联面试`, now,
+      ),
+    ];
+    if (!outcome.knockout) statements.push(autoInterviewStatement(db, account.id, account.contact, candidateId, now));
+    await db.batch(statements);
+    return NextResponse.json({
+      ok: true, count: 1, score: outcome.total, level: outcome.level,
+      jobId: resolved.job.id, jobTitle: resolved.job.title, createdJob: resolved.created,
+    });
   }
 
   if (action === 'saveReview') {
@@ -211,6 +285,7 @@ function scoreCandidate(row: DataRow, rule: RuleRow) {
   const requiredCertificates = jsonList(rule.certificates_json);
   const cities = jsonList(rule.cities_json);
   const industries = jsonList(rule.industries_json);
+  const custom = jsonCustomConditions(rule.custom_conditions_json);
   const keywords = jsonList(rule.keywords_json);
   const certificates = jsonList(row.certificates_json);
   const skills = jsonList(row.skills_json);
@@ -228,6 +303,9 @@ function scoreCandidate(row: DataRow, rule: RuleRow) {
   if (cities.length && !cities.includes(String(row.city || ''))) failures.push('工作地点不符');
   if (rule.salary_max !== null && expectedSalary > Number(rule.salary_max)) failures.push('期望薪资超出上限');
   if (industries.length && !industries.some(item => String(row.industry || '').includes(item))) failures.push('行业背景不符');
+  for (const condition of custom) {
+    if (!matchesCustomCondition(row, condition)) failures.push(`${customFieldLabels[condition.field] || '自定义条件'}不符`);
+  }
   const knockout = rule.logic === 'OR' ? failures.length > 0 && failures.length === hardRuleCount(rule) : failures.length > 0;
   const haystack = [row.title, row.role, row.company, row.raw_text, ...skills, ...certificates].join(' ').toLowerCase();
   const keywordScore = keywords.length ? Math.round(keywords.filter(item => haystack.includes(item.toLowerCase())).length / keywords.length * 100) : 0;
@@ -253,12 +331,93 @@ function scoreCandidate(row: DataRow, rule: RuleRow) {
 
 function hardRuleCount(rule: RuleRow) {
   return [rule.min_education, jsonList(rule.majors_json).length, rule.min_years, jsonList(rule.certificates_json).length,
-    rule.age_min, rule.age_max, jsonList(rule.cities_json).length, rule.salary_max, jsonList(rule.industries_json).length].filter(value => value !== '' && value !== null && value !== 0).length;
+    rule.age_min, rule.age_max, jsonList(rule.cities_json).length, rule.salary_max, jsonList(rule.industries_json).length,
+    ...jsonCustomConditions(rule.custom_conditions_json).map(() => 1)].filter(value => value !== '' && value !== null && value !== 0).length;
 }
 
 async function insertLog(ownerId: string, candidateId: string | null, jobId: string | null, operator: string, action: string, detail: string) {
   await getDb().prepare(`INSERT INTO screening_logs (id, owner_id, candidate_id, job_id, operator_name, action, detail, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), ownerId, candidateId, jobId, operator, action, detail, new Date().toISOString()).run();
+}
+
+async function ensureScreeningRule(ownerId: string, ownerName: string, jobId: string, now: string) {
+  if (!jobId) return null;
+  const db = getDb();
+  let rule = await db.prepare('SELECT * FROM screening_rules WHERE owner_id = ? AND job_id = ? AND enabled = 1')
+    .bind(ownerId, jobId).first<RuleRow>();
+  if (rule) return rule;
+  const job = await db.prepare('SELECT id, title, city FROM jobs WHERE id = ? AND owner_id = ?')
+    .bind(jobId, ownerId).first<{ id: string; title: string; city: string }>();
+  if (!job) return null;
+  const generated = buildSystemResumeJob(job.title, job.id, job.city || '');
+  await db.prepare(`INSERT OR IGNORE INTO screening_rules (
+    id, owner_id, job_id, name, logic, min_education, majors_json, min_years, certificates_json,
+    age_min, age_max, cities_json, salary_max, industries_json, custom_conditions_json, keywords_json,
+    keyword_weight, experience_weight, education_weight, stability_weight, enabled, created_at, updated_at
+  ) VALUES (?, ?, ?, ?, 'AND', ?, ?, ?, ?, NULL, NULL, ?, NULL, ?, '[]', ?, ?, ?, ?, ?, 1, ?, ?)`
+  ).bind(
+    crypto.randomUUID(), ownerId, jobId, `${job.title}初筛规则`, generated.minEducation || '', JSON.stringify(generated.majors || []),
+    generated.minYears ?? null, JSON.stringify(generated.certificates || []), JSON.stringify(generated.city && generated.city !== '待设置' ? [generated.city] : []),
+    JSON.stringify(generated.industries || []), JSON.stringify(generated.keywords || []), generated.keywordWeight ?? 45,
+    generated.experienceWeight ?? 25, generated.educationWeight ?? 18, generated.stabilityWeight ?? 12, now, now,
+  ).run();
+  await insertLog(ownerId, null, jobId, ownerName, '系统规则配置', `岗位“${job.title}”尚无初筛规则，已自动生成系统规则`);
+  rule = await db.prepare('SELECT * FROM screening_rules WHERE owner_id = ? AND job_id = ? AND enabled = 1')
+    .bind(ownerId, jobId).first<RuleRow>();
+  return rule || null;
+}
+
+async function ensureCandidateJob(ownerId: string, ownerName: string, row: DataRow, now: string) {
+  const db = getDb();
+  const linkedJobId = text(row.job_id, 80);
+  if (linkedJobId) {
+    const linked = await db.prepare('SELECT id, title, department, city FROM jobs WHERE id = ? AND owner_id = ?')
+      .bind(linkedJobId, ownerId).first<{ id: string; title: string; department: string; city: string }>();
+    if (linked) return { job: linked satisfies ResumeJob, created: false };
+  }
+
+  const rawText = String(row.raw_text || '');
+  const role = text(row.role, 80) || parseResumeText(rawText).role;
+  if (!role) return null;
+  const matched = matchResumeJob(role, rawText, await getResumeJobs(ownerId));
+  if (matched) {
+    await db.batch([
+      db.prepare('UPDATE candidates SET job_id = ?, updated_at = ? WHERE id = ? AND owner_id = ?').bind(matched.id, now, row.id, ownerId),
+      db.prepare('UPDATE resume_applications SET job_id = ? WHERE candidate_id = ? AND owner_id = ?').bind(matched.id, row.id, ownerId),
+    ]);
+    await insertLog(ownerId, String(row.id), matched.id, ownerName, '岗位自动关联', `重新筛选时已将简历关联至岗位“${matched.title}”`);
+    return { job: matched satisfies ResumeJob, created: false };
+  }
+
+  const generatedId = crypto.randomUUID();
+  const draft = buildSystemResumeJob(role, generatedId, text(row.city, 50));
+  await db.prepare(`INSERT OR IGNORE INTO jobs (id, owner_id, title, department, city, status, headcount, owner_name, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, '招聘中', 1, ?, ?, ?)`).bind(
+    generatedId, ownerId, draft.title, draft.department, draft.city, ownerName, now, now,
+  ).run();
+  const persisted = await db.prepare(`SELECT id, title, department, city FROM jobs WHERE owner_id = ? AND title = ? COLLATE NOCASE
+    AND department = ? COLLATE NOCASE AND city = ? COLLATE NOCASE LIMIT 1`).bind(
+    ownerId, draft.title, draft.department, draft.city,
+  ).first<{ id: string; title: string; department: string; city: string }>();
+  if (!persisted) return null;
+  const created = persisted.id === generatedId;
+  await db.batch([
+    db.prepare('UPDATE candidates SET job_id = ?, updated_at = ? WHERE id = ? AND owner_id = ?').bind(persisted.id, now, row.id, ownerId),
+    db.prepare('UPDATE resume_applications SET job_id = ? WHERE candidate_id = ? AND owner_id = ?').bind(persisted.id, row.id, ownerId),
+  ]);
+  await insertLog(
+    ownerId, String(row.id), persisted.id, ownerName, created ? '岗位自动创建' : '岗位自动关联',
+    created ? `重新筛选识别到新岗位“${persisted.title}”，已自动新增岗位并关联简历` : `重新筛选时已将简历关联至岗位“${persisted.title}”`,
+  );
+  return { job: persisted satisfies ResumeJob, created };
+}
+
+function autoInterviewStatement(db: D1Database, ownerId: string, interviewer: string, candidateId: string, now: string) {
+  return db.prepare(`INSERT INTO interviews (id, owner_id, candidate_id, scheduled_at, round, mode, interviewer, status, created_at, updated_at)
+    SELECT ?, ?, ?, ?, 'AI 初面', '待确认', ?, '待确认', ?, ?
+    WHERE NOT EXISTS (
+      SELECT 1 FROM interviews WHERE owner_id = ? AND candidate_id = ? AND status NOT IN ('已完成', '已取消')
+    )`).bind(crypto.randomUUID(), ownerId, candidateId, now, interviewer, now, now, ownerId, candidateId);
 }
 
 async function executeBatches(db: D1Database, statements: D1PreparedStatement[]) {
@@ -274,10 +433,10 @@ async function ownedCandidate(id: string, ownerId: string) {
 }
 
 function mapProfile(row: DataRow) {
-  return { candidateId: row.candidate_id, education: row.education, major: row.major, school: row.school, age: row.age, gender: row.gender, industry: row.industry, expectedSalary: row.expected_salary, workYears: row.work_years, stabilityMonths: row.stability_months, workHistory: jsonList(row.work_history_json), projectHistory: jsonList(row.project_history_json), certificates: jsonList(row.certificates_json), highlights: jsonList(row.highlights_json), risks: jsonList(row.risks_json), parsingStatus: row.parsing_status, fileName: row.file_name, fileType: row.file_type, fileSize: row.file_size, keywordScore: row.keyword_score, experienceScore: row.experience_score, educationScore: row.education_score, stabilityScore: row.stability_score, matchScore: row.match_score, matchLevel: row.match_level, screenedAt: row.screened_at, updatedAt: row.updated_at };
+  return { candidateId: row.candidate_id, education: row.education, major: row.major, school: row.school, age: row.age, gender: row.gender, industry: row.industry, expectedSalary: row.expected_salary, workYears: row.work_years, stabilityMonths: row.stability_months, workHistory: readableTextList(row.work_history_json), projectHistory: readableTextList(row.project_history_json), certificates: jsonList(row.certificates_json), highlights: jsonList(row.highlights_json), risks: jsonList(row.risks_json), parsingStatus: row.parsing_status, fileName: row.file_name, fileType: row.file_type, fileSize: row.file_size, keywordScore: row.keyword_score, experienceScore: row.experience_score, educationScore: row.education_score, stabilityScore: row.stability_score, matchScore: row.match_score, matchLevel: row.match_level, screenedAt: row.screened_at, updatedAt: row.updated_at };
 }
 function mapApplication(row: DataRow) { return { id: row.id, candidateId: row.candidate_id, jobId: row.job_id, channel: row.channel, appliedAt: row.applied_at, status: row.status, createdAt: row.created_at }; }
-function mapRule(row: DataRow) { return { id: row.id, jobId: row.job_id, name: row.name, logic: row.logic, minEducation: row.min_education, majors: jsonList(row.majors_json), minYears: row.min_years, certificates: jsonList(row.certificates_json), ageMin: row.age_min, ageMax: row.age_max, cities: jsonList(row.cities_json), salaryMax: row.salary_max, industries: jsonList(row.industries_json), keywords: jsonList(row.keywords_json), keywordWeight: row.keyword_weight, experienceWeight: row.experience_weight, educationWeight: row.education_weight, stabilityWeight: row.stability_weight, updatedAt: row.updated_at }; }
+function mapRule(row: DataRow) { return { id: row.id, jobId: row.job_id, name: row.name, logic: row.logic, minEducation: row.min_education, majors: jsonList(row.majors_json), minYears: row.min_years, certificates: jsonList(row.certificates_json), ageMin: row.age_min, ageMax: row.age_max, cities: jsonList(row.cities_json), salaryMax: row.salary_max, industries: jsonList(row.industries_json), customConditions: jsonCustomConditions(row.custom_conditions_json), keywords: jsonList(row.keywords_json), keywordWeight: row.keyword_weight, experienceWeight: row.experience_weight, educationWeight: row.education_weight, stabilityWeight: row.stability_weight, updatedAt: row.updated_at }; }
 function mapTemplate(row: DataRow) { return { id: row.id, name: row.name, filters: jsonObject(row.filters_json), updatedAt: row.updated_at }; }
 function mapReview(row: DataRow) { return { candidateId: row.candidate_id, tags: jsonList(row.tags_json), comment: row.comment, riskNote: row.risk_note, rejectReason: row.reject_reason, reviewer: row.reviewer, updatedAt: row.updated_at }; }
 function mapLog(row: DataRow) { return { id: row.id, candidateId: row.candidate_id, jobId: row.job_id, operatorName: row.operator_name, action: row.action, detail: row.detail, createdAt: row.created_at }; }
@@ -288,6 +447,52 @@ function optionalInteger(value: unknown, min: number, max: number) { if (value =
 function optionalNumber(value: unknown, min: number, max: number) { if (value === '' || value === null || value === undefined) return null; const parsed = Number(value); return Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : null; }
 function list(value: unknown) { if (Array.isArray(value)) return value.map(item => text(item, 80)).filter(Boolean); return String(value ?? '').split(/[,，\n]/).map(item => item.trim().slice(0, 80)).filter(Boolean); }
 function jsonList(value: unknown): string[] { try { const parsed = JSON.parse(String(value || '[]')); return Array.isArray(parsed) ? parsed.map(item => String(item)) : []; } catch { return []; } }
+function readableTextList(value: unknown) {
+  return jsonList(value).map(item => item.trim()).filter(item => {
+    if (!item) return false;
+    if (/^[A-Za-z0-9_~+/=-]{24,}$/.test(item)) return false;
+    const readable = item.match(/[\u4e00-\u9fa5A-Za-z0-9]/g)?.length || 0;
+    return readable / item.length >= 0.55;
+  });
+}
+const customFieldLabels: Record<string, string> = { education:'学历', major:'专业', workYears:'工作年限', certificates:'职业证书', age:'年龄', city:'工作所在地', expectedSalary:'期望薪资', industry:'行业背景', skills:'技能关键词', company:'最近公司', role:'应聘职位', stabilityMonths:'平均任职月数' };
+const customFields = new Set(Object.keys(customFieldLabels));
+const customOperators = new Set(['contains','not_contains','equals','not_equals','gte','lte']);
+function customConditions(value: unknown): CustomCondition[] {
+  try {
+    const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.slice(0, 20).map(item => ({ field:text(item?.field, 40), operator:text(item?.operator, 30), value:text(item?.value, 120) }))
+      .filter(item => customFields.has(item.field) && customOperators.has(item.operator) && item.value);
+  } catch { return []; }
+}
+function jsonCustomConditions(value: unknown): CustomCondition[] { try { return customConditions(JSON.parse(String(value || '[]'))); } catch { return []; } }
+function matchesCustomCondition(row: DataRow, condition: CustomCondition) {
+  const raw = customFieldValue(row, condition.field);
+  const expected = condition.value.trim();
+  if (condition.operator === 'gte' || condition.operator === 'lte') {
+    const actualNumber = Number(raw);
+    const expectedNumber = Number(expected);
+    if (!Number.isFinite(actualNumber) || !Number.isFinite(expectedNumber)) return false;
+    return condition.operator === 'gte' ? actualNumber >= expectedNumber : actualNumber <= expectedNumber;
+  }
+  const actual = String(raw || '').trim().toLowerCase();
+  const normalizedExpected = expected.toLowerCase();
+  if (condition.operator === 'contains') return actual.includes(normalizedExpected);
+  if (condition.operator === 'not_contains') return !actual.includes(normalizedExpected);
+  if (condition.operator === 'equals') return actual === normalizedExpected;
+  if (condition.operator === 'not_equals') return actual !== normalizedExpected;
+  return false;
+}
+function customFieldValue(row: DataRow, field: string) {
+  if (field === 'workYears') return Number(row.work_years || parseFloat(String(row.years || '0')) || 0);
+  if (field === 'expectedSalary') return Number(row.expected_salary || 0);
+  if (field === 'stabilityMonths') return Number(row.stability_months || 0);
+  if (field === 'certificates') return jsonList(row.certificates_json).join(' ');
+  if (field === 'skills') return jsonList(row.skills_json).join(' ');
+  const columns: Record<string,string> = { education:'education', major:'major', age:'age', city:'city', industry:'industry', company:'company', role:'role' };
+  return row[columns[field] || ''] || '';
+}
 function jsonObject(value: unknown) { try { const parsed = JSON.parse(String(value || '{}')); return parsed && typeof parsed === 'object' ? parsed : {}; } catch { return {}; } }
 function unauthorized() { return NextResponse.json({ ok: false, message: '请先登录。' }, { status: 401 }); }
 function invalid(message: string) { return NextResponse.json({ ok: false, message }, { status: 400 }); }

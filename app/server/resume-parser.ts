@@ -50,6 +50,21 @@ export type ResumeMatchAnalysis = {
   summary: string;
 };
 
+export type SystemResumeJob = ResumeJob & {
+  department: string;
+  city: string;
+  minEducation: string;
+  majors: string[];
+  minYears: number;
+  certificates: string[];
+  industries: string[];
+  keywords: string[];
+  keywordWeight: number;
+  experienceWeight: number;
+  educationWeight: number;
+  stabilityWeight: number;
+};
+
 const roleLabels = ['应聘岗位', '应聘职位', '求职意向', '求职目标', '目标岗位', '期望职位', '期望岗位', '求职岗位', '意向职位', '目标职位', '职位名称', '岗位名称', '意向岗位', '期望工作', '求职方向', '职业目标'];
 const commonRoles = [
   '大模型算法工程师', '自然语言处理工程师', '机器学习工程师', '人工智能工程师', '数据开发工程师', '数据分析师', '数据产品经理',
@@ -59,6 +74,13 @@ const commonRoles = [
   'UI设计师', 'UX设计师', '视觉设计师', '交互设计师', '平面设计师', '产品设计师', '运营经理', '产品运营', '用户运营',
   '市场经理', '品牌经理', '销售经理', '客户经理', '商务经理', '渠道经理', '招聘经理', '招聘专员', '人力资源经理', 'HRBP',
   '财务经理', '财务分析师', '会计', '出纳', '行政经理', '行政专员', '采购经理', '采购专员', '供应链经理', '客服主管', '客服专员',
+].sort((a, b) => b.length - a.length);
+
+const commonMajors = [
+  '计算机科学与技术', '软件工程', '网络工程', '信息安全', '人工智能', '数据科学与大数据技术', '电子信息工程', '通信工程',
+  '自动化', '机械设计制造及其自动化', '工业工程', '土木工程', '工程管理', '会计学', '财务管理', '审计学', '金融学',
+  '经济学', '工商管理', '市场营销', '人力资源管理', '行政管理', '物流管理', '供应链管理', '电子商务', '国际经济与贸易',
+  '视觉传达设计', '环境设计', '工业设计', '产品设计', '广告学', '新闻学', '汉语言文学', '英语', '法学', '数学与应用数学',
 ].sort((a, b) => b.length - a.length);
 
 const roleFamilies = [
@@ -76,6 +98,7 @@ const roleFamilies = [
 
 const knownSkills = [...new Set(roleFamilies.flatMap(item => item.keywords).concat([
   'C++', 'C#', 'PHP', 'Oracle', 'MongoDB', 'Kafka', 'Git', 'GitLab', 'Jenkins', 'Flink', 'Spark', 'Hadoop', 'Pandas', 'NumPy', 'Scikit-learn',
+  '会计核算', '财务报表', '税务申报', '成本核算', '预算管理', '财务软件',
 ]))].sort((a, b) => b.length - a.length);
 
 const fieldLabels = [
@@ -87,7 +110,9 @@ const fieldLabels = [
 export function parseResumeFileName(value: string) {
   const stem = value.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').trim();
   const parts = stem.split(/\s*[-—–_|｜]\s*/).map(item => item.trim()).filter(Boolean);
-  const name = parts.find(item => /^[\u4e00-\u9fa5·]{2,4}$/.test(item) && !/(?:简历|求职|应聘|职位|岗位)/.test(item)) || '';
+  const untagged = stem.replace(/[【\[].*?[】\]]/g, ' ');
+  const name = parts.find(item => /^[\u4e00-\u9fa5·]{2,4}$/.test(item) && !/(?:简历|求职|应聘|职位|岗位)/.test(item))
+    || untagged.match(/[\u4e00-\u9fa5·]{2,4}/g)?.find(item => !/(?:简历|求职|应聘|职位|岗位|招聘|会计|工程师|经理|专员|设计师)/.test(item)) || '';
   const role = commonRoles.find(item => stem.toLowerCase().includes(item.toLowerCase()))
     || cleanRole(parts.find(item => /(?:求职|应聘|职位|岗位)/.test(item))?.replace(/^(?:求职|应聘|职位|岗位)\s*/, '') || '');
   return { name, role };
@@ -104,7 +129,7 @@ export function parseResumeText(value: string): ParsedResume {
   const role = cleanRole(labeledRole) || inferRole(lines, text);
   const education = inferEducation(text);
   const school = labeledValue(lines, ['毕业院校', '院校', '学校'], 80) || text.match(/([\u4e00-\u9fa5]{2,30}(?:大学|学院|学校))/)?.[1] || '';
-  const major = labeledValue(lines, ['所学专业', '专业'], 50);
+  const major = labeledValue(lines, ['所学专业', '专业'], 50) || inferMajor(lines, text);
   const ageText = labeledValue(lines, ['年龄'], 10).match(/\d{2}/)?.[0] || text.match(/(?<!\d)(\d{2})\s*岁/)?.[1];
   const yearsText = text.match(/(?:工作经验|工作年限|从业年限)\s*[：:|｜-]?\s*(\d+(?:\.\d+)?)\s*年/)?.[1]
     || text.match(/(\d+(?:\.\d+)?)\s*年(?:以上)?(?:工作|从业)经验/)?.[1];
@@ -117,6 +142,8 @@ export function parseResumeText(value: string): ParsedResume {
   const certificateText = labeledValue(lines, ['资格证书', '职业证书', '证书'], 300) || sectionText(text, ['证书', '资格证书'], ['工作经历', '项目经验', '教育经历'], 500);
   const listedSkills = splitResumeList(skillText);
   const durations = employmentDurations(text);
+  const detectedWorkHistory = datedHistoryEntries(text, 'work');
+  const detectedProjectHistory = datedHistoryEntries(text, 'project');
 
   return {
     phone,
@@ -133,10 +160,10 @@ export function parseResumeText(value: string): ParsedResume {
     company: cleanField(company),
     industry: cleanField(industry),
     expectedSalary: parseSalary(salaryText),
-    skills: listedSkills.length ? listedSkills : inferSkills(text),
+    skills: listedSkills.length ? listedSkills : inferSkills(text, role),
     certificates: splitResumeList(certificateText),
-    workHistory: sectionLines(text, ['工作经历', '工作经验', '职业经历'], ['项目经验', '教育经历', '教育背景', '专业技能', '技能', '证书']),
-    projectHistory: sectionLines(text, ['项目经验', '项目经历'], ['教育经历', '教育背景', '专业技能', '技能', '证书', '自我评价']),
+    workHistory: detectedWorkHistory.length ? detectedWorkHistory : sectionLines(text, ['工作经历', '工作经验', '职业经历'], ['项目经验', '教育经历', '教育背景', '专业技能', '技能', '证书']),
+    projectHistory: detectedProjectHistory.length ? detectedProjectHistory : sectionLines(text, ['项目经验', '项目经历'], ['教育经历', '教育背景', '专业技能', '技能', '证书', '自我评价']),
   };
 }
 
@@ -166,6 +193,62 @@ export function matchResumeJob(role: string, rawText: string, jobs: ResumeJob[])
     if (confidence >= threshold && (!best || confidence > best.confidence)) best = { ...job, confidence, reason };
   }
   return best;
+}
+
+export function buildSystemResumeJob(title: string, id = '', city = ''): SystemResumeJob {
+  const normalized = title.trim();
+  const role = normalized.toLowerCase();
+  const family = familyFor(normalized);
+  const job: SystemResumeJob = {
+    id,
+    title: normalized,
+    department: inferJobDepartment(normalized),
+    city: city.trim() || '待设置',
+    minEducation: '大专',
+    majors: [],
+    minYears: 1,
+    certificates: [],
+    industries: [],
+    keywords: [],
+    keywordWeight: 45,
+    experienceWeight: 25,
+    educationWeight: 18,
+    stabilityWeight: 12,
+  };
+  const keywords = [normalized, ...(family?.keywords || [])];
+  if (/前端|frontend|web/.test(role)) {
+    job.minEducation = '本科'; job.majors = ['计算机', '软件工程']; job.minYears = 2;
+    keywords.push('JavaScript', 'TypeScript', 'React', 'Vue', '前端工程化');
+  } else if (/大模型|算法|机器学习|人工智能|ai/.test(role)) {
+    job.minEducation = '本科'; job.majors = ['计算机', '人工智能', '数学']; job.minYears = 3;
+    keywords.push('Python', '机器学习', '深度学习', '模型训练', '算法');
+  } else if (/测试|qa|质量/.test(role)) {
+    job.minEducation = '本科'; job.majors = ['计算机', '软件工程']; job.minYears = 2;
+    keywords.push('测试用例', '缺陷管理', '自动化测试', '接口测试', '质量保障');
+  } else if (/后端|服务端|java|python|开发|工程师/.test(role)) {
+    job.minEducation = '本科'; job.majors = ['计算机', '软件工程']; job.minYears = 3;
+    keywords.push('系统设计', '数据库', '接口开发', '性能优化', '代码质量');
+  } else if (/产品/.test(role)) {
+    job.minEducation = '本科'; job.majors = ['产品设计', '工商管理', '计算机']; job.minYears = 3;
+    keywords.push('用户研究', '需求分析', '产品设计', '项目推进', '数据分析');
+  } else if (/采购|供应链/.test(role)) {
+    job.majors = ['采购管理', '供应链']; job.minYears = 3;
+    keywords.push('采购计划', '供应商管理', '询价比价', '成本控制', '合同管理');
+  } else if (/视觉|设计|ui|ux/.test(role)) {
+    job.majors = ['视觉传达', '设计']; job.minYears = 2;
+    keywords.push('视觉设计', '品牌设计', '设计规范', '创意表达', '设计工具');
+  } else if (/人事|人力|招聘|hr/.test(role)) {
+    job.minEducation = '本科'; job.majors = ['人力资源']; job.minYears = 2;
+    keywords.push('招聘管理', '人才甄选', '沟通协调', '劳动法规', '员工关系');
+  } else if (/会计|财务|审计|出纳/.test(role)) {
+    job.minEducation = '大专'; job.majors = ['会计学', '财务管理', '审计学']; job.minYears = 2;
+    keywords.push('会计核算', '财务报表', '税务申报', '成本核算', '预算管理', 'Excel', '财务软件');
+  } else if (/销售|商务|客户/.test(role)) {
+    job.minYears = 2;
+    keywords.push('客户开发', '销售目标', '商务谈判', '客户关系', '业绩');
+  }
+  job.keywords = [...new Set(keywords.map(item => item.trim()).filter(Boolean))].slice(0, 30);
+  return job;
 }
 
 export function scoreResumeForJob(parsed: ParsedResume, rawText: string, job: ResumeJob): ResumeMatchAnalysis {
@@ -243,7 +326,7 @@ function cleanName(value: string) {
 }
 
 function inferName(lines: string[]) {
-  const blocked = /简历|求职|应聘|职位|岗位|工程师|经理|主管|总监|专员|顾问|学校|大学|学院|公司|介绍|目录|模板|人才|招聘|信息|资料|此致|敬礼|您好/;
+  const blocked = /简历|求职|应聘|职位|岗位|工程师|经理|主管|总监|专员|顾问|学校|大学|学院|公司|介绍|目录|模板|人才|招聘|信息|资料|联系方式|联系信息|手机|电话|邮箱|此致|敬礼|您好/;
   const candidates = lines.map((line, index) => {
     const value = line.replace(/个人简历|RESUME/gi, '').trim();
     if (!/^[\u4e00-\u9fa5·]{2,4}$/.test(value) || blocked.test(value)) return null;
@@ -285,6 +368,16 @@ function inferEducation(text: string) {
   return labeled || values.find(item => text.includes(item)) || '';
 }
 
+function inferMajor(lines: string[], text: string) {
+  const known = commonMajors.find(item => text.includes(item));
+  if (known) return known;
+  const educationIndex = lines.findIndex(line => /教育经历|教育背景|毕业院校|学历/.test(line));
+  const scope = (educationIndex >= 0 ? lines.slice(educationIndex, educationIndex + 8) : lines).join(' ');
+  const candidate = scope.match(/(?:本科|硕士|博士|大专|中专)\s+([\u4e00-\u9fa5]{2,16}(?:学|工程|设计|管理|技术|贸易|语言|教育|医学|法学))/)?.[1]
+    || scope.match(/([\u4e00-\u9fa5]{2,16}(?:学|工程|设计|管理|技术|贸易|语言|教育|医学|法学))\s+(?:本科|硕士|博士|大专|中专)/)?.[1];
+  return candidate && !/(?:大学|学院|学校|学历|教育)/.test(candidate) ? candidate : '';
+}
+
 function inferRecentCompany(lines: string[]) {
   const workStart = lines.findIndex(line => /^(?:工作经历|工作经验|职业经历)/.test(line));
   if (workStart < 0) return '';
@@ -320,8 +413,10 @@ function inferIndustry(text: string) {
   return industries.find(([, pattern]) => pattern.test(text))?.[0] || '';
 }
 
-function inferSkills(text: string) {
-  return knownSkills.filter(skill => includesTerm(text, skill)).slice(0, 20);
+function inferSkills(text: string, role: string) {
+  return knownSkills.filter(skill => includesTerm(text, skill))
+    .filter(skill => skill !== '销售' || /销售|商务|客户/.test(role))
+    .slice(0, 20);
 }
 
 function employmentDurations(text: string) {
@@ -356,11 +451,42 @@ function splitResumeList(value: string) {
 function sectionText(text: string, starts: string[], ends: string[], maxLength: number) {
   const startPattern = starts.map(escapeRegExp).join('|');
   const endPattern = ends.map(escapeRegExp).join('|');
-  return text.match(new RegExp(`(?:^|\\n)\\s*(?:${startPattern})\\s*[：:]?\\s*\\n?([\\s\\S]{2,${maxLength}}?)(?=\\n\\s*(?:${endPattern})\\s*[：:]?|$)`, 'i'))?.[1]?.trim() || '';
+  return text.match(new RegExp(`(?:^|\\n)\\s*(?:${startPattern})\\s*[：:]?\\s*\\n?([\\s\\S]{0,${maxLength}}?)(?=\\n\\s*(?:${endPattern})\\s*[：:]?|$)`, 'i'))?.[1]?.trim() || '';
 }
 
 function sectionLines(text: string, starts: string[], ends: string[]) {
-  return sectionText(text, starts, ends, 2400).split(/\n+/).map(item => cleanField(item)).filter(item => item.length > 2).slice(0, 20);
+  return sectionText(text, starts, ends, 2400).split(/\n+/).map(item => cleanField(item)).filter(isReadableHistoryLine).slice(0, 20);
+}
+
+function datedHistoryEntries(text: string, kind: 'work' | 'project') {
+  const entries: string[] = [];
+  const projectSignal = /小程序|APP|应用|平台|系统|项目|模块|商城|直播|网站|客户端|后台|产品|好司机/i;
+  const roleSignal = /工程师|经理|主管|总监|专员|顾问|设计师|分析师|架构师|会计|出纳|运营|开发|测试|人事|行政|销售|客服|采购/;
+  const dateRange = /^((?:19|20)\d{2}(?:[.\/年-]\d{1,2})?\s*(?:至|到|[-—–~～])\s*(?:(?:19|20)\d{2}(?:[.\/年-]\d{1,2})?|至今|现在|今))\s*(.+)$/i;
+  for (const rawLine of normalizeResumeText(text).split('\n')) {
+    const line = cleanField(rawLine);
+    const match = line.match(dateRange);
+    if (!match) continue;
+    const detail = match[2].trim();
+    const roleIndex = detail.search(roleSignal);
+    if (roleIndex <= 0) continue;
+    const subject = detail.slice(0, roleIndex).replace(/[|｜·•\s]+$/g, '').trim();
+    const role = detail.slice(roleIndex).replace(/^[|｜·•\s]+/g, '').trim();
+    if (!subject || !role) continue;
+    const isProject = projectSignal.test(subject);
+    if ((kind === 'project') !== isProject) continue;
+    const value = `${match[1].replace(/\s+/g, '')} · ${subject} · ${role}`;
+    if (!entries.includes(value)) entries.push(value);
+  }
+  return entries.slice(0, 12);
+}
+
+function isReadableHistoryLine(item: string) {
+  if (item.length <= 2 || /^(?:内容|业绩|职责|项目描述|工作描述)\s*[：:]?$/.test(item)) return false;
+  if (/^(?:工作经历|工作经验|职业经历|项目经验|项目经历|教育经历|教育背景)$/.test(item)) return false;
+  if (/^[A-Za-z0-9_~+/=-]{24,}$/.test(item) || /^~+$/.test(item)) return false;
+  const readable = item.match(/[\u4e00-\u9fa5A-Za-z0-9]/g)?.length || 0;
+  return readable / item.length >= .55;
 }
 
 function cleanField(value: string) {
@@ -373,6 +499,19 @@ function normalizeJobTitle(value: string) {
 
 function familyFor(value: string) {
   return roleFamilies.find(family => family.patterns.some(pattern => pattern.test(value)));
+}
+
+function inferJobDepartment(title: string) {
+  const value = title.toLowerCase();
+  if (/前端|后端|开发|工程师|算法|测试|运维|架构|ai|数据/.test(value)) return '研发部';
+  if (/产品/.test(value)) return '产品部';
+  if (/视觉|设计|ui|ux/.test(value)) return '设计部';
+  if (/人事|人力|招聘|hr/.test(value)) return '人力资源部';
+  if (/销售|商务|客户/.test(value)) return '销售部';
+  if (/采购|供应链/.test(value)) return '供应链部';
+  if (/财务|会计|出纳/.test(value)) return '财务部';
+  if (/市场|品牌|运营/.test(value)) return '市场运营部';
+  return '业务部';
 }
 
 function jobKeywords(job: ResumeJob) {

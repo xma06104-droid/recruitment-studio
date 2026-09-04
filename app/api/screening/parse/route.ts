@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { accountFromRequest } from '@/app/server/db';
 import { extractResumeFileText } from '@/app/server/resume-file-text';
 import { getResumeJobs } from '@/app/server/resume-jobs';
-import { matchResumeJob, parseResumeFileName, parseResumeText, scoreResumeForJob } from '@/app/server/resume-parser';
+import { buildSystemResumeJob, matchResumeJob, parseResumeFileName, parseResumeText, scoreResumeForJob } from '@/app/server/resume-parser';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const allowedExtensions = ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'webp', 'txt', 'html', 'htm'];
@@ -38,12 +38,17 @@ export async function POST(request: NextRequest) {
   const selectedJobId = field(form, 'jobId', 80);
   const selectedJob = selectedJobId ? jobs.find(job => job.id === selectedJobId) : null;
   if (selectedJobId && !selectedJob) return invalid('所选关联岗位不存在，请刷新后重试。');
-  const suggestedJob = selectedJob
+  let suggestedJob = selectedJob
     ? { ...selectedJob, confidence: 100, reason: '已选择关联岗位' }
     : matchResumeJob(parsed.role, rawText, jobs);
+  let willCreateJob = false;
+  if (!suggestedJob && parsed.role) {
+    suggestedJob = { ...buildSystemResumeJob(parsed.role, '', parsed.city), confidence: 100, reason: '未找到现有岗位，提交后将自动新建并配置系统初筛规则' };
+    willCreateJob = true;
+  }
   if (!parsed.role && suggestedJob) parsed = { ...parsed, role: suggestedJob.title };
   const match = suggestedJob ? scoreResumeForJob(parsed, rawText, suggestedJob) : null;
-  return NextResponse.json({ ok: true, parsed, recognized: recognizedCount(parsed), suggestedJob, match });
+  return NextResponse.json({ ok: true, parsed, recognized: recognizedCount(parsed), suggestedJob, match, willCreateJob });
 }
 
 function field(form: FormData, key: string, max: number) {

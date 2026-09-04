@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { accountFromRequest, ensureSchema, getDb, getResumeBucket } from '@/app/server/db';
 import { extractResumeFileText, ResumeFileExtraction } from '@/app/server/resume-file-text';
 import { getResumeJobs } from '@/app/server/resume-jobs';
-import { matchResumeJob, parseResumeFileName, parseResumeText, ParsedResume, scoreResumeForJob } from '@/app/server/resume-parser';
+import { buildSystemResumeJob, matchResumeJob, parseResumeFileName, parseResumeText, ParsedResume, ResumeJob, scoreResumeForJob } from '@/app/server/resume-parser';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const allowedExtensions = ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'webp', 'txt', 'html', 'htm'];
@@ -31,16 +31,17 @@ export async function POST(request: NextRequest) {
   }
   const db = getDb();
   const jobs = await getResumeJobs(account.id);
+  const requestedRole = field(form, 'role', 100) || parsed.role;
   let jobId = field(form, 'jobId', 80) || null;
   let job = jobId ? jobs.find(item => item.id === jobId) || null : null;
   if (jobId && !job) return invalid('关联职位不存在。');
   let matchedJob = null;
   if (!jobId) {
-    matchedJob = matchResumeJob(parsed.role, rawText, jobs);
+    matchedJob = matchResumeJob(requestedRole, rawText, jobs);
     if (matchedJob) { jobId = matchedJob.id; job = matchedJob; }
   }
   const name = field(form, 'name', 60) || parsed.name;
-  const role = field(form, 'role', 100) || job?.title || parsed.role;
+  const role = requestedRole || job?.title || parsed.role;
   const phone = field(form, 'phone', 30) || parsed.phone;
   const email = field(form, 'email', 120) || parsed.email;
   if (file && extraction && !extraction.text && !rawText && (!name || !role)) return invalid(extraction.message);
@@ -66,6 +67,14 @@ export async function POST(request: NextRequest) {
   const projectHistory = suppliedProjectHistory.length ? suppliedProjectHistory : parsed.projectHistory;
   const city = field(form, 'city', 80) || parsed.city;
   const company = field(form, 'company', 100) || parsed.company;
+  let createdJob = false;
+  if (!job) {
+    const created = await ensureSystemJob(account.id, account.contact, role, city, now);
+    job = created.job;
+    jobId = job.id;
+    createdJob = created.created;
+    matchedJob = { ...job, confidence: 100, reason: createdJob ? '未找到现有岗位，已自动创建岗位并配置系统初筛规则' : '已关联同名岗位' };
+  }
   const scoredResume: ParsedResume = {
     ...parsed, name, role, phone, email, education, major, school, age, workYears, stabilityMonths,
     city, company, industry, expectedSalary, skills, certificates, workHistory, projectHistory,
@@ -138,7 +147,7 @@ export async function POST(request: NextRequest) {
       JSON.stringify(workHistory), JSON.stringify(projectHistory), JSON.stringify(certificates), JSON.stringify(match?.highlights || []),
       JSON.stringify(match?.risks || []), rawText, parsingStatus, fileKey, file?.name || '', file?.type || '', file?.size || 0,
       match?.keywordScore ?? null, match?.experienceScore ?? null, match?.educationScore ?? null, match?.stabilityScore ?? null,
-      match?.score ?? null, match?.level || '', null, now, now,
+      match?.score ?? null, match?.level || '', match ? now : null, now, now,
     ),
     db.prepare(`INSERT INTO resume_applications (id, owner_id, candidate_id, job_id, channel, applied_at, status, created_at)
       VALUES (?, ?, ?, ?, ?, ?, '待初筛', ?)`).bind(crypto.randomUUID(), account.id, candidateId, jobId, channel, now, now),
@@ -150,9 +159,43 @@ export async function POST(request: NextRequest) {
   ]);
 
   return NextResponse.json({
-    ok: true, candidateId, duplicate: Boolean(existing), parsingStatus,
+    ok: true, candidateId, duplicate: Boolean(existing), parsingStatus, createdJob,
     matchedJob: matchedJob || (job ? { ...job, confidence: 100, reason: '已选择关联岗位' } : null), match,
   }, { status: 201 });
+}
+
+async function ensureSystemJob(ownerId: string, ownerName: string, title: string, city: string, now: string) {
+  const db = getDb();
+  const generatedId = crypto.randomUUID();
+  const draft = buildSystemResumeJob(title, generatedId, city);
+  await db.prepare(`INSERT OR IGNORE INTO jobs (id, owner_id, title, department, city, status, headcount, owner_name, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, '招聘中', 1, ?, ?, ?)`).bind(
+    generatedId, ownerId, draft.title, draft.department, draft.city, ownerName, now, now,
+  ).run();
+  const persisted = await db.prepare(`SELECT id FROM jobs WHERE owner_id = ? AND title = ? COLLATE NOCASE
+    AND department = ? COLLATE NOCASE AND city = ? COLLATE NOCASE LIMIT 1`).bind(
+    ownerId, draft.title, draft.department, draft.city,
+  ).first<{ id: string }>();
+  if (!persisted) throw new Error('自动创建岗位失败。');
+  const job = { ...draft, id: persisted.id } satisfies ResumeJob;
+  const created = persisted.id === generatedId;
+  await db.batch([
+    db.prepare(`INSERT OR IGNORE INTO screening_rules (
+      id, owner_id, job_id, name, logic, min_education, majors_json, min_years, certificates_json,
+      age_min, age_max, cities_json, salary_max, industries_json, custom_conditions_json, keywords_json,
+      keyword_weight, experience_weight, education_weight, stability_weight, enabled, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, 'AND', ?, ?, ?, ?, NULL, NULL, ?, NULL, ?, '[]', ?, ?, ?, ?, ?, 1, ?, ?)`).bind(
+      crypto.randomUUID(), ownerId, job.id, `${job.title}初筛规则`, job.minEducation || '', JSON.stringify(job.majors || []),
+      job.minYears ?? null, JSON.stringify(job.certificates || []), JSON.stringify(job.city && job.city !== '待设置' ? [job.city] : []),
+      JSON.stringify(job.industries || []), JSON.stringify(job.keywords || []), job.keywordWeight ?? 45,
+      job.experienceWeight ?? 25, job.educationWeight ?? 18, job.stabilityWeight ?? 12, now, now,
+    ),
+    ...(created ? [db.prepare(`INSERT INTO screening_logs (id, owner_id, candidate_id, job_id, operator_name, action, detail, created_at)
+      VALUES (?, ?, NULL, ?, ?, '系统规则配置', ?, ?)`).bind(
+      crypto.randomUUID(), ownerId, job.id, ownerName, `识别到新岗位“${job.title}”，已自动新增岗位并生成系统初筛规则`, now,
+    )] : []),
+  ]);
+  return { job, created };
 }
 
 function field(form: FormData, key: string, max: number) { const value = form.get(key); return typeof value === 'string' ? value.trim().slice(0, max) : ''; }

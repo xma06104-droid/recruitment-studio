@@ -808,6 +808,8 @@ select{color-scheme:dark}
   border-color:rgba(162,181,211,.12);color:#eef5ff;background:#111a2b;box-shadow:0 42px 120px rgba(0,3,12,.62)
 }
 .job-modal h2,.flow-invite-modal h2,.ai-question-modal h2,.rs-import-modal h2,.rs-compare h2,.rs-reject-dialog h2,.rs-detail h2,.detail-drawer>h2{color:#f7faff;font-size:31px}
+.job-modal.scrollable-modal{max-height:calc(100dvh - 40px);overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#31455f transparent}
+.job-modal.scrollable-modal::-webkit-scrollbar{width:7px}.job-modal.scrollable-modal::-webkit-scrollbar-thumb{border-radius:999px;background:#31455f}.job-modal.scrollable-modal::-webkit-scrollbar-track{background:transparent}
 .job-modal>p,.flow-invite-modal>p,.ai-question-modal>p,.rs-import-modal>p,.rs-compare>p,.rs-reject-dialog>p,.detail-drawer>p{color:#91a0b5;font-size:14px;line-height:1.75}
 .job-modal label,.flow-invite-modal label,.ai-question-modal label,.rs-import-modal label,.rs-review-form label,.rs-reject-dialog label{color:#c5cfdd;font-size:13px}
 .job-modal input,.job-modal select,.job-modal textarea,.flow-invite-modal input,.flow-invite-modal select,.flow-invite-modal textarea,.ai-question-modal input,.ai-question-modal select,.ai-question-modal textarea,.rs-import-modal input,.rs-import-modal select,.rs-import-modal textarea,.rs-review-form input,.rs-review-form textarea,.rs-reject-dialog textarea{font-size:14px}
@@ -817,6 +819,9 @@ select{color-scheme:dark}
 .rs-detail>header>span,.rs-compare-grid>header>span{background:linear-gradient(145deg,#20c6dd,#3989ff)}.rs-detail>header p,.rs-detail>header small,.rs-detail-score span{color:#8796aa}.rs-detail-actions button{border-color:rgba(162,181,211,.11);color:#aad3e2;background:#152238}.rs-detail-actions button:first-child{background:#198aa6}.rs-detail-actions button.danger{color:#ffb0bd;background:#2b1721}.rs-profile-grid p,.rs-history article{background:#152137}.rs-profile-grid span,.rs-history article p{color:#8c9baf}.rs-profile-grid b,.rs-history article>b{color:#e9f1fc}.rs-tag-groups>div{background:#12233a}.rs-tag-groups span,.rs-history article i{color:#a9d6e0;background:#1a2b42}.rs-tag-groups>div.risk{background:#291921}
 .rs-compare-grid{border-color:rgba(162,181,211,.1)}.rs-compare-grid>*{border-color:rgba(162,181,211,.09);color:#aeb9c9}.rs-compare-grid>strong{color:#d8e2ef;background:#0c1626}.rs-compare-grid>header b{color:#f3f7ff}.rs-compare-grid>header small{color:#8391a6}
 .account-menu h3,.account-menu b,.notice-pop h3{color:#f4f8ff}.account-menu p,.account-menu small,.notice-pop p{color:#8c9aaf}.account-menu button,.notice-pop button{color:#b4c2d3;background:#152238}
+.notice-pop>p{position:relative;padding:12px 13px 12px 30px;border:1px solid rgba(111,154,204,.13);color:#aebbd0;background:linear-gradient(110deg,#0c1728,#132139);box-shadow:inset 0 1px rgba(255,255,255,.025)}
+.notice-pop>p:before{content:"";position:absolute;left:13px;top:50%;width:7px;height:7px;border-radius:50%;background:#55d6e8;box-shadow:0 0 12px rgba(85,214,232,.65);transform:translateY(-50%)}
+.notice-pop>p+ p:before{background:#7b8cff;box-shadow:0 0 12px rgba(123,140,255,.58)}
 
 /* Authentication and registration use the same visual language */
 .auth-shell,.register-shell{background:radial-gradient(circle at 12% 10%,rgba(31,147,192,.14),transparent 30%),radial-gradient(circle at 86% 84%,rgba(41,76,177,.13),transparent 28%),#050b16}
@@ -895,6 +900,9 @@ select{color-scheme:dark}
 .rs-rule-help li b{font-size:14px}
 .rs-rule-help li p{margin-top:8px;font-size:13px;line-height:1.75}
 .rs-rule-form fieldset legend{padding:0 10px;color:#9fc8dd;font-size:15px;font-weight:800}
+.rs-rule-hint{display:block;margin-top:2px;color:#75869d;font-size:11px;line-height:1.6}
+.rs-custom-rule-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}.rs-custom-rule-head p{margin:0;color:#8191a7;font-size:12px;line-height:1.6}.rs-custom-rule-head button{flex:0 0 auto;height:38px;padding:0 14px;border:1px solid rgba(74,209,230,.24);border-radius:10px;color:#72ddec;background:#14263a;font-size:12px;font-weight:700;cursor:pointer}.rs-custom-rule-head button:hover{color:#fff;background:#193149}.rs-custom-empty{padding:22px;border:1px dashed rgba(162,181,211,.15);border-radius:12px;color:#728299;background:#0b1524;text-align:center;font-size:12px}.rs-custom-rule-list{display:grid;gap:10px}.rs-custom-rule-row{display:grid;grid-template-columns:minmax(130px,.9fr) minmax(120px,.75fr) minmax(180px,1.45fr) 68px;gap:9px;align-items:center;padding:11px;border:1px solid rgba(162,181,211,.1);border-radius:13px;background:#111d30}.rs-custom-rule-row select,.rs-custom-rule-row input{height:42px!important;margin:0!important;border-color:rgba(162,181,211,.13)!important;color:#edf5ff!important;background:#0b1525!important;font-size:13px!important}.rs-custom-rule-row .remove{height:42px;border:1px solid rgba(237,112,133,.18);border-radius:10px;color:#ffabb9;background:#2a1721;font-size:12px;font-weight:700;cursor:pointer}.rs-custom-rule-row .remove:hover{background:#371a26}
+.rs-rule-auto-note{display:flex;align-items:center;gap:12px;margin:0 20px 17px;padding:13px 15px;border:1px solid rgba(69,213,231,.2);border-radius:12px;background:linear-gradient(110deg,rgba(26,174,198,.12),rgba(55,121,235,.1));color:#9badc1;font-size:12px;line-height:1.55}.rs-rule-auto-note b{flex:0 0 auto;color:#68dce9;font-size:12px}.rs-keyword-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.rs-keyword-heading button{height:34px;padding:0 12px;border:1px solid rgba(75,215,235,.24);border-radius:9px;color:#eafcff;background:linear-gradient(110deg,#168fae,#2f72d7);font-size:11px;font-weight:750;cursor:pointer;box-shadow:0 8px 20px rgba(17,120,181,.14)}.rs-keyword-heading button:hover{filter:brightness(1.1)}.rs-keyword-note{margin:-6px 0 13px;color:#63d8e7;font-size:11px;line-height:1.6}
 
 /* Screening log typography follows the main page scale */
 .rs-log-card>header>span{font-size:14px;font-weight:650}
@@ -908,6 +916,40 @@ select{color-scheme:dark}
 /* Candidate interview score uses the drawer's readable type scale */
 .candidate-profile>em{min-width:82px;color:#5fd7b0;font-size:16px;text-align:center}
 .candidate-profile>em b{display:block;font-size:30px;line-height:1}
+
+/* Position summary values are centered and use the product cyan-blue gradient. */
+.summary-strip span{display:flex;align-items:center;justify-content:center;gap:10px;text-align:center;color:transparent;background:linear-gradient(100deg,#54dfd5,#4fb8f5 55%,#438cff);-webkit-background-clip:text;background-clip:text}
+.summary-strip b{margin-right:0;color:transparent;background:linear-gradient(100deg,#65e5d9,#52bdf5 55%,#4a91ff);-webkit-background-clip:text;background-clip:text}
+
+/* AI interview navigation keeps every selected module on the same dark surface. */
+.ai-studio-tabs button.active{border-color:rgba(75,215,235,.34);color:#f5fbff;background:radial-gradient(circle at 92% 0,rgba(49,145,211,.14),transparent 42%),linear-gradient(135deg,#0b1526,#13223a 68%,#152a3e);box-shadow:inset 3px 0 #45d4e7,0 14px 32px rgba(2,10,24,.28),inset 0 1px 0 rgba(255,255,255,.04)}
+.ai-studio-tabs button.active small{color:#8ea2b9}
+
+/* Home priority-job table uses a clearer header and larger numeric/status signals. */
+.job-head{height:50px;font-size:13px;font-weight:750;letter-spacing:.045em}
+.job-row{min-height:84px}
+.job-row>span{font-size:16px;font-weight:800}
+.job-row>span:first-of-type{gap:10px}
+.job-dot{width:10px;height:10px;box-shadow:0 0 0 4px rgba(120,101,239,.1)}
+.job-dot.dot-1{box-shadow:0 0 0 4px rgba(240,143,100,.1)}.job-dot.dot-2{box-shadow:0 0 0 4px rgba(88,166,232,.1)}.job-dot.dot-3{box-shadow:0 0 0 4px rgba(76,178,139,.1)}
+.job-row>em{min-width:62px;padding:8px 12px;border-radius:10px;font-size:11px;font-weight:750;text-align:center}
+
+/* Candidate drawer stays fully within the dark product theme. */
+.candidate-drawer{color:#edf5ff;background:radial-gradient(circle at 90% 0,rgba(46,131,202,.13),transparent 30%),linear-gradient(155deg,#0b1525,#101c30 62%,#11243a)}
+.candidate-drawer .drawer-close{border:1px solid rgba(95,220,237,.24);color:#fff;background:linear-gradient(135deg,#1ebfd8,#367ff0);box-shadow:0 10px 24px rgba(34,130,205,.22)}
+.candidate-drawer .candidate-profile>span{border:1px solid rgba(112,223,238,.22);color:#fff;background:linear-gradient(145deg,#20c5dc,#3b82ed);box-shadow:0 12px 28px rgba(32,143,208,.2)}
+.candidate-drawer .candidate-profile h2{color:#f7fbff}.candidate-drawer .candidate-profile p{color:#8f9fb4}
+.candidate-drawer .current-stage{border:1px solid rgba(162,181,211,.12);color:#aebbd0;background:#0d192a;box-shadow:inset 0 1px rgba(255,255,255,.025)}
+.candidate-drawer .current-stage select{height:40px;padding:0 36px 0 14px;border:1px solid rgba(76,211,231,.24);border-radius:11px;color:#fff;background:#17304b;font-size:13px;font-weight:700;box-shadow:0 10px 24px rgba(22,105,170,.17)}
+.candidate-drawer .ai-assessment{border:1px solid rgba(162,181,211,.1);background:#0d192a}.candidate-drawer .ai-assessment p{color:#a8b5c7;font-size:13px}.candidate-drawer .ai-assessment b{color:#61d8e8}
+.candidate-drawer .channel-tags span{padding:9px 13px;border:1px solid rgba(100,219,235,.22);border-radius:9px;color:#f3fbff;background:linear-gradient(115deg,#167f9a,#315fd2);box-shadow:0 8px 18px rgba(27,96,166,.16);font-size:11px;font-weight:700}
+.candidate-drawer .profile-info p{border-color:rgba(162,181,211,.11);color:#e3ebf6;font-size:13px}.candidate-drawer .profile-info span{color:#8797ac}
+
+@media(max-width:760px){
+  .rs-custom-rule-head{align-items:flex-start;flex-direction:column}
+  .rs-custom-rule-row{grid-template-columns:1fr 1fr}
+  .rs-custom-rule-row input,.rs-custom-rule-row .remove{grid-column:1/-1}
+}
 .candidate-profile>em small{margin-top:7px;color:#9eacbf;font-size:12px}
 .real-empty h3{color:#fff}
 
@@ -922,6 +964,12 @@ select{color-scheme:dark}
 .flow-list-title .new-job{height:42px;padding:0 16px;font-size:13px}
 .flow-person-row{color:#c7d1df;background:#0f1929;transition:background-color .18s ease,box-shadow .18s ease}
 .flow-person-row:hover,.flow-person-row:focus-within,.flow-person-row.active,.flow-person-row.selected{background:linear-gradient(90deg,rgba(30,183,211,.16),rgba(34,102,181,.1));box-shadow:inset 4px 0 0 #43cfe7}
+.flow-person-profile{align-items:flex-start;gap:16px}
+.flow-person-profile>span{width:54px;height:54px;border:1px solid rgba(76,215,235,.24);border-radius:14px;color:#eafcff;background:linear-gradient(145deg,#13253a,#172e49);box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 10px 24px rgba(0,7,19,.28);font-size:18px;font-weight:850}
+.flow-person-profile h3{gap:10px;margin-bottom:8px;color:#f6f9ff;font-size:16px;line-height:1.25}
+.flow-person-profile h3 small{color:#a8b6c8;font-size:13px;font-weight:650}
+.flow-person-profile p{margin-bottom:7px;color:#c4cfdd;font-size:14px;line-height:1.35}
+.flow-person-profile div>small{color:#8f9eb2;font-size:12px;line-height:1.35}
 
 /* AI question library uses the main page type scale */
 .ai-library-toolbar button{font-size:13px;font-weight:700}
@@ -933,6 +981,7 @@ select{color-scheme:dark}
 .ai-question-row:hover,.ai-question-row:active,.ai-question-row:focus,.ai-question-row:focus-visible,.ai-question-row:focus-within,.ai-question-row.selected{background:linear-gradient(90deg,rgba(30,183,211,.15),rgba(34,102,181,.09));box-shadow:inset 4px 0 0 #43cfe7}
 .ai-question-row>div:last-child button{height:32px;padding:0 10px;border-color:rgba(162,181,211,.13);color:#b8c8d9;background:#162238;font-size:11px;font-weight:650}
 .ai-question-row>div:last-child button:hover{color:#fff;background:#1b2b46}
+.ai-question-row>div:last-child button.danger{border-color:rgba(229,103,124,.2);color:#ffadba;background:#2a1823}.ai-question-row>div:last-child button.danger:hover{color:#ffd7de;background:#381b28}
 .manage-row{transition:background-color .18s ease,box-shadow .18s ease}
 .manage-row:hover,.manage-row:focus-within,.manage-row.selected{background:linear-gradient(90deg,rgba(30,183,211,.14),rgba(34,102,181,.08));box-shadow:inset 4px 0 0 #43cfe7}
 
@@ -1024,3 +1073,238 @@ button:disabled{cursor:wait}
 .interview-side>div{background:#0d1728}
 .manage-row:active,.manage-row:focus,.flow-person-row:active,.ai-question-row:active,.rs-person-row:active{background:linear-gradient(90deg,rgba(30,183,211,.15),rgba(34,102,181,.09));box-shadow:inset 4px 0 0 #43cfe7}
 .candidate-card:active,.candidate-card:focus-visible,.interview-card:active,.interview-card:focus-visible,.kpi-grid article.clickable:active,.kpi-grid article.clickable:focus-visible{outline:0;border-color:rgba(67,207,231,.3);background:#15243a;box-shadow:0 18px 42px rgba(0,8,24,.28),inset 0 0 0 1px rgba(67,207,231,.07)}
+
+/* Offer and recruitment analytics share the same dark dashboard surfaces */
+.offer-kpis article,.analytics-kpis article,.analytics-chart,.channel-card{
+  border:1px solid rgba(162,181,211,.11);color:#eef5ff;background:#111a2b;box-shadow:var(--grand-shadow)
+}
+.offer-kpis span,.analytics-kpis span{color:#95a4b8;font-size:13px}
+.offer-kpis b,.analytics-kpis b{color:#f6f9ff;font-size:32px}
+.offer-kpis small,.analytics-kpis small{color:#65d7b5;font-size:11px}
+.offer-head{color:#9cabc0;background:#0c1525}
+.offer-row{border-color:rgba(162,181,211,.09);color:#c6d0de;background:#111a2b;font-size:12px}
+.offer-row b,.offer-row strong{color:#f4f8ff}
+.offer-row>div>span{color:#7edfec;background:#17273d}
+.offer-row select{border:1px solid rgba(162,181,211,.13);color:#eef5ff;background:#0c1627}
+.offer-row>button{color:#62d7e8;background:transparent}
+.analytics-filters button{border-color:rgba(162,181,211,.12);color:#a8b6c9;background:#111d30;font-size:12px}
+.analytics-filters button.active{border-color:transparent;color:#fff;background:linear-gradient(110deg,#168da8,#347ce4)}
+.chart-title h3{color:#f4f8ff;font-size:16px}.chart-title p{color:#8e9db2;font-size:12px}
+.chart-title>div:last-child{font-size:11px}.chart-body{border-color:rgba(162,181,211,.09)}
+.chart-body span{color:#8998ad;font-size:10px}.channel-row{border-color:rgba(162,181,211,.09)}
+.channel-row>b{color:#80deeb;background:#17273d;font-size:10px}.channel-row>span,.channel-row>strong{color:#eaf2fc;font-size:12px}
+.channel-row i{background:#1c293d}.channel-row em{background:linear-gradient(90deg,#22c5dd,#398bff)}.channel-row small{color:#8d9bb0;font-size:10px}
+
+/* Talent cards: larger type, dark badges and no white score blocks */
+.candidate-grid{grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:20px}
+.candidate-card{min-height:320px;padding:26px;border-radius:22px}
+.candidate-top{gap:14px}.candidate-top>span{width:48px;height:48px;border-color:rgba(162,181,211,.12);color:#70d8e8;background:#17273d;font-size:14px}
+.candidate-top b{color:#f4f8ff;font-size:16px}.candidate-top small{margin-top:6px;color:#97a5b8;font-size:12px;line-height:1.45}
+.candidate-top em{padding:0;color:#65d7e8;background:transparent!important;font-size:16px}
+.candidate-card h3{margin:24px 0 15px;color:#f4f8ff;font-size:15px}
+.skill-row{gap:8px}.skill-row i{padding:7px 10px;border:1px solid rgba(162,181,211,.1);border-radius:8px;color:#b7c5d5;background:#172438;font-size:11px}
+.candidate-card footer{gap:10px;margin-top:24px;padding-top:17px;border-color:rgba(162,181,211,.1)}
+.candidate-card footer span{padding:7px 10px;color:#65d9e8;background:#162940;font-size:11px}.candidate-card footer small,.candidate-card footer b{font-size:11px}.candidate-card footer small{color:#94a2b6}.candidate-card footer b{color:#67d7e7}
+.real-empty h3{color:#fff!important}
+
+/* Detail headers and edit actions stay readable on the dark canvas */
+.rs-detail>header p{margin:8px 0 6px;font-size:14px;line-height:1.55}.rs-detail>header small{font-size:13px;line-height:1.55}
+.rs-detail-score b{color:#f7faff;font-size:36px;font-weight:850;line-height:1}.rs-detail-score span{margin-top:8px;color:#aab8ca;font-size:13px;font-weight:800}
+.drawer-actions{margin:22px 0 8px}.drawer-actions button{height:44px;border-color:rgba(67,207,231,.22);color:#e8fbff;background:linear-gradient(110deg,#168da8,#347ce4);font-size:13px;font-weight:750;cursor:pointer}
+.account-trigger:hover,.account-trigger.open,.account-trigger:focus-visible{outline:0;border-color:rgba(67,207,231,.18);color:#eef5ff;background:#142139;box-shadow:inset 0 0 0 1px rgba(67,207,231,.08)}
+.account-trigger b{color:#f4f8ff}
+.ai-question-head,.ai-question-row{grid-template-columns:minmax(320px,1.8fr) 100px 72px 58px 116px}
+@media(max-width:1100px){.ai-question-head,.ai-question-row{grid-template-columns:minmax(280px,1.6fr) 92px 68px 54px 105px}}
+
+/* Screening operation logs use high-contrast text across every row */
+.rs-log-row,.rs-log-row time,.rs-log-row>b,.rs-log-row>span,.rs-log-row>span small,.rs-log-row p{color:#f4f8ff}
+.rs-log-row>span small{color:#d5deea}
+.rs-log-row em{border:1px solid rgba(162,181,211,.13);color:#f4f8ff;background:#18263b;font-weight:700}
+
+/* Screening process palette matched to the supplied navy and cyan reference */
+.rs-process{
+  border:1px solid #263249;
+  background:linear-gradient(135deg,#111628 0%,#101525 58%,#0c1728 100%);
+  box-shadow:0 22px 55px rgba(0,4,14,.34),inset 0 1px 0 rgba(255,255,255,.035)
+}
+.rs-process>div>i{
+  border:1px solid #087b90;
+  color:#63e4ee;
+  background:linear-gradient(145deg,#0b5362,#0b3448);
+  box-shadow:inset 0 1px 0 rgba(105,236,245,.1),0 8px 20px rgba(0,64,82,.18)
+}
+.rs-process b{color:#f6f8fc}.rs-process small{color:#96a3b8}.rs-process>em{color:#53677d}
+
+/* Resume selection controls use square checks and a dark batch action bar */
+.rs-list-toolbar input[type="checkbox"],.rs-person-row>label input[type="checkbox"]{
+  width:22px;height:22px;min-width:22px;aspect-ratio:1;border-radius:3px
+}
+.rs-batch-bar{
+  border-bottom-color:rgba(162,181,211,.1);
+  color:#eef5ff;
+  background:linear-gradient(90deg,#111b2d,#142138)
+}
+.rs-batch-bar b{color:#f4f8ff}
+.rs-batch-bar button{border-color:rgba(162,181,211,.14);color:#dce7f4;background:#1a2940}
+.rs-batch-bar button:hover{color:#fff;background:#21334f}
+.rs-batch-bar button.danger{border-color:rgba(221,104,124,.18);color:#ffadba;background:#2a1823}
+
+/* AI interview page keeps every selectable surface on the dark theme. */
+.ai-studio-tabs button,.ai-studio-tabs button:hover{border-color:rgba(162,181,211,.1);color:#9cacbf;background:#0f1929;box-shadow:none;transform:none}
+.ai-studio-tabs button>i{border:1px solid rgba(79,210,235,.14);color:#6bd8e7;background:linear-gradient(145deg,#14243a,#172b45);box-shadow:none}
+.ai-studio-tabs button.active{border-color:rgba(75,215,235,.3);color:#f5fbff;background:radial-gradient(circle at 92% 0,rgba(49,145,211,.15),transparent 42%),linear-gradient(135deg,#0b1526,#13223a 68%,#152a3e);box-shadow:inset 4px 0 #45d4e7,0 14px 32px rgba(2,10,24,.28)}
+.ai-studio-tabs button.active>i{border-color:rgba(93,225,242,.28);color:#fff;background:linear-gradient(145deg,#18aec5,#347ce4);box-shadow:0 8px 22px rgba(34,151,211,.2)}
+.ai-studio-tabs button.active small{color:#9babc0}
+.ai-library-filter>button.active{color:#eef8ff;background:linear-gradient(90deg,#16263c,#172a43);box-shadow:inset 3px 0 #43cfe7}
+.ai-library-filter>button b{color:#a6b5c8;background:#17253a}.ai-library-filter>button.active b{color:#063247;background:#73e0ec}
+.ai-library-toolbar>label,.ai-library-toolbar>label:focus-within{border-color:rgba(162,181,211,.12);color:#7fdce8;background:#0c1627;box-shadow:none}
+.ai-library-toolbar input{color:#dfe8f4;background:transparent}.ai-library-toolbar button{border-color:rgba(78,215,235,.2);color:#fff;background:linear-gradient(110deg,#168da8,#347ce4);box-shadow:0 8px 20px rgba(30,127,191,.16)}
+.ai-question-row>div:first-child>i{border-color:rgba(77,215,235,.2);color:#73deeb;background:linear-gradient(145deg,#13243a,#172c47);box-shadow:none}
+.ai-question-row>em,.ai-question-row>em.voice{border:1px solid rgba(162,181,211,.11);color:#b8c8db;background:#17263c}
+.ai-summary-shell>aside>button.active{border-color:rgba(75,215,235,.24);color:#eef8ff;background:linear-gradient(90deg,#15263d,#172b45);box-shadow:inset 3px 0 #43cfe7}
+.ai-summary-shell>aside>button>span{color:#6fdbe9;background:linear-gradient(145deg,#14243a,#172c47)}.ai-summary-shell>aside>button.active>span{color:#fff;background:linear-gradient(145deg,#18aec5,#347ce4)}
+.ai-summary-shell>aside>button em{color:#83e0c4;background:#132a29}
+
+/* Candidate interview metadata uses the same readable scale as the profile. */
+.flow-person-row{grid-template-columns:20px minmax(330px,1.45fr) minmax(150px,.65fr) minmax(125px,.5fr) 150px;min-height:108px}
+.flow-person-owner span,.flow-person-status span{color:#91a1b6;font-size:12px;font-weight:650}
+.flow-person-owner b{margin-top:8px;color:#f2f7ff;font-size:15px;font-weight:780;line-height:1.3}
+.flow-person-owner small{margin-top:7px;color:#9baabd;font-size:12px;line-height:1.3}
+.flow-person-owner b.timeout{color:#ffadba}.flow-more.timeout-action{padding:8px 12px;border:1px solid rgba(255,119,143,.24);border-radius:9px;color:#ffc0ca;background:#2c1823}.flow-more.timeout-action:hover{color:#fff;background:#3a1b29}
+.ai-invite-row-actions{display:grid;justify-items:start;gap:5px}.ai-invite-row-actions .invite-waiting{padding:6px 10px;border:1px solid rgba(255,197,97,.24);border-radius:8px;color:#ffd17d;background:#302617;font-size:11px;font-weight:800;cursor:default;opacity:1}.ai-invite-row-actions>small{color:#87e0eb;font-size:11px;font-weight:700}.ai-invite-row-actions .resend-link{padding:0;color:#7baaff;font-size:11px}.ai-invite-row-actions .resend-link:hover{color:#b4cdff;text-decoration:underline}
+.flow-person-status b{min-width:48px;margin-top:8px;padding:7px 11px;border:1px solid rgba(162,181,211,.11);border-radius:9px;color:#f0f6ff;background:#17263c;font-size:18px;font-weight:820;line-height:1;text-align:center}
+.flow-person-status b.completed{border-color:rgba(75,208,169,.17);color:#89e2c5;background:#132a29}
+.flow-more{color:#6bd9e8;font-size:13px;font-weight:700;line-height:1.45}
+@media(max-width:1100px){.flow-person-row{grid-template-columns:20px minmax(300px,1.4fr) minmax(140px,.6fr) 150px}}
+@media(max-width:760px){.flow-person-row{grid-template-columns:1fr}}
+
+/* Paste-to-question recognition lives inside the scrollable question dialog. */
+.ai-question-copy{display:grid;gap:10px;margin:0 0 20px;padding:15px;border:1px solid rgba(75,215,235,.16);border-radius:13px;background:linear-gradient(135deg,rgba(24,157,183,.09),rgba(48,102,190,.07))}
+.ai-question-copy>div{display:flex;align-items:center;justify-content:space-between;gap:12px}.ai-question-copy b{color:#f2f8ff;font-size:13px}.ai-question-copy small{color:#7f90a7;font-size:10px}
+.job-modal .ai-question-copy textarea{min-height:112px;margin:0;resize:vertical;color:#eaf3ff;background:#0b1525;font-size:13px;line-height:1.65}
+.ai-question-copy>button{height:40px;border:1px solid rgba(76,216,235,.2);border-radius:10px;color:#fff;background:linear-gradient(110deg,#168da8,#347ce4);font-size:12px;font-weight:750;cursor:pointer}.ai-question-copy>button:hover{filter:brightness(1.08)}
+.ai-question-copy>p{margin:0;color:#68dbe8;font-size:11px;line-height:1.5}
+@media(max-width:760px){.ai-question-copy>div{align-items:flex-start;flex-direction:column}}
+
+.ai-score-ring{border-color:#32c8df;border-right-color:#3988ff;color:#f5faff;background:#0c1829;box-shadow:inset 0 0 24px rgba(42,157,216,.09),0 10px 25px rgba(0,7,20,.22)}
+.ai-score-ring strong{color:#f7fbff!important;font-size:36px;font-weight:900;line-height:1}
+.ai-score-ring small{margin-top:6px;color:#93a7bf!important;font-size:11px;font-weight:750}
+
+/* AI summary header and overview use the product's cyan-blue technical language. */
+.ai-summary-report>header{position:relative;min-height:78px;padding:14px 16px 18px;border:1px solid rgba(75,215,235,.12);border-radius:15px;background:radial-gradient(circle at 92% 0,rgba(48,139,210,.13),transparent 42%),linear-gradient(120deg,#101d30,#13243b);overflow:hidden}
+.ai-summary-report>header:after{content:"";position:absolute;left:16px;right:16px;bottom:0;height:2px;background:linear-gradient(90deg,#41d3e7,#398cff,transparent)}
+.ai-summary-report>header>div:first-child{gap:15px}.ai-summary-report>header>div:first-child>span{width:52px;height:52px;border:1px solid rgba(107,229,242,.25);border-radius:14px;color:#fff;background:linear-gradient(145deg,#19b5cb,#347ce4);box-shadow:0 10px 26px rgba(28,133,199,.23);font-size:16px}
+.ai-summary-report>header h2{margin-bottom:8px;color:#f5faff;font-size:20px;font-weight:820;letter-spacing:.015em}.ai-summary-report>header p{color:#9badc2;font-size:13px;line-height:1.5}
+.ai-summary-overview{border:1px solid rgba(75,215,235,.14);color:#edf6ff;background:radial-gradient(circle at 94% 0,rgba(51,143,213,.13),transparent 42%),linear-gradient(125deg,#101d30,#13243a);box-shadow:inset 0 1px 0 rgba(255,255,255,.035),0 16px 36px rgba(0,6,18,.2)}
+.ai-summary-overview>div:last-child>span{color:#86a1bb;font-size:12px;font-weight:750;letter-spacing:.06em}.ai-summary-overview h3{margin:7px 0;color:#5fdaea;font-size:22px;font-weight:850}.ai-summary-overview p{color:#d1dbe8;font-size:14px;line-height:1.8}
+.ai-summary-completed{display:block;margin-top:12px;color:#9bacc1;font-size:13px;font-weight:720}.ai-summary-overview em{margin-top:10px;padding:6px 9px;border:1px solid rgba(89,218,180,.14);color:#82dfc2;background:#112b2a;font-size:11px;font-weight:700}
+
+/* Each scored question is split into question and answer columns. */
+.ai-answer-breakdown{margin-top:18px;border:1px solid rgba(162,181,211,.12);border-radius:15px;overflow:hidden;background:#0d1728;color:#eef6ff;box-shadow:0 18px 42px rgba(0,5,17,.2)}
+.ai-answer-breakdown>header{display:grid;grid-template-columns:minmax(220px,.75fr) minmax(320px,1.25fr);gap:0;padding:13px 18px;border-bottom:1px solid rgba(162,181,211,.09);color:#91a7bd;background:#0a1423;font-size:12px;font-weight:800;letter-spacing:.05em}
+.ai-answer-breakdown>article{display:grid;grid-template-columns:minmax(220px,.75fr) minmax(320px,1.25fr);border-top:1px solid rgba(162,181,211,.09);background:#101b2d}
+.ai-answer-question,.ai-answer-response{padding:18px}.ai-answer-question{position:relative;border-right:1px solid rgba(162,181,211,.09);background:linear-gradient(145deg,#112138,#13263e)}
+.ai-answer-question>span{color:#5ed9e9;font-size:11px;font-weight:800;letter-spacing:.08em}.ai-answer-question h4{margin:9px 0 14px;color:#f3f8ff;font-size:16px;line-height:1.55}.ai-answer-question em{display:inline-flex;padding:6px 9px;border-radius:8px;color:#fff;background:linear-gradient(110deg,#168da8,#347ce4);font-size:12px;font-style:normal;font-weight:800}
+.ai-answer-response p{margin:0;color:#d6e0ec;font-size:14px;line-height:1.85;white-space:pre-wrap}.ai-answer-response small{display:block;margin-top:13px;padding-top:11px;border-top:1px dashed rgba(162,181,211,.15);color:#8fa2b9;font-size:12px;line-height:1.6}
+.ai-followup-advice{position:relative;overflow:hidden;padding:17px 18px;border:1px solid rgba(75,215,235,.15);border-radius:14px;color:#eef7ff;background:radial-gradient(circle at 95% 0,rgba(49,139,210,.13),transparent 45%),linear-gradient(120deg,#0f1d30,#13253c);box-shadow:inset 0 1px 0 rgba(255,255,255,.035),0 14px 32px rgba(1,8,20,.18)}
+.ai-followup-advice:after{content:"";position:absolute;right:-26px;bottom:-34px;width:110px;height:110px;border:1px solid rgba(75,215,235,.07);border-radius:50%}
+.ai-followup-advice>span{position:relative;z-index:1;width:36px;height:36px;border:1px solid rgba(107,229,242,.24);border-radius:10px;color:#fff;background:linear-gradient(145deg,#18aec5,#347ce4);box-shadow:0 8px 20px rgba(34,143,205,.2);font-size:15px;font-weight:850}
+.ai-followup-advice h3{color:#f4f9ff;font-size:14px}.ai-followup-advice p{color:#9fadc0;font-size:12px;line-height:1.7}
+@media(max-width:760px){.ai-answer-breakdown>header{display:none}.ai-answer-breakdown>article{grid-template-columns:1fr}.ai-answer-question{border-right:0;border-bottom:1px solid rgba(162,181,211,.11)}}
+
+/* Resume intake keeps five essential columns and uses readable status badges. */
+.rs-intake-head,.rs-intake-row{grid-template-columns:minmax(180px,1.35fr) minmax(150px,1fr) 130px minmax(180px,1.25fr) 105px}
+.rs-intake-status em{padding:8px 11px;border:1px solid transparent;border-radius:9px;font-size:11px;font-weight:800;line-height:1}
+.rs-intake-status em.ok{border-color:rgba(91,219,180,.2);color:#91e6ca;background:#13302d}
+.rs-intake-status em.warn{border-color:rgba(239,176,112,.2);color:#ffc48d;background:#30231e}
+.rs-intake-status button{font-size:11px;font-weight:700}
+@media(max-width:1100px){.rs-intake-head,.rs-intake-row{min-width:760px}}
+
+/* Native date and time affordances stay visible on every dark form. */
+input[type="date"],input[type="time"],input[type="datetime-local"]{color-scheme:dark}
+input[type="date"]::-webkit-calendar-picker-indicator,input[type="datetime-local"]::-webkit-calendar-picker-indicator{filter:invert(1) brightness(1.8);cursor:pointer;opacity:.95}
+.offer-content-field textarea{min-height:170px;resize:vertical;line-height:1.75}
+
+/* Offer rows expose clear record actions and a stronger candidate identity. */
+.offer-head,.offer-row{grid-template-columns:1.1fr 1.15fr .72fr .82fr .9fr .82fr 1fr}
+.offer-row{min-height:78px}
+.offer-row>div:first-child>span{width:44px;height:44px;min-width:44px;border:1px solid rgba(105,225,241,.25);border-radius:13px;color:#fff;background:linear-gradient(145deg,#18aec5,#347ce4);box-shadow:0 9px 22px rgba(33,137,204,.2);font-size:15px;font-weight:850}
+.offer-row-actions{display:flex;gap:7px;justify-content:flex-start}
+.offer-row-actions button{height:32px;padding:0 10px;border:1px solid rgba(76,216,235,.18);border-radius:8px;color:#77deeb;background:#14263d;font-size:11px;font-weight:750;cursor:pointer}
+.offer-row-actions button:hover{color:#fff;background:#19314d}.offer-row-actions button.danger{border-color:rgba(228,102,124,.2);color:#ffabb8;background:#2b1823}.offer-row-actions button.danger:hover{color:#ffd7dd;background:#3a1b29}
+
+/* AI navigation and completed-report list use a larger, luminous hierarchy. */
+.ai-studio-tabs{padding:0;background:transparent}
+.ai-studio-tabs button,.ai-studio-tabs button:hover{min-height:104px;padding:20px 22px;border:1px solid rgba(80,174,225,.18);background:radial-gradient(circle at 92% 0,rgba(50,137,207,.12),transparent 45%),linear-gradient(135deg,#0d1829,#12243a);box-shadow:inset 0 1px 0 rgba(255,255,255,.035),0 15px 32px rgba(0,7,21,.2)}
+.ai-studio-tabs button:nth-child(2),.ai-studio-tabs button:nth-child(2):hover{background:radial-gradient(circle at 88% 5%,rgba(72,98,214,.16),transparent 44%),linear-gradient(135deg,#0e192b,#17213e)}
+.ai-studio-tabs button:nth-child(3),.ai-studio-tabs button:nth-child(3):hover{background:radial-gradient(circle at 90% 0,rgba(45,190,207,.15),transparent 44%),linear-gradient(135deg,#0c1929,#132c3b)}
+.ai-studio-tabs button.active{border-color:rgba(85,222,241,.42);background:radial-gradient(circle at 90% 0,rgba(50,153,218,.26),transparent 43%),linear-gradient(135deg,#0b1728,#15304a);box-shadow:inset 4px 0 #45d4e7,0 16px 36px rgba(1,10,25,.3),0 0 24px rgba(50,173,221,.08)}
+.ai-studio-tabs button>i{width:48px;height:48px;border-radius:14px;font-size:17px}.ai-studio-tabs button>span{font-size:15px;font-weight:800;line-height:1.35}.ai-studio-tabs small{margin-top:7px;color:#91a3b9;font-size:11px;font-weight:600}
+.ai-summary-shell>aside{padding:20px}.ai-summary-list-title h3{color:#f3f8ff;font-size:16px}.ai-summary-list-title p{margin-top:7px;color:#95a5ba;font-size:12px}
+.ai-summary-shell>aside>button{grid-template-columns:44px minmax(0,1fr) 40px;gap:12px;min-height:68px;margin-top:8px;padding:10px;border-radius:12px;color:#d8e3ef}
+.ai-summary-shell>aside>button>span{width:44px;height:44px;border-radius:12px;font-size:14px}.ai-summary-shell>aside>button b{color:#f2f7ff;font-size:14px}.ai-summary-shell>aside>button small{margin-top:6px;color:#96a7bc;font-size:11px}.ai-summary-shell>aside>button em{width:38px;height:38px;font-size:12px}
+@media(max-width:760px){.offer-head,.offer-row{grid-template-columns:1fr}.offer-head{display:none}.offer-row{gap:10px;padding:16px}.offer-row>span,.offer-row>strong,.offer-row>select,.offer-row-actions{display:flex}.ai-studio-tabs button{min-height:88px;padding:14px}.ai-studio-tabs button>span{font-size:13px}.ai-studio-tabs small{font-size:10px}}
+
+/* Candidate rows rely on spacing and hover state instead of high-contrast dividers. */
+.flow-person-list .flow-person-row{border-bottom:0}
+
+/* Lock toolbar and row selectors to the same true-square dimensions. */
+.rs-list-toolbar input[type="checkbox"],.rs-person-row>label input[type="checkbox"]{
+  box-sizing:border-box;width:24px;min-width:24px;max-width:24px;height:24px;min-height:24px;max-height:24px;flex:0 0 24px;padding:0;border-radius:4px
+}
+.rs-list-toolbar input[type="checkbox"]:checked:after,.rs-person-row>label input[type="checkbox"]:checked:after{font-size:15px}
+
+/* Intelligent question generation and targeted resume rescoring actions. */
+.ai-generator-bar{display:flex;align-items:center;justify-content:space-between;gap:18px;margin:-4px 0 16px;padding:16px 18px;border:1px solid rgba(75,215,235,.16);border-radius:15px;background:radial-gradient(circle at 88% 0,rgba(49,144,211,.18),transparent 42%),linear-gradient(120deg,#0e1a2c,#142740);box-shadow:0 14px 34px rgba(0,7,20,.2)}
+.ai-generator-bar>div{display:flex;flex-direction:column}.ai-generator-bar b{color:#f4f9ff;font-size:14px}.ai-generator-bar span{margin-top:6px;color:#91a4ba;font-size:11px}.ai-generator-bar button{height:40px;padding:0 15px;border:1px solid rgba(91,225,241,.25);border-radius:10px;color:#fff;background:linear-gradient(110deg,#168da8,#347ce4);box-shadow:0 9px 22px rgba(31,126,194,.2);font-size:12px;font-weight:800;cursor:pointer}.ai-generator-bar button:disabled{cursor:not-allowed;filter:saturate(.25);opacity:.55}
+.ai-generator-note{display:flex;gap:12px;margin:8px 0 4px;padding:14px;border:1px solid rgba(75,215,235,.14);border-radius:12px;background:linear-gradient(135deg,rgba(24,157,183,.09),rgba(48,102,190,.07))}.ai-generator-note>span{display:grid;place-items:center;width:36px;height:36px;flex:0 0 auto;border-radius:10px;color:#fff;background:linear-gradient(145deg,#18aec5,#347ce4)}.ai-generator-note b{color:#eef7ff;font-size:12px}.ai-generator-note p{margin:5px 0 0;color:#91a3b9;font-size:11px;line-height:1.65}
+.rs-actions button.rescreen{padding:5px 8px;border:1px solid rgba(75,215,235,.2);border-radius:7px;color:#071722;background:linear-gradient(110deg,#68dce8,#5ca6f3);font-weight:800}.rs-actions button.rescreen:disabled{cursor:wait;opacity:.65}
+@media(max-width:760px){.ai-generator-bar{align-items:flex-start;flex-direction:column}.ai-generator-bar button{width:100%}}
+
+/* Talent match scores use a warm high-contrast accent distinct from the cyan chrome. */
+.candidate-top em{min-width:58px;padding:7px 10px!important;border:1px solid rgba(255,205,113,.38);border-radius:10px;color:#1a1307!important;background:linear-gradient(135deg,#ffd56a,#ff9f43)!important;box-shadow:0 8px 22px rgba(255,165,55,.2);font-size:17px!important;font-weight:900!important;text-align:center}
+.candidate-top em.unrated{border-color:rgba(162,181,211,.14);color:#92a1b5!important;background:#17243a!important;box-shadow:none;font-size:12px!important}
+
+/* Keep every talent card on the same top and bottom alignment grid. */
+.candidate-card{display:flex;align-items:stretch;justify-content:flex-start;flex-direction:column}
+.candidate-top{width:100%;min-height:82px;align-items:flex-start}
+.candidate-top>div{min-width:0;padding-top:2px}.candidate-top b{line-height:1.35}.candidate-top small{min-height:35px;display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.candidate-top em{align-self:flex-start}.candidate-card footer{margin-top:auto}
+
+/* Candidate-facing AI interview uses the same dark cyan-blue product language. */
+.candidate-interview-shell{min-height:100vh;padding:42px;color:#edf7ff;background:radial-gradient(circle at 12% 10%,rgba(24,189,216,.13),transparent 30%),radial-gradient(circle at 88% 0,rgba(58,114,232,.16),transparent 32%),#050e1c;font-family:Inter,"PingFang SC","Microsoft YaHei",sans-serif}
+.candidate-interview-state,.candidate-interview-welcome{width:min(680px,100%);margin:8vh auto 0;padding:48px;border:1px solid rgba(92,218,237,.2);border-radius:24px;background:linear-gradient(145deg,rgba(17,33,54,.98),rgba(10,23,40,.98));box-shadow:0 30px 80px rgba(0,5,18,.48),inset 0 1px rgba(255,255,255,.04);text-align:center}
+.candidate-interview-state>i{display:grid;place-items:center;width:64px;height:64px;margin:0 auto 22px;border-radius:18px;color:#fff;background:linear-gradient(145deg,#18b7cd,#377ff1);font-size:25px;font-style:normal;font-weight:900}.candidate-interview-state h1{margin:0;color:#f7fbff;font-size:30px}.candidate-interview-state p{margin:14px auto 0;color:#9cacc0;font-size:15px;line-height:1.8}.candidate-interview-state.complete>i{background:linear-gradient(145deg,#24b993,#2699b9)}.candidate-interview-state.error>i{background:linear-gradient(145deg,#dd6678,#9a395b)}
+.candidate-interview-welcome{position:relative;overflow:hidden;text-align:left}.candidate-interview-welcome:before{content:"";position:absolute;top:-100px;right:-80px;width:280px;height:280px;border:1px solid rgba(76,216,235,.08);border-radius:50%;box-shadow:0 0 70px rgba(48,134,224,.12)}.candidate-interview-welcome>span{color:#58dce9;font-size:11px;font-weight:850;letter-spacing:.18em}.candidate-brand{position:absolute;right:42px;top:42px;color:#d9e7f7;font-size:14px;font-weight:800;letter-spacing:.08em}.candidate-interview-welcome h1{margin:28px 0 10px;color:#f6fbff;font-size:36px;line-height:1.25}.candidate-interview-welcome>p{margin:0;color:#aab9cc;font-size:15px;line-height:1.9}.candidate-interview-welcome>p b{color:#6fe0ed}.candidate-device-list{display:grid;gap:10px;margin:30px 0}.candidate-device-list>div{display:flex;align-items:center;gap:14px;padding:15px 16px;border:1px solid rgba(154,180,212,.1);border-radius:13px;background:#111f34}.candidate-device-list i{display:grid;place-items:center;width:34px;height:34px;flex:0 0 auto;border-radius:10px;color:#67ddea;background:#153147;font-size:11px;font-style:normal;font-weight:850}.candidate-device-list span{display:flex;flex-direction:column}.candidate-device-list b{color:#eef7ff;font-size:13px}.candidate-device-list small{margin-top:4px;color:#8294aa;font-size:11px}.candidate-interview-welcome>button{display:flex;align-items:center;justify-content:center;gap:18px;width:100%;height:54px;border:0;border-radius:13px;color:#fff;background:linear-gradient(110deg,#18b5ca,#377ff2);box-shadow:0 13px 30px rgba(37,131,211,.22);font-size:15px;font-weight:850;cursor:pointer}.candidate-interview-welcome>small{display:block;margin-top:15px;color:#71839a;font-size:11px;text-align:center}
+.candidate-interview-shell.live{padding:26px 38px}.candidate-live-head{display:flex;align-items:center;justify-content:space-between;max-width:1420px;margin:0 auto 18px}.candidate-live-head span{color:#65ddea;font-size:11px;font-weight:800;letter-spacing:.11em}.candidate-live-head h1{margin:6px 0 0;color:#f4f9ff;font-size:23px}.candidate-live-head>div:last-child{display:flex;align-items:baseline;gap:5px;color:#8498b0}.candidate-live-head>div:last-child b{color:#fff;font-size:28px}.candidate-live-progress{height:3px;max-width:1420px;margin:0 auto 20px;border-radius:4px;background:#16253a;overflow:hidden}.candidate-live-progress i{display:block;height:100%;background:linear-gradient(90deg,#25d0dc,#3b7ff4);box-shadow:0 0 15px #27c4df;transition:width .3s}.candidate-live-grid{display:grid;grid-template-columns:minmax(360px,.9fr) minmax(460px,1.1fr);gap:18px;max-width:1420px;margin:0 auto}.candidate-video,.candidate-question{position:relative;min-height:610px;border:1px solid rgba(109,151,200,.16);border-radius:20px;background:#0d192b;overflow:hidden;box-shadow:0 24px 55px rgba(0,5,18,.3)}.candidate-video video{width:100%;height:100%;min-height:610px;object-fit:cover;background:radial-gradient(circle at center,#172b46,#07111f)}.candidate-camera-badge{position:absolute;left:20px;top:20px;padding:8px 11px;border:1px solid rgba(153,178,209,.15);border-radius:9px;color:#a4b4c8;background:rgba(6,17,31,.85);font-size:11px}.candidate-camera-badge.ready{color:#79e0c0}.candidate-camera-badge.denied{color:#ffc088}.candidate-video footer{position:absolute;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:space-between;padding:20px;background:linear-gradient(transparent,rgba(4,12,23,.94));font-size:13px}.candidate-video footer b{color:#f5f9ff}.candidate-video footer span{color:#6fddc2}.candidate-question{display:flex;flex-direction:column;padding:34px}.candidate-question-meta{display:flex;align-items:center;justify-content:space-between}.candidate-question-meta span{color:#60dce9;font-size:11px;font-weight:850;letter-spacing:.13em}.candidate-question-meta time{padding:8px 11px;border-radius:9px;color:#eaf4ff;background:#172840;font-size:13px;font-weight:800}.candidate-question h2{margin:34px 0 12px;color:#f6faff;font-size:26px;line-height:1.55}.candidate-question>p{margin:0 0 24px;color:#8699b0;font-size:12px}.candidate-question label{display:flex;flex:1;flex-direction:column;gap:10px;color:#9eb0c4;font-size:12px;font-weight:700}.candidate-question textarea{box-sizing:border-box;width:100%;min-height:260px;flex:1;padding:18px;border:1px solid rgba(115,151,196,.18);border-radius:14px;outline:0;color:#edf5ff;background:#091525;font:14px/1.85 inherit;resize:none}.candidate-question textarea:focus{border-color:rgba(77,215,235,.45);box-shadow:0 0 0 3px rgba(61,190,219,.08)}.candidate-question-actions{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:18px}.candidate-question-actions>span{color:#7f91a8;font-size:11px}.candidate-question-actions>span.active{color:#65dec3}.candidate-question-actions button{height:45px;padding:0 19px;border:0;border-radius:11px;color:#fff;background:linear-gradient(110deg,#17afc5,#377ff1);font-size:12px;font-weight:800;cursor:pointer}.candidate-question-actions button:disabled{cursor:wait;opacity:.6}.candidate-submit-error{margin-top:12px;padding:10px 12px;border:1px solid rgba(230,102,123,.24);border-radius:9px;color:#ffb1bd;background:#2d1722;font-size:11px}
+@media(max-width:900px){.candidate-interview-shell{padding:22px}.candidate-interview-state,.candidate-interview-welcome{margin-top:2vh;padding:30px}.candidate-brand{position:static;margin-top:10px}.candidate-live-grid{grid-template-columns:1fr}.candidate-video,.candidate-video video{min-height:340px}.candidate-question{min-height:520px}.candidate-interview-shell.live{padding:18px}.candidate-live-head h1{font-size:18px}}
+@media(max-width:560px){.candidate-interview-welcome h1{font-size:28px}.candidate-question{padding:22px}.candidate-question h2{font-size:21px}.candidate-question-actions{align-items:stretch;flex-direction:column}.candidate-question-actions button{width:100%}}
+
+/* Invitation expiry selector appears before an AI interview email is created. */
+.ai-invite-dialog{position:relative;width:min(520px,calc(100vw - 36px));padding:34px;border:1px solid rgba(80,215,235,.2);border-radius:20px;color:#edf7ff;background:radial-gradient(circle at 90% 0,rgba(51,139,220,.17),transparent 38%),linear-gradient(145deg,#111f33,#0b1829);box-shadow:0 30px 85px rgba(0,5,19,.55)}
+.ai-invite-dialog>span{color:#59dce9;font-size:10px;font-weight:850;letter-spacing:.17em}.ai-invite-dialog h2{margin:13px 0 7px;color:#f6faff;font-size:27px}.ai-invite-dialog>p{margin:0 0 26px;color:#92a5bb;font-size:13px}.ai-invite-dialog>p b{color:#eef7ff}.ai-invite-dialog>label{display:block;margin-bottom:10px;color:#bcc9d8;font-size:12px;font-weight:750}.ai-validity-options{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.ai-validity-options button{display:flex;align-items:center;justify-content:center;flex-direction:column;min-height:108px;border:1px solid rgba(139,168,202,.16);border-radius:13px;color:#9caec2;background:#111f33;cursor:pointer}.ai-validity-options button:hover{border-color:rgba(77,217,235,.3)}.ai-validity-options button.active{border-color:#4dd8e9;color:#fff;background:linear-gradient(145deg,#153549,#173c60);box-shadow:0 0 0 3px rgba(55,194,220,.08),0 12px 26px rgba(0,10,28,.25)}.ai-validity-options b{font-size:25px;line-height:1}.ai-validity-options span{margin-top:4px;font-size:11px}.ai-validity-options small{margin-top:10px;color:#71849b;font-size:10px}.ai-validity-options button.active small{color:#8ddde7}.ai-invite-note{display:flex;gap:11px;margin:18px 0;padding:13px;border:1px solid rgba(75,215,235,.13);border-radius:11px;background:rgba(31,144,182,.07)}.ai-invite-note i{display:grid;place-items:center;width:30px;height:30px;flex:0 0 auto;border-radius:8px;color:#63dfec;background:#153148;font-style:normal}.ai-invite-note p{margin:0;color:#91a4ba;font-size:11px;line-height:1.65}.ai-invite-dialog>footer{display:flex;justify-content:flex-end;gap:10px;margin-top:22px}.ai-invite-dialog>footer button{height:42px;padding:0 17px;border:1px solid rgba(141,169,202,.18);border-radius:10px;color:#aebdd0;background:#15243a;font-size:12px;font-weight:750;cursor:pointer}.ai-invite-dialog>footer button.primary{border:0;color:#fff;background:linear-gradient(110deg,#18b4ca,#377ff1)}.ai-invite-dialog>footer button:disabled{cursor:wait;opacity:.6}
+@media(max-width:560px){.ai-invite-dialog{padding:26px 20px}.ai-validity-options{grid-template-columns:1fr}.ai-validity-options button{min-height:76px}.ai-invite-dialog>footer{flex-direction:column-reverse}.ai-invite-dialog>footer button{width:100%}}
+
+/* Voice-only interview answers are read-only live transcripts, never text inputs. */
+.ai-voice-answer,.candidate-voice-answer{display:flex;align-items:flex-start;gap:14px;min-height:170px;margin-top:20px;padding:18px;border:1px solid rgba(75,215,235,.17);border-radius:15px;background:radial-gradient(circle at 0 0,rgba(37,196,220,.09),transparent 38%),#0a1627}
+.ai-voice-answer>i,.candidate-voice-answer>i{display:grid;place-items:center;width:42px;height:42px;flex:0 0 42px;border:1px solid rgba(88,222,237,.22);border-radius:13px;color:#70dce9;background:#143047;font-size:16px;font-style:normal}
+.ai-voice-answer.listening>i,.candidate-voice-answer.listening>i{color:#fff;background:linear-gradient(145deg,#18b8cd,#377ff1);box-shadow:0 0 0 6px rgba(50,197,220,.07),0 0 28px rgba(50,197,220,.18)}
+.ai-voice-answer>span,.candidate-voice-answer>span{min-width:0;display:flex;flex-direction:column}.ai-voice-answer b,.candidate-voice-answer b{color:#dff7fb;font-size:13px}.ai-voice-answer p,.candidate-voice-answer p{margin:9px 0 0;color:#b9c8da;font-size:14px;line-height:1.8;white-space:pre-wrap;word-break:break-word}
+.candidate-question .candidate-voice-answer{min-height:260px;flex:1;margin-top:0}.candidate-question-actions button.voice-retry{margin-left:auto;border:1px solid rgba(76,216,235,.2);color:#74ddea;background:#142942}
+
+/* Local and configured test environments expose the one-time interview URL for QA. */
+.ai-test-interview-url{display:grid;gap:10px}.ai-test-interview-url label{color:#b9c8d8;font-size:12px;font-weight:750}.ai-test-interview-url code{display:block;padding:14px;border:1px solid rgba(75,215,235,.16);border-radius:11px;color:#a7eaf2;background:#081526;font:12px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}.ai-test-interview-url button{height:44px;border:0;border-radius:11px;color:#fff;background:linear-gradient(110deg,#18b4ca,#377ff1);font-size:13px;font-weight:800;cursor:pointer}.ai-test-interview-url button:hover{filter:brightness(1.08)}
+
+/* Camera readiness reflects actual video playback, with a user-gesture recovery path. */
+.candidate-video video{display:block;transform:scaleX(-1)}.candidate-camera-badge.blocked{color:#ffd08a}.candidate-video-retry{position:absolute;z-index:3;left:50%;top:50%;height:46px;padding:0 18px;transform:translate(-50%,-50%);border:1px solid rgba(86,220,238,.28);border-radius:12px;color:#fff;background:linear-gradient(110deg,#159eb7,#347ce4);box-shadow:0 14px 34px rgba(12,87,150,.28);font-size:13px;font-weight:800;cursor:pointer}.candidate-video-retry:hover{filter:brightness(1.08)}
+
+/* Dashboard schedules stay legible on the dark workbench. */
+.today-panel .schedule-line{padding:12px 14px 13px 17px;border:1px solid rgba(151,177,211,.12);border-left:3px solid #7368ee;border-radius:11px;background:radial-gradient(circle at 100% 0,rgba(83,106,211,.12),transparent 48%),linear-gradient(135deg,#0c1728,#142139);box-shadow:inset 0 1px 0 rgba(255,255,255,.025)}
+.today-panel .schedule-line:before{left:-6px;top:15px;width:7px;height:7px;border:2px solid #101c30;background:#7368ee}
+.today-panel .schedule-line.orange-line{border-left-color:#ed8a5b}.today-panel .schedule-line.orange-line:before{background:#ed8a5b}
+.today-panel .schedule-line.green-line{border-left-color:#4da985}.today-panel .schedule-line.green-line:before{background:#4da985}
+
+/* Candidate interview summaries are grouped by question instead of one dense paragraph. */
+.candidate-drawer .drawer-ai-assessment{padding:14px;background:#0a1525}
+.drawer-ai-overview{padding:13px 14px;border:1px solid rgba(83,211,231,.14);border-radius:11px;background:linear-gradient(135deg,rgba(25,154,181,.1),rgba(45,91,177,.08))}.drawer-ai-overview>b{display:block;margin:0 0 7px!important;color:#61d8e8!important;font-size:12px}.candidate-drawer .drawer-ai-overview p{margin:0;color:#b5c2d2;font-size:12px;line-height:1.75}
+.drawer-ai-items{display:grid;gap:10px;margin-top:11px}.drawer-ai-items>article{padding:14px;border:1px solid rgba(162,181,211,.11);border-radius:12px;background:#111e31}.drawer-ai-items header{display:flex;align-items:center;justify-content:space-between}.drawer-ai-items header span{color:#5fd8e8;font-size:11px;font-weight:800}.drawer-ai-items header em{padding:4px 7px;border-radius:7px;color:#fff;background:linear-gradient(110deg,#168da8,#347ce4);font-size:10px;font-style:normal;font-weight:800}.drawer-ai-items h4{margin:10px 0 12px;color:#f1f7ff;font-size:13px;line-height:1.6}.drawer-ai-items>article>div{padding:10px 11px;border-radius:9px;background:#0b1728}.candidate-drawer .drawer-ai-items>article>div>b{display:block;margin:0 0 6px;color:#8fa3ba;font-size:10px}.candidate-drawer .drawer-ai-items p{margin:0;color:#c6d1df;font-size:12px;line-height:1.75}.drawer-ai-items small{display:block;margin-top:10px;color:#8194ab;font-size:10px;line-height:1.55}
