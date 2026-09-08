@@ -1478,20 +1478,26 @@ input[type="date"]::-webkit-calendar-picker-indicator,input[type="datetime-local
 .interviewer-candidate-row:active{transform:translateY(1px)}
 .hr-resume-backdrop{z-index:140;background:rgba(1,6,14,.78);backdrop-filter:blur(9px)}
 .hr-resume-drawer{width:min(620px,96vw);padding:38px 36px 44px;color:#edf5ff}
-.hr-resume-profile{margin:26px 0 20px}
+.hr-resume-profile{margin:26px 0 22px}
 .hr-resume-profile>span{width:58px;height:58px;border-radius:17px;font-size:21px}
-.hr-resume-profile h2{font-size:26px}.hr-resume-profile p{font-size:12px;line-height:1.6}
-.hr-resume-profile>em b{color:#69deeb;font-size:24px}.hr-resume-profile>em small{margin-top:3px;color:#788ba4;font-size:9px}
-.hr-resume-status{display:grid;grid-template-columns:auto 1fr;gap:5px 16px;align-items:center;padding:15px 17px;border:1px solid rgba(93,215,233,.14);border-radius:13px;background:linear-gradient(120deg,rgba(23,131,158,.12),rgba(51,93,177,.09))}
-.hr-resume-status span{color:#93a5ba;font-size:11px}.hr-resume-status b{justify-self:end;padding:5px 10px;border:1px solid rgba(91,216,234,.2);border-radius:999px;color:#67dbea;background:#123047;font-size:12px}
-.hr-resume-status small{grid-column:1/-1;color:#75879f;font-size:10px}
-.hr-review-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:17px}
-.hr-review-actions button{min-height:68px;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:5px;padding:0 15px;border:1px solid rgba(162,181,211,.13);border-radius:12px;color:#f1f6fc;background:#121f33;font-size:14px;font-weight:800;cursor:pointer;transition:.18s ease}
-.hr-review-actions button small{color:#7f91a8;font-size:9px;font-weight:500}
-.hr-review-actions button:hover{transform:translateY(-1px)}
-.hr-review-actions .pass:hover,.hr-review-actions .pass.active{border-color:rgba(64,215,229,.38);background:linear-gradient(135deg,rgba(22,155,173,.27),rgba(45,104,189,.2));box-shadow:inset 3px 0 #4fd8e8}
-.hr-review-actions .pending:hover,.hr-review-actions .pending.active{border-color:rgba(239,187,79,.35);background:rgba(146,104,29,.18);box-shadow:inset 3px 0 #efbd52}
-.hr-review-actions .reject:hover,.hr-review-actions .reject.active{border-color:rgba(239,104,122,.36);background:rgba(136,42,60,.19);box-shadow:inset 3px 0 #ef7182}
+.hr-resume-profile h2{font-size:26px}.hr-resume-profile p{margin-top:7px;font-size:12px;line-height:1.6}
+.hr-resume-name-line{display:flex;align-items:center;gap:11px;min-width:0}
+.hr-resume-name-line h2{margin:0;white-space:nowrap}
+.hr-resume-name-line>em{display:flex;align-items:baseline;gap:4px;padding-left:11px;border-left:1px solid rgba(162,181,211,.13);font-style:normal;white-space:nowrap}
+.hr-resume-name-line>em b{color:#69deeb;font-size:22px}.hr-resume-name-line>em small{color:#788ba4;font-size:8px}
+.hr-resume-inline-status{padding:5px 10px;border:1px solid rgba(91,216,234,.2);border-radius:999px;color:#67dbea;background:#123047;font-size:10px;white-space:nowrap}
+.hr-resume-inline-status.pending{border-color:rgba(239,187,79,.26);color:#f1c766;background:rgba(133,93,26,.2)}
+.hr-resume-inline-status.reject{border-color:rgba(239,104,122,.26);color:#f08b9a;background:rgba(128,38,55,.2)}
+.hr-resume-inline-status.pass{border-color:rgba(77,218,187,.26);color:#67ddc1;background:rgba(26,127,106,.2)}
+.hr-review-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:8px}
+.hr-review-actions button{min-height:58px;display:flex;align-items:center;justify-content:flex-start;gap:10px;padding:0 13px;border:0;border-radius:12px;color:#fff;font-family:inherit;text-align:left;cursor:pointer;box-shadow:0 11px 25px rgba(0,5,15,.25),inset 0 1px rgba(255,255,255,.16);transition:filter .18s ease,transform .18s ease,box-shadow .18s ease}
+.hr-review-actions button i{width:29px;height:29px;display:grid;flex:0 0 auto;place-items:center;border:1px solid rgba(255,255,255,.22);border-radius:9px;background:rgba(255,255,255,.13);font-size:17px;font-style:normal;font-weight:800}
+.hr-review-actions button span{min-width:0;display:flex;flex-direction:column;gap:3px}.hr-review-actions button b{color:#fff;font-size:13px}.hr-review-actions button small{overflow:hidden;color:rgba(255,255,255,.7);font-size:8px;font-weight:500;text-overflow:ellipsis;white-space:nowrap}
+.hr-review-actions .pass{background:linear-gradient(135deg,#16afc9,#3479ec)}
+.hr-review-actions .pending{background:linear-gradient(135deg,#9a6a18,#d59d32)}
+.hr-review-actions .reject{background:linear-gradient(135deg,#9d3852,#d2556b)}
+.hr-review-actions button:hover{filter:brightness(1.1);transform:translateY(-2px);box-shadow:0 15px 29px rgba(0,5,15,.32),inset 0 1px rgba(255,255,255,.2)}
+.hr-review-actions button.active{outline:2px solid rgba(255,255,255,.8);outline-offset:2px}
 .hr-review-actions button:disabled{cursor:wait;opacity:.58;transform:none}
 .hr-resume-saving{margin:10px 0 0!important;color:#62d8e8!important;font-size:11px!important}
 .hr-resume-section{padding-top:3px}.hr-resume-section h3{padding-bottom:10px;border-bottom:1px solid rgba(162,181,211,.09)}

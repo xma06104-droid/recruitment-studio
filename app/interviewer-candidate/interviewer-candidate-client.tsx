@@ -164,12 +164,11 @@ function CandidateResumeDrawer({candidate,job,profile,saving,onClose,onReview}:{
     <aside className="detail-drawer candidate-drawer hr-resume-drawer" aria-label={`${candidate.name}的简历`} onMouseDown={event=>event.stopPropagation()}>
       <button type="button" className="drawer-close" onClick={onClose} aria-label="关闭简历">×</button>
       <p className="drawer-label">CANDIDATE RESUME</p>
-      <div className="candidate-profile hr-resume-profile"><span>{candidate.name.slice(0,1)}</span><div><h2>{candidate.name}</h2><p>{candidate.company||'公司未填写'} · {candidate.role||job?.title||'职位未填写'}</p></div><em><b>{profile?.matchScore??candidate.score??'—'}</b><small>匹配度</small></em></div>
-      <div className="hr-resume-status"><span>当前状态</span><b>{status}</b><small>招聘阶段：{candidate.stage}</small></div>
+      <div className="candidate-profile hr-resume-profile"><span>{candidate.name.slice(0,1)}</span><div><div className="hr-resume-name-line"><h2>{candidate.name}</h2><em><b>{profile?.matchScore??candidate.score??'—'}</b><small>匹配度</small></em><strong className={`hr-resume-inline-status ${status==='已拒绝'?'reject':status==='待定'?'pending':status==='待AI面试'?'pass':'screen'}`}>{status}</strong></div><p>{candidate.company||'公司未填写'} · {candidate.role||job?.title||'职位未填写'}</p></div></div>
       <div className="hr-review-actions" aria-label="候选人审核操作">
-        <button type="button" className={status==='待AI面试'?'active pass':'pass'} disabled={saving} onClick={()=>onReview('pass')}>通过<small>待 AI 面试</small></button>
-        <button type="button" className={status==='待定'?'active pending':'pending'} disabled={saving} onClick={()=>onReview('pending')}>待定<small>保留候选人</small></button>
-        <button type="button" className={status==='已拒绝'?'active reject':'reject'} disabled={saving} onClick={()=>onReview('reject')}>拒绝<small>结束初筛</small></button>
+        <button type="button" className={status==='待AI面试'?'active pass':'pass'} disabled={saving} onClick={()=>onReview('pass')}><i>✓</i><span><b>通过</b><small>进入待 AI 面试</small></span></button>
+        <button type="button" className={status==='待定'?'active pending':'pending'} disabled={saving} onClick={()=>onReview('pending')}><i>◷</i><span><b>待定</b><small>保留候选人</small></span></button>
+        <button type="button" className={status==='已拒绝'?'active reject':'reject'} disabled={saving} onClick={()=>onReview('reject')}><i>×</i><span><b>拒绝</b><small>结束初筛</small></span></button>
       </div>
       {saving&&<p className="hr-resume-saving">正在同步审核结果…</p>}
       <section className="hr-resume-section"><h3>基本信息</h3><div className="profile-info"><p><span>应聘职位</span>{job?.title||candidate.role||'-'}</p><p><span>手机号</span>{candidate.phone||'-'}</p><p><span>邮箱</span>{candidate.email||'-'}</p><p><span>所在城市</span>{candidate.city||'-'}</p><p><span>工作经验</span>{profile?.workYears!==null&&profile?.workYears!==undefined?`${profile.workYears}年`:candidate.years||'-'}</p><p><span>期望薪资</span>{profile?.expectedSalary?`${profile.expectedSalary}元/月`:'-'}</p></div></section>
