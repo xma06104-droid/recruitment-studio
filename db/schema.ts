@@ -233,6 +233,20 @@ export const SCHEMA_STATEMENTS = [
     FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE,
     FOREIGN KEY (owner_id) REFERENCES accounts(id) ON DELETE CASCADE
   )`,
+  `CREATE TABLE IF NOT EXISTS manual_assessments (
+    candidate_id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    total INTEGER NOT NULL,
+    professional INTEGER NOT NULL,
+    communication INTEGER NOT NULL,
+    culture INTEGER NOT NULL,
+    comment TEXT NOT NULL DEFAULT '',
+    reviewer TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE,
+    FOREIGN KEY (owner_id) REFERENCES accounts(id) ON DELETE CASCADE
+  )`,
   `CREATE TABLE IF NOT EXISTS screening_logs (
     id TEXT PRIMARY KEY,
     owner_id TEXT NOT NULL,
@@ -313,4 +327,5 @@ export const SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_resume_applications_owner_job ON resume_applications(owner_id, job_id, applied_at)`,
   `CREATE INDEX IF NOT EXISTS idx_screening_rules_owner_job ON screening_rules(owner_id, job_id)`,
   `CREATE INDEX IF NOT EXISTS idx_screening_logs_owner_created ON screening_logs(owner_id, created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_manual_assessments_owner_updated ON manual_assessments(owner_id, updated_at)`,
 ] as const;

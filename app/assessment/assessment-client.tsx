@@ -1,12 +1,13 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { announceWorkbenchChange, useWorkbenchSync } from '@/app/workbench-sync';
 
 type Account = { contact:string; phone:string; email:string };
 type Job = { id:string; title:string; department:string; city:string; status:string; ownerName:string; createdAt:string };
 type Candidate = { id:string; jobId:string|null; name:string; role:string; company:string; years:string; stage:string; source:string; skills:string[]; score:number|null; phone:string; email:string; city:string; createdAt:string; updatedAt:string };
-type Dataset = { account:Account; jobs:Job[]; candidates:Candidate[] };
-type Assessment = { total:number; professional:number; communication:number; culture:number; comment:string; updatedAt:string };
+type Assessment = { candidateId:string; total:number; professional:number; communication:number; culture:number; comment:string; reviewer:string; updatedAt:string };
+type Dataset = { account:Account; jobs:Job[]; candidates:Candidate[]; manualAssessments:Assessment[] };
 
 const menuItems = [
   {icon:'◉',label:'候选人筛选',href:'/interviewer-candidate'},
@@ -24,20 +25,22 @@ export default function AssessmentClient() {
   const [stateFilter,setStateFilter]=useState('all');
   const [contentFilter,setContentFilter]=useState('all');
   const [sort,setSort]=useState('recent');
-  const [assessments,setAssessments]=useState<Record<string,Assessment>>({});
   const [editing,setEditing]=useState<Candidate|null>(null);
   const [toast,setToast]=useState('');
+  const [saving,setSaving]=useState(false);
 
-  useEffect(()=>{
-    void fetch('/api/workbench',{cache:'no-store'}).then(async response=>{
+  async function load(){
+    await fetch('/api/workbench',{cache:'no-store'}).then(async response=>{
       if(response.status===401){window.location.assign('/');return}
       if(!response.ok)throw new Error('load');
       const result=await response.json() as Dataset;
       setData(result);
-      const saved=window.localStorage.getItem(storageKey(result.account.phone));
-      if(saved)setAssessments(JSON.parse(saved) as Record<string,Assessment>);
-    }).catch(()=>setError('评估数据加载失败，请稍后刷新。'));
-  },[]);
+      setError('');
+    });
+  }
+  useEffect(()=>{void load().catch(()=>setError('评估数据加载失败，请稍后刷新。'))},[]);
+  useWorkbenchSync(()=>load().catch(()=>undefined));
+  const assessments=useMemo(()=>Object.fromEntries((data?.manualAssessments||[]).map(item=>[item.candidateId,item])) as Record<string,Assessment>,[data]);
 
   const candidates=useMemo(()=>{
     if(!data)return [];
@@ -58,13 +61,18 @@ export default function AssessmentClient() {
 
   function flash(message:string){setToast(message);window.setTimeout(()=>setToast(''),2200)}
   function resetFilters(){setKeyword('');setJobId('');setStateFilter('all');setContentFilter('all');setSort('recent')}
-  function saveAssessment(candidate:Candidate,assessment:Assessment){
-    if(!data)return;
-    const next={...assessments,[candidate.id]:assessment};
-    setAssessments(next);
-    window.localStorage.setItem(storageKey(data.account.phone),JSON.stringify(next));
-    setEditing(null);
-    flash(`已保存 ${candidate.name} 的人工评估`);
+  async function saveAssessment(candidate:Candidate,assessment:Omit<Assessment,'candidateId'|'reviewer'>){
+    if(saving)return;
+    setSaving(true);
+    try{
+      const response=await fetch('/api/workbench',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({resource:'manualAssessment',payload:{candidateId:candidate.id,...assessment}})});
+      if(response.status===401){window.location.assign('/');return}
+      if(!response.ok){flash('保存失败');return}
+      announceWorkbenchChange();
+      await load();
+      setEditing(null);
+      flash(`已保存 ${candidate.name} 的人工评估，两个系统已同步`);
+    }catch{flash('保存失败')}finally{setSaving(false)}
   }
 
   if(!data)return <main className="interviewer-loading"><span>星</span><b>{error||'正在读取人工评估数据…'}</b>{error&&<button onClick={()=>window.location.reload()}>重新加载</button>}</main>;
@@ -118,12 +126,12 @@ export default function AssessmentClient() {
         </section>
       </div>
     </section>
-    {editing&&<AssessmentDialog candidate={editing} job={data.jobs.find(item=>item.id===editing.jobId)} value={assessments[editing.id]} onClose={()=>setEditing(null)} onSave={value=>saveAssessment(editing,value)}/>} 
+    {editing&&<AssessmentDialog candidate={editing} job={data.jobs.find(item=>item.id===editing.jobId)} value={assessments[editing.id]} saving={saving} onClose={()=>{if(!saving)setEditing(null)}} onSave={value=>void saveAssessment(editing,value)}/>}
     {toast&&<div className="interviewer-toast">{toast}</div>}
   </main>;
 }
 
-function AssessmentDialog({candidate,job,value,onClose,onSave}:{candidate:Candidate;job?:Job;value?:Assessment;onClose:()=>void;onSave:(value:Assessment)=>void}) {
+function AssessmentDialog({candidate,job,value,saving,onClose,onSave}:{candidate:Candidate;job?:Job;value?:Assessment;saving:boolean;onClose:()=>void;onSave:(value:Omit<Assessment,'candidateId'|'reviewer'>)=>void}) {
   const [professional,setProfessional]=useState(value?.professional||80);
   const [communication,setCommunication]=useState(value?.communication||80);
   const [culture,setCulture]=useState(value?.culture||80);
@@ -139,7 +147,7 @@ function AssessmentDialog({candidate,job,value,onClose,onSave}:{candidate:Candid
       <ScoreField label="沟通表达" value={communication} onChange={setCommunication}/>
       <ScoreField label="团队与文化匹配" value={culture} onChange={setCulture}/>
       <label className="assessment-comment"><span>评估意见</span><textarea value={comment} onChange={event=>setComment(event.target.value)} placeholder="记录候选人的优势、风险和后续建议" rows={4}/></label>
-      <footer><button type="button" onClick={onClose}>取消</button><button type="submit">保存评估</button></footer>
+      <footer><button type="button" disabled={saving} onClick={onClose}>取消</button><button type="submit" disabled={saving}>{saving?'保存中…':'保存评估'}</button></footer>
     </form>
   </div>;
 }
@@ -150,5 +158,4 @@ function ScoreField({label,value,onChange}:{label:string;value:number;onChange:(
 
 function displayScore(candidate:Candidate,assessments:Record<string,Assessment>){return assessments[candidate.id]?.total??candidate.score??0}
 function stars(score:number){const filled=Math.max(1,Math.min(5,Math.round(score/20)));return `${'★'.repeat(filled)}${'☆'.repeat(5-filled)}`}
-function storageKey(phone:string){return `xingjian:manual-assessments:${phone||'account'}`}
 function formatDate(value:string){const date=new Date(value);return Number.isNaN(date.getTime())?'-':`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`}

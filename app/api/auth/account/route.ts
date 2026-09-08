@@ -27,6 +27,7 @@ export async function PATCH(request: NextRequest) {
       db.prepare('UPDATE jobs SET owner_name = ?, updated_at = ? WHERE owner_id = ?').bind(contact, new Date().toISOString(), account.id),
       db.prepare('UPDATE interviews SET interviewer = ?, updated_at = ? WHERE owner_id = ?').bind(contact, new Date().toISOString(), account.id),
       db.prepare('UPDATE offers SET owner_name = ?, updated_at = ? WHERE owner_id = ?').bind(contact, new Date().toISOString(), account.id),
+      db.prepare('UPDATE manual_assessments SET reviewer = ?, updated_at = ? WHERE owner_id = ?').bind(contact, new Date().toISOString(), account.id),
     ]);
 
     return NextResponse.json({

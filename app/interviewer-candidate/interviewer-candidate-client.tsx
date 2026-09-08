@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useWorkbenchSync } from '@/app/workbench-sync';
 
 type Account = { contact:string; phone:string; email:string };
 type Job = { id:string; title:string; department:string; city:string; status:string; ownerName:string; createdAt:string };
@@ -27,14 +28,17 @@ export default function InterviewerCandidateClient() {
   const [selected,setSelected]=useState<string[]>([]);
   const [toast,setToast]=useState('');
 
-  useEffect(()=>{
-    void fetch('/api/workbench',{cache:'no-store'}).then(async response=>{
+  async function load(){
+    await fetch('/api/workbench',{cache:'no-store'}).then(async response=>{
       if(response.status===401){window.location.assign('/');return}
       if(!response.ok)throw new Error('load');
       const result=await response.json() as Dataset;
       setData(result);
-    }).catch(()=>setError('候选人数据加载失败，请稍后刷新。'));
-  },[]);
+      setError('');
+    });
+  }
+  useEffect(()=>{void load().catch(()=>setError('候选人数据加载失败，请稍后刷新。'))},[]);
+  useWorkbenchSync(()=>load().catch(()=>undefined));
 
   const jobs=useMemo(()=>data?.jobs.filter(job=>!jobKeyword||`${job.title}${job.department}${job.city}`.toLowerCase().includes(jobKeyword.toLowerCase()))||[],[data,jobKeyword]);
   const counts=useMemo(()=>Object.fromEntries(reviewStatuses.map(item=>[item,data?.candidates.filter(candidate=>candidateReviewStatus(candidate.stage)===item).length||0])) as Record<ReviewStatus,number>,[data]);

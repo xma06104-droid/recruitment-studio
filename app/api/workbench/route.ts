@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
           WHERE previous.owner_id = latest.owner_id AND previous.candidate_id = latest.candidate_id
         )
     )`).bind(now, account.id, account.id).run();
-  const [jobs, candidates, interviews, offers, aiQuestions, aiInterviews, aiInvitations] = await Promise.all([
+  const [jobs, candidates, interviews, offers, aiQuestions, aiInterviews, aiInvitations, manualAssessments] = await Promise.all([
     db.prepare('SELECT * FROM jobs WHERE owner_id = ? ORDER BY created_at DESC').bind(account.id).all<DataRow>(),
     db.prepare('SELECT * FROM candidates WHERE owner_id = ? ORDER BY created_at DESC').bind(account.id).all<DataRow>(),
     db.prepare('SELECT * FROM interviews WHERE owner_id = ? ORDER BY scheduled_at ASC').bind(account.id).all<DataRow>(),
@@ -40,6 +40,7 @@ export async function GET(request: NextRequest) {
     db.prepare('SELECT * FROM ai_questions WHERE owner_id = ? ORDER BY created_at DESC').bind(account.id).all<DataRow>(),
     db.prepare('SELECT * FROM ai_interviews WHERE owner_id = ? ORDER BY COALESCE(completed_at, created_at) DESC').bind(account.id).all<DataRow>(),
     db.prepare('SELECT * FROM ai_interview_invitations WHERE owner_id = ? ORDER BY created_at DESC').bind(account.id).all<DataRow>(),
+    db.prepare('SELECT * FROM manual_assessments WHERE owner_id = ? ORDER BY updated_at DESC').bind(account.id).all<DataRow>(),
   ]);
   const { unique: uniqueQuestions, duplicateIds } = deduplicateAiQuestions(aiQuestions.results);
   if (duplicateIds.length) {
@@ -57,6 +58,7 @@ export async function GET(request: NextRequest) {
     aiQuestions: uniqueQuestions.map(mapAiQuestion),
     aiInterviews: aiInterviews.results.map(mapAiInterview),
     aiInvitations: mappedInvitations,
+    manualAssessments: manualAssessments.results.map(mapManualAssessment),
   }, { headers: { 'Cache-Control': 'private, no-store' } });
 }
 
@@ -95,6 +97,32 @@ export async function POST(request: NextRequest) {
     const skills = list(payload.skills).slice(0, 12);
     await db.prepare(`INSERT INTO candidates (id, owner_id, job_id, name, role, company, years, stage, source, skills_json, score, phone, email, city, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, '待初筛', ?, ?, NULL, ?, ?, ?, ?, ?)`).bind(id, account.id, jobId, name, role, text(payload.company, 100), text(payload.years, 40), text(payload.source, 80), JSON.stringify(skills), text(payload.phone, 30), text(payload.email, 120), text(payload.city, 80), now, now).run();
+  } else if (resource === 'manualAssessment') {
+    const candidateId = text(payload.candidateId, 80);
+    if (!candidateId || !(await ownedRecord('candidates', candidateId, account.id))) return invalid('请选择有效候选人。');
+    const professional = integer(payload.professional, 0, 100, -1);
+    const communication = integer(payload.communication, 0, 100, -1);
+    const culture = integer(payload.culture, 0, 100, -1);
+    if ([professional, communication, culture].some(score => score < 0)) return invalid('请填写有效的人工评估分数。');
+    const total = Math.round((professional + communication + culture) / 3);
+    await db.batch([
+      db.prepare(`INSERT INTO manual_assessments (
+        candidate_id, owner_id, total, professional, communication, culture, comment, reviewer, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(candidate_id) DO UPDATE SET
+        total = excluded.total,
+        professional = excluded.professional,
+        communication = excluded.communication,
+        culture = excluded.culture,
+        comment = excluded.comment,
+        reviewer = excluded.reviewer,
+        updated_at = excluded.updated_at
+      WHERE manual_assessments.owner_id = excluded.owner_id`).bind(
+        candidateId, account.id, total, professional, communication, culture,
+        text(payload.comment, 4000), account.contact, now, now,
+      ),
+      db.prepare('UPDATE candidates SET updated_at = ? WHERE id = ? AND owner_id = ?').bind(now, candidateId, account.id),
+    ]);
   } else if (resource === 'interview') {
     const candidateId = text(payload.candidateId, 80);
     if (!candidateId || !(await ownedRecord('candidates', candidateId, account.id))) return invalid('请选择有效候选人。');
@@ -362,6 +390,20 @@ function mapInterview(row: DataRow) {
 
 function mapOffer(row: DataRow) {
   return { id: row.id, candidateId: row.candidate_id, jobTitle: row.job_title, salary: row.salary, recipientEmail: row.recipient_email, content: row.content, ownerName: row.owner_name, status: row.status, deadline: row.deadline, createdAt: row.created_at, updatedAt: row.updated_at };
+}
+
+function mapManualAssessment(row: DataRow) {
+  return {
+    candidateId: row.candidate_id,
+    total: row.total,
+    professional: row.professional,
+    communication: row.communication,
+    culture: row.culture,
+    comment: row.comment,
+    reviewer: row.reviewer,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
 }
 
 function mapAiQuestion(row: DataRow) {

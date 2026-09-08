@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { announceWorkbenchChange, useWorkbenchSync } from '@/app/workbench-sync';
 
 type Person = { id:string; jobId:string|null; name:string; role:string; company:string; years:string; stage:string; source:string; skills:string[]; score:number|null; phone:string; email:string; city:string; createdAt:string; updatedAt:string };
 type Job = { id:string; title:string; department:string; city:string; status:string };
@@ -69,7 +70,7 @@ export default function ScreeningWorkspace({people,jobs,questions,account,reload
 
   async function load(force=true){setRefreshing(true);try{const next=await preloadScreeningData(force);setData(next);setHydrated(true);setError('')}catch(loadError){if(loadError instanceof Error&&loadError.message==='UNAUTHORIZED'){window.location.assign('/');return}setError('简历筛选数据暂时无法加载。')}finally{setRefreshing(false)}}
   useEffect(()=>{let active=true;void preloadScreeningData(Boolean(screeningDataCache)).then(next=>{if(!active)return;setData(next);setHydrated(true);setError('')}).catch(loadError=>{if(!active)return;if(loadError instanceof Error&&loadError.message==='UNAUTHORIZED'){window.location.assign('/');return}setError('简历筛选数据暂时无法加载。')}).finally(()=>{if(active)setRefreshing(false)});return()=>{active=false}},[]);
-  useEffect(()=>{const refresh=()=>{if(document.visibilityState==='visible'&&!mutationInFlight.current)void load(true)};const timer=window.setInterval(refresh,10000);window.addEventListener('focus',refresh);document.addEventListener('visibilitychange',refresh);return()=>{window.clearInterval(timer);window.removeEventListener('focus',refresh);document.removeEventListener('visibilitychange',refresh)}},[]);
+  useWorkbenchSync(()=>mutationInFlight.current?undefined:load(true));
 
   const profileMap=useMemo(()=>new Map((data?.profiles||[]).map(item=>[item.candidateId,item])),[data]);
   const reviewMap=useMemo(()=>new Map((data?.reviews||[]).map(item=>[item.candidateId,item])),[data]);
@@ -81,7 +82,7 @@ export default function ScreeningWorkspace({people,jobs,questions,account,reload
   const sources=[...new Set(people.map(item=>item.source).filter(Boolean))];
   const stages=[...new Set(people.map(item=>item.stage).filter(Boolean))];
 
-  async function post(payload:Record<string,unknown>,success:string,failure='操作失败'){if(mutationInFlight.current)return null;mutationInFlight.current=true;setBusy(true);try{const response=await fetch('/api/screening',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const result=await response.json().catch(()=>({})) as {message?:string;count?:number};if(response.status===401){window.location.assign('/');return null}if(!response.ok){flash(failure);return null}await Promise.all([load(true),reload()]);flash(success);return result}catch{flash(failure);return null}finally{mutationInFlight.current=false;setBusy(false)}}
+  async function post(payload:Record<string,unknown>,success:string,failure='操作失败'){if(mutationInFlight.current)return null;mutationInFlight.current=true;setBusy(true);try{const response=await fetch('/api/screening',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const result=await response.json().catch(()=>({})) as {message?:string;count?:number};if(response.status===401){window.location.assign('/');return null}if(!response.ok){flash(failure);return null}announceWorkbenchChange();await Promise.all([load(true),reload()]);flash(success);return result}catch{flash(failure);return null}finally{mutationInFlight.current=false;setBusy(false)}}
   async function move(ids:string[],stage:string,reason=''){const result=await post({action:'batchTransition',candidateIds:ids,stage,reason},`${ids.length} 份简历已流转至「${stage}」`);if(result){setSelected([]);setTransition(null);setDetailId(null)}}
   function toggle(id:string){setSelected(current=>current.includes(id)?current.filter(item=>item!==id):[...current,id])}
   function toggleAll(){setSelected(selected.length===rows.length?[]:rows.map(item=>item.id))}
@@ -134,7 +135,7 @@ export default function ScreeningWorkspace({people,jobs,questions,account,reload
           const result=await response.json().catch(()=>({})) as {message?:string;duplicate?:boolean;parsingStatus?:string;createdJob?:boolean;matchedJob?:{title:string};match?:MatchPreview};
           if(response.status===401){window.location.assign('/');return '登录状态已失效，请重新登录。'}
           if(!response.ok)return result.message||'简历导入失败，请检查填写内容。';
-          setShowImport(false);await Promise.all([load(true),reload()]);
+          announceWorkbenchChange();setShowImport(false);await Promise.all([load(true),reload()]);
           flash(result.duplicate?'检测到重复投递，已合并到现有候选人档案':result.createdJob&&result.matchedJob&&result.match?`已新增岗位「${result.matchedJob.title}」、配置系统初筛规则，并生成 ${result.match.score} 分匹配度`:result.matchedJob&&result.match?`简历已关联「${result.matchedJob.title}」，岗位匹配度 ${result.match.score} 分`:'简历已完成解析入库');
           return null;
         }catch{return '简历导入失败，请检查网络后重试。'}finally{mutationInFlight.current=false;setBusy(false)}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { announceWorkbenchChange, useWorkbenchSync } from '@/app/workbench-sync';
 
 type Account={contact:string;phone:string;email:string};
 type Job={id:string;title:string;department:string;city:string;status:string};
@@ -15,9 +16,10 @@ export default function RecruitmentProgressClient(){
   const [data,setData]=useState<Dataset|null>(null);const [error,setError]=useState('');const [keyword,setKeyword]=useState('');const [jobId,setJobId]=useState('');const [stage,setStage]=useState('全部');const [savingId,setSavingId]=useState('');const [toast,setToast]=useState('');
   async function load(){const response=await fetch('/api/workbench',{cache:'no-store'});if(response.status===401){window.location.assign('/');return}if(!response.ok)throw new Error('load');setData(await response.json() as Dataset)}
   useEffect(()=>{void load().catch(()=>setError('招聘进展数据加载失败，请稍后刷新。'))},[]);
+  useWorkbenchSync(()=>load().catch(()=>undefined));
   const visible=useMemo(()=>data?.candidates.filter(person=>{const job=data.jobs.find(item=>item.id===person.jobId);const text=`${person.name}${person.phone}${person.role}${person.company}${job?.title||''}`.toLowerCase();return(!keyword||text.includes(keyword.toLowerCase()))&&(!jobId||person.jobId===jobId)&&(stage==='全部'||person.stage===stage)}).sort((a,b)=>new Date(b.updatedAt).getTime()-new Date(a.updatedAt).getTime())||[],[data,keyword,jobId,stage]);
   function flash(message:string){setToast(message);window.setTimeout(()=>setToast(''),2200)}
-  async function updateStage(id:string,value:string){setSavingId(id);try{const response=await fetch('/api/workbench',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({resource:'candidateStage',id,value})});if(!response.ok){flash('保存失败');return}await load();flash('保存成功')}catch{flash('保存失败')}finally{setSavingId('')}}
+  async function updateStage(id:string,value:string){setSavingId(id);try{const response=await fetch('/api/workbench',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({resource:'candidateStage',id,value})});if(!response.ok){flash('保存失败');return}announceWorkbenchChange();await load();flash('保存成功，两个系统已同步')}catch{flash('保存失败')}finally{setSavingId('')}}
   if(!data)return <main className="interviewer-loading"><span>星</span><b>{error||'正在读取招聘进展…'}</b>{error&&<button onClick={()=>window.location.reload()}>重新加载</button>}</main>;
   const groups=[
     {label:'收到简历',count:data.candidates.length},

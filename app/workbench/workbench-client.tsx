@@ -3,6 +3,7 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import ScreeningWorkspace, { preloadScreeningData } from './screening-workspace';
 import { buildSpeechHints, contextualizeSpeechTranscript, selectContextualSpeechTranscript } from '@/app/speech-context';
+import { announceWorkbenchChange, useWorkbenchSync } from '@/app/workbench-sync';
 
 type Account = { id:string; contact:string; phone:string; email:string; createdAt:string };
 type Job = { id:string; title:string; department:string; city:string; status:string; headcount:number; ownerName:string; createdAt:string; updatedAt:string };
@@ -12,6 +13,7 @@ type Offer = { id:string; candidateId:string; jobTitle:string; salary:string; re
 type AiQuestion = { id:string; jobId:string|null; title:string; category:string; questionType:string; duration:number; competency:string; keywords:string; referenceAnswer:string; followUp:boolean; createdAt:string; updatedAt:string };
 type AiInterview = { id:string; candidateId:string; jobTitle:string; status:string; score:number|null; durationSeconds:number|null; summary:string; completedAt:string|null; createdAt:string; updatedAt:string };
 type AiInvitation = { id:string; candidateId:string; recipientEmail:string; jobTitle:string; status:string; sentAt:string; openedAt:string|null; completedAt:string|null; expiresAt:string; interviewUrl:string; createdAt:string; updatedAt:string };
+type ManualAssessment = { candidateId:string; total:number; professional:number; communication:number; culture:number; comment:string; reviewer:string; updatedAt:string };
 type AnswerScore = { score:number; keywords:string[]; matched:string[] };
 type SpeechAlternativeLike = { transcript:string;confidence?:number };
 type SpeechResultLike = { [index:number]:SpeechAlternativeLike;length:number;isFinal?:boolean };
@@ -24,7 +26,7 @@ type SpeechRecognitionLike = {
 };
 type SpeechRecognitionPhraseLike = { phrase:string;boost:number };
 type SpeechRecognitionConstructor = new()=>SpeechRecognitionLike;
-type Dataset = { account:Account; jobs:Job[]; candidates:Candidate[]; interviews:Interview[]; offers:Offer[]; aiQuestions:AiQuestion[]; aiInterviews:AiInterview[]; aiInvitations:AiInvitation[] };
+type Dataset = { account:Account; jobs:Job[]; candidates:Candidate[]; interviews:Interview[]; offers:Offer[]; aiQuestions:AiQuestion[]; aiInterviews:AiInterview[]; aiInvitations:AiInvitation[]; manualAssessments:ManualAssessment[] };
 type ModalName = 'job'|'candidate'|'interview'|'offer'|'question'|'questionGenerator'|'aiResult'|'profile'|'password'|null;
 
 const nav = [['⌂','工作台'],['▣','职位管理'],['♙','人才库'],['▤','简历筛选'],['◉','AI 面试'],['◴','面试管理'],['✓','Offer 管理'],['↗','招聘数据']];
@@ -65,13 +67,7 @@ export default function WorkbenchClient() {
   }
 
   useEffect(()=>{ void loadData(); },[]);
-  useEffect(()=>{
-    const refresh=()=>{if(document.visibilityState==='visible'&&!saveInFlight.current)void loadData()};
-    const timer=window.setInterval(refresh,10000);
-    window.addEventListener('focus',refresh);
-    document.addEventListener('visibilitychange',refresh);
-    return()=>{window.clearInterval(timer);window.removeEventListener('focus',refresh);document.removeEventListener('visibilitychange',refresh)};
-  },[]);
+  useWorkbenchSync(()=>saveInFlight.current?undefined:loadData());
   useEffect(()=>{const closeAccount=(event:MouseEvent)=>{if(!(event.target instanceof Element)||!event.target.closest('.account-area'))setAccountOpen(false)};document.addEventListener('mousedown',closeAccount);return()=>document.removeEventListener('mousedown',closeAccount)},[]);
 
   async function create(resource:string,payload:Record<string,unknown>) {
@@ -82,7 +78,7 @@ export default function WorkbenchClient() {
       const result=await response.json().catch(()=>({})) as {message?:string};
       if(response.status===401){window.location.assign('/');return}
       if(!response.ok){flash('保存失败');return}
-      setModal(null);await loadData();flash('保存成功');
+      setModal(null);announceWorkbenchChange();await loadData();flash('保存成功');
     }catch{flash('保存失败')}finally{saveInFlight.current=false;setModalSaving(false)}
   }
 
@@ -94,7 +90,7 @@ export default function WorkbenchClient() {
       const result=await response.json().catch(()=>({})) as {message?:string};
       if(response.status===401){window.location.assign('/');return}
       if(!response.ok){flash('保存失败');return}
-      setModal(null);setEditingQuestion(null);await loadData();flash('保存成功');
+      setModal(null);setEditingQuestion(null);announceWorkbenchChange();await loadData();flash('保存成功');
     }catch{flash('保存失败')}finally{saveInFlight.current=false;setModalSaving(false)}
   }
 
@@ -106,7 +102,7 @@ export default function WorkbenchClient() {
       const result=await response.json().catch(()=>({})) as {message?:string;count?:number};
       if(response.status===401){window.location.assign('/');return}
       if(!response.ok){flash(result.message||'面试题生成失败，请稍后重试。');return}
-      setModal(null);await loadData();flash(result.count?`已生成并保存 ${result.count} 道岗位面试题`:'该岗位的推荐题目已经存在');
+      setModal(null);announceWorkbenchChange();await loadData();flash(result.count?`已生成并保存 ${result.count} 道岗位面试题`:'该岗位的推荐题目已经存在');
     }catch{flash('面试题生成失败，请检查网络后重试。')}finally{saveInFlight.current=false;setModalSaving(false)}
   }
 
@@ -118,7 +114,7 @@ export default function WorkbenchClient() {
       const result=await response.json().catch(()=>({})) as {message?:string};
       if(response.status===401){window.location.assign('/');return false}
       if(!response.ok){flash(result.message||'面试题删除失败，请稍后重试。');return false}
-      await loadData();flash('面试题已删除');return true;
+      announceWorkbenchChange();await loadData();flash('面试题已删除');return true;
     }catch{flash('面试题删除失败，请检查网络后重试。');return false}
     finally{saveInFlight.current=false}
   }
@@ -131,7 +127,7 @@ export default function WorkbenchClient() {
       const result=await response.json().catch(()=>({})) as {message?:string};
       if(response.status===401){window.location.assign('/');return}
       if(!response.ok){flash('保存失败');return}
-      setModal(null);setEditingJob(null);await loadData();flash('保存成功');
+      setModal(null);setEditingJob(null);announceWorkbenchChange();await loadData();flash('保存成功');
     }catch{flash('保存失败')}finally{saveInFlight.current=false;setModalSaving(false)}
   }
 
@@ -143,7 +139,7 @@ export default function WorkbenchClient() {
       const result=await response.json().catch(()=>({})) as {message?:string};
       if(response.status===401){window.location.assign('/');return false}
       if(!response.ok){flash('保存失败');return false}
-      await loadData();flash('保存成功');return true;
+      announceWorkbenchChange();await loadData();flash('保存成功');return true;
     }catch{flash('保存失败');return false}
     finally{saveInFlight.current=false}
   }
@@ -156,7 +152,7 @@ export default function WorkbenchClient() {
       const result=await response.json().catch(()=>({})) as {message?:string;sent?:boolean;mailtoUrl?:string;recipientEmail?:string;interviewUrl?:string;testMode?:boolean};
       if(response.status===401){window.location.assign('/');return false}
       if(!response.ok){flash(result.message||'面试邀请生成失败，请稍后重试。');return false}
-      await loadData();
+      announceWorkbenchChange();await loadData();
       if(result.mailtoUrl)window.location.href=result.mailtoUrl;
       if(result.sent&&result.interviewUrl)flash(`AI 面试邀请已发送至 ${result.recipientEmail}，地址可一键复制`);
       else if(result.interviewUrl)flash(result.mailtoUrl?'邀请邮件已生成，请在邮箱中确认发送；地址也可一键复制':'AI 面试邀请地址已生成，可一键复制');
@@ -173,7 +169,7 @@ export default function WorkbenchClient() {
       const result=await response.json().catch(()=>({})) as {message?:string};
       if(response.status===401){window.location.assign('/');return}
       if(!response.ok){flash('保存失败');return}
-      setModal(null);setEditingInterview(null);await loadData();flash('保存成功');
+      setModal(null);setEditingInterview(null);announceWorkbenchChange();await loadData();flash('保存成功');
     }catch{flash('保存失败')}finally{saveInFlight.current=false;setModalSaving(false)}
   }
 
@@ -185,7 +181,7 @@ export default function WorkbenchClient() {
       const result=await response.json().catch(()=>({})) as {message?:string};
       if(response.status===401){window.location.assign('/');return}
       if(!response.ok){flash('保存失败');return}
-      setModal(null);setEditingOffer(null);await loadData();flash('保存成功');
+      setModal(null);setEditingOffer(null);announceWorkbenchChange();await loadData();flash('保存成功');
     }catch{flash('保存失败')}finally{saveInFlight.current=false;setModalSaving(false)}
   }
 
@@ -198,7 +194,7 @@ export default function WorkbenchClient() {
       const result=await response.json().catch(()=>({})) as {message?:string};
       if(response.status===401){window.location.assign('/');return}
       if(!response.ok){flash(result.message||'Offer 删除失败，请稍后重试。');return}
-      await loadData();flash('Offer 已删除');
+      announceWorkbenchChange();await loadData();flash('Offer 已删除');
     }catch{flash('Offer 删除失败，请检查网络后重试。')}finally{saveInFlight.current=false}
   }
 
@@ -206,7 +202,7 @@ export default function WorkbenchClient() {
     const response=await fetch('/api/workbench',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({resource,id,value})});
     const result=await response.json().catch(()=>({})) as {message?:string};
     if(!response.ok){flash(result.message||'更新失败，请稍后重试。');return}
-    await loadData();flash(success);
+    announceWorkbenchChange();await loadData();flash(success);
   }
 
   function flash(text:string){const tone=text.includes('失败')||text.includes('错误')?'error':text.includes('成功')?'success':'info';setToast({text,tone});window.setTimeout(()=>setToast(null),2300)}
@@ -229,7 +225,7 @@ export default function WorkbenchClient() {
         interviews:action==='profile'?current.interviews.map(interview=>({...interview,interviewer:result.account!.contact})):current.interviews,
         offers:action==='profile'?current.offers.map(offer=>({...offer,ownerName:result.account!.contact})):current.offers,
       }:current);
-      if(action==='profile')await loadData();
+      if(action==='profile'){announceWorkbenchChange();await loadData()}
       setModal(null);flash('保存成功');
     }catch{setAccountError('账号信息更新失败，请检查网络后重试。');flash('保存失败')}finally{saveInFlight.current=false;setAccountSaving(false)}
   }
@@ -285,7 +281,7 @@ export default function WorkbenchClient() {
     {modal==='profile'&&<ProfileModal account={data.account} close={()=>setModal(null)} error={accountError} submitting={accountSaving} submit={form=>void updateAccount('profile',formObject(form))}/>}
     {modal==='password'&&<PasswordModal close={()=>setModal(null)} error={accountError} submitting={accountSaving} submit={form=>void updateAccount('password',formObject(form))}/>}
     {selectedJob&&<JobDrawer job={selectedJob} candidates={data.candidates} interviews={visibleInterviews} offers={data.offers} close={()=>setDrawer(null)} edit={()=>{setDrawer(null);setEditingJob(selectedJob);setModal('job')}}/>}
-    {selectedCandidate&&<CandidateDrawer person={selectedCandidate} aiInterview={data.aiInterviews.find(item=>item.candidateId===selectedCandidate.id)} close={()=>setDrawer(null)} advance={value=>void update('candidateStage',selectedCandidate.id,value,'候选人阶段已更新')}/>}
+    {selectedCandidate&&<CandidateDrawer person={selectedCandidate} aiInterview={data.aiInterviews.find(item=>item.candidateId===selectedCandidate.id)} assessment={data.manualAssessments.find(item=>item.candidateId===selectedCandidate.id)} close={()=>setDrawer(null)} advance={value=>void update('candidateStage',selectedCandidate.id,value,'候选人阶段已更新')}/>}
     {toast&&<div className={`dashboard-toast ${toast.tone}`} role="status" aria-live="polite">{toast.tone==='success'?'✓ ':toast.tone==='error'?'! ':''}{toast.text}</div>}
   </main>
 }
@@ -689,7 +685,19 @@ function CandidateInterviewAssessment({report}:{report?:AiInterview}){
   </div>;
 }
 
-function CandidateDrawer({person,aiInterview,close,advance}:{person:Candidate;aiInterview?:AiInterview;close:()=>void;advance:(value:string)=>void}){const hasInterviewScore=aiInterview?.score!==null&&aiInterview?.score!==undefined;const displayedScore=hasInterviewScore?aiInterview.score:person.score;return <div className="drawer-backdrop" onMouseDown={close}><aside className="detail-drawer candidate-drawer" onMouseDown={event=>event.stopPropagation()}><button className="drawer-close" onClick={close}>×</button><div className="candidate-profile"><span>{person.name.slice(0,1)}</span><div><h2>{person.name}</h2><p>{person.company||'最近公司未填写'}{person.years?` · ${person.years}`:''}</p></div><em><b>{displayedScore??'—'}</b><small>{hasInterviewScore?'面试得分':'简历匹配度'}</small></em></div><label className="current-stage">当前阶段<select value={person.stage} onChange={event=>advance(event.target.value)}>{[...stages,'已淘汰'].map(item=><option key={item}>{item}</option>)}</select></label><section><h3>AI 面试记录</h3><CandidateInterviewAssessment report={aiInterview}/></section><section><h3>核心技能</h3><div className="channel-tags">{person.skills.length?person.skills.map(skill=><span key={skill}>{skill}</span>):<span>未填写</span>}</div></section><section><h3>候选人信息</h3><div className="profile-info"><p><span>应聘职位</span>{person.role}</p><p><span>手机号</span>{person.phone||'未填写'}</p><p><span>邮箱</span>{person.email||'未填写'}</p><p><span>所在城市</span>{person.city||'未填写'}</p></div></section></aside></div>}
+function CandidateDrawer({person,aiInterview,assessment,close,advance}:{person:Candidate;aiInterview?:AiInterview;assessment?:ManualAssessment;close:()=>void;advance:(value:string)=>void}){
+  const hasInterviewScore=aiInterview?.score!==null&&aiInterview?.score!==undefined;
+  const displayedScore=assessment?.total??(hasInterviewScore?aiInterview.score:person.score);
+  return <div className="drawer-backdrop" onMouseDown={close}><aside className="detail-drawer candidate-drawer" onMouseDown={event=>event.stopPropagation()}>
+    <button className="drawer-close" onClick={close}>×</button>
+    <div className="candidate-profile"><span>{person.name.slice(0,1)}</span><div><h2>{person.name}</h2><p>{person.company||'最近公司未填写'}{person.years?` · ${person.years}`:''}</p></div><em><b>{displayedScore??'—'}</b><small>{assessment?'人工评估':hasInterviewScore?'面试得分':'简历匹配度'}</small></em></div>
+    <label className="current-stage">当前阶段<select value={person.stage} onChange={event=>advance(event.target.value)}>{[...stages,'已淘汰'].map(item=><option key={item}>{item}</option>)}</select></label>
+    {assessment&&<section><h3>HR 人工评估</h3><div className="profile-info"><p><span>综合得分</span>{assessment.total} 分</p><p><span>专业能力</span>{assessment.professional} 分</p><p><span>沟通表达</span>{assessment.communication} 分</p><p><span>文化匹配</span>{assessment.culture} 分</p><p><span>评估人</span>{assessment.reviewer}</p><p><span>评估意见</span>{assessment.comment||'未填写'}</p></div></section>}
+    <section><h3>AI 面试记录</h3><CandidateInterviewAssessment report={aiInterview}/></section>
+    <section><h3>核心技能</h3><div className="channel-tags">{person.skills.length?person.skills.map(skill=><span key={skill}>{skill}</span>):<span>未填写</span>}</div></section>
+    <section><h3>候选人信息</h3><div className="profile-info"><p><span>应聘职位</span>{person.role}</p><p><span>手机号</span>{person.phone||'未填写'}</p><p><span>邮箱</span>{person.email||'未填写'}</p><p><span>所在城市</span>{person.city||'未填写'}</p></div></section>
+  </aside></div>;
+}
 
 function Empty({icon,title,text,action,click,compact=false}:{icon?:string;title:string;text:string;action?:string;click?:()=>void;compact?:boolean}){return <div className={'real-empty '+(compact?'compact':'')}>{icon&&<span>{icon}</span>}<h3>{title}</h3><p>{text}</p>{action&&click&&<button onClick={click}>{action}</button>}</div>}
 function formObject(data:FormData){const result:Record<string,unknown>={};data.forEach((value,key)=>{result[key]=value});result.followUp=data.get('followUp')==='on';const scheduledDate=String(data.get('scheduledDate')||'');const scheduledTime=String(data.get('scheduledTime')||'');if(scheduledDate&&scheduledTime){result.scheduledAt=`${scheduledDate}T${scheduledTime}`;delete result.scheduledDate;delete result.scheduledTime}return result}

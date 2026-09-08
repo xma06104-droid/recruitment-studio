@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { announceWorkbenchChange, useWorkbenchSync } from '@/app/workbench-sync';
 
 type Account={contact:string;phone:string;email:string};
 type Job={id:string;title:string;department:string;city:string;status:string};
@@ -14,10 +15,11 @@ export default function InterviewManagementClient(){
   const [data,setData]=useState<Dataset|null>(null);const [error,setError]=useState('');const [keyword,setKeyword]=useState('');const [status,setStatus]=useState('全部');const [jobId,setJobId]=useState('');const [date,setDate]=useState('');const [modal,setModal]=useState(false);const [saving,setSaving]=useState(false);const [toast,setToast]=useState('');
   async function load(){const response=await fetch('/api/workbench',{cache:'no-store'});if(response.status===401){window.location.assign('/');return}if(!response.ok)throw new Error('load');setData(await response.json() as Dataset)}
   useEffect(()=>{void load().catch(()=>setError('面试数据加载失败，请稍后刷新。'))},[]);
+  useWorkbenchSync(()=>load().catch(()=>undefined));
   const visible=useMemo(()=>data?.interviews.filter(item=>{const person=data.candidates.find(candidate=>candidate.id===item.candidateId);const text=`${person?.name||''}${person?.role||''}${item.interviewer}${item.round}${item.mode}`.toLowerCase();return(!keyword||text.includes(keyword.toLowerCase()))&&(status==='全部'||item.status===status)&&(!jobId||person?.jobId===jobId)&&(!date||localDate(item.scheduledAt)===date)}).sort((a,b)=>new Date(a.scheduledAt).getTime()-new Date(b.scheduledAt).getTime())||[],[data,keyword,status,jobId,date]);
   function flash(message:string){setToast(message);window.setTimeout(()=>setToast(''),2200)}
-  async function updateStatus(id:string,value:string){const response=await fetch('/api/workbench',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({resource:'interviewStatus',id,value})});if(!response.ok){flash('保存失败');return}await load();flash('保存成功')}
-  async function createInterview(event:FormEvent<HTMLFormElement>){event.preventDefault();if(saving)return;setSaving(true);const form=new FormData(event.currentTarget);const scheduledAt=new Date(`${form.get('date')}T${form.get('time')}`).toISOString();try{const response=await fetch('/api/workbench',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({resource:'interview',payload:{candidateId:form.get('candidateId'),scheduledAt,round:form.get('round'),mode:form.get('mode')}})});if(!response.ok){flash('保存失败');return}setModal(false);await load();flash('保存成功')}catch{flash('保存失败')}finally{setSaving(false)}}
+  async function updateStatus(id:string,value:string){const response=await fetch('/api/workbench',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({resource:'interviewStatus',id,value})});if(!response.ok){flash('保存失败');return}announceWorkbenchChange();await load();flash('保存成功，两个系统已同步')}
+  async function createInterview(event:FormEvent<HTMLFormElement>){event.preventDefault();if(saving)return;setSaving(true);const form=new FormData(event.currentTarget);const scheduledAt=new Date(`${form.get('date')}T${form.get('time')}`).toISOString();try{const response=await fetch('/api/workbench',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({resource:'interview',payload:{candidateId:form.get('candidateId'),scheduledAt,round:form.get('round'),mode:form.get('mode')}})});if(!response.ok){flash('保存失败');return}setModal(false);announceWorkbenchChange();await load();flash('保存成功，两个系统已同步')}catch{flash('保存失败')}finally{setSaving(false)}}
   if(!data)return <Loading error={error}/>;
   const today=localDate(new Date().toISOString());
   return <main className="interviewer-page"><Sidebar active="面试管理"/><section className="interviewer-main"><Header title="面试管理" account={data.account} keyword={keyword} setKeyword={setKeyword}/><Crumbs title="面试管理"/>
