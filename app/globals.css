@@ -1408,3 +1408,9 @@ input[type="date"]::-webkit-calendar-picker-indicator,input[type="datetime-local
 .interview-meta{gap:9px}
 .interview-meta span{font-size:14px;font-weight:650}
 .interview-meta small{font-size:12px;font-weight:500}
+
+/* Larger interview filters and result count. */
+.hr-filter-bar{min-height:74px;padding:14px 18px}
+.hr-filter-bar select,.hr-filter-bar input{height:44px;padding:0 14px;font-size:14px}
+.hr-filter-bar button{height:44px;padding:0 16px;font-size:13px}
+.hr-filter-bar>span{font-size:14px;font-weight:650}
