@@ -1398,3 +1398,13 @@ input[type="date"]::-webkit-calendar-picker-indicator,input[type="datetime-local
 @media(max-width:1040px){.hr-module-content{padding:18px}.progress-funnel{grid-template-columns:repeat(3,1fr)}.hr-record-list{padding:0 18px}}
 @media(max-width:760px){.hr-module-content{padding:14px}.hr-module-hero{align-items:flex-start;gap:16px;padding:21px;flex-direction:column}.hr-kpi-row{grid-template-columns:repeat(2,1fr)}.hr-filter-bar{align-items:stretch;flex-direction:column}.hr-filter-bar select,.hr-filter-bar input{width:100%}.hr-filter-bar>span{margin-left:0}.progress-funnel{grid-template-columns:1fr 1fr}.hr-form-grid{grid-template-columns:1fr}.hr-record-card>header{padding:0 17px}.hr-record-list{padding:0 15px}}
 .interview-manage-row small{color:#8190a5}
+
+/* Larger interview-row typography for faster scanning. */
+.interview-manage-row{min-height:142px}
+.interview-manage-row>div>p{font-size:13px;line-height:1.5}
+.interview-manage-row h3{margin:10px 0;font-size:18px;line-height:1.4}
+.interview-manage-row h3 span{padding:5px 8px;font-size:12px}
+.interview-manage-row small{font-size:13px;line-height:1.55}
+.interview-meta{gap:9px}
+.interview-meta span{font-size:14px;font-weight:650}
+.interview-meta small{font-size:12px;font-weight:500}
