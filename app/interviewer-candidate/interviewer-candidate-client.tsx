@@ -1,13 +1,16 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useWorkbenchSync } from '@/app/workbench-sync';
+import { announceWorkbenchChange, useWorkbenchSync } from '@/app/workbench-sync';
 
 type Account = { contact:string; phone:string; email:string };
 type Job = { id:string; title:string; department:string; city:string; status:string; ownerName:string; createdAt:string };
 type Candidate = { id:string; jobId:string|null; name:string; role:string; company:string; years:string; stage:string; source:string; skills:string[]; score:number|null; phone:string; email:string; city:string; createdAt:string; updatedAt:string };
 type Dataset = { account:Account; jobs:Job[]; candidates:Candidate[] };
+type Profile = { candidateId:string; education:string; major:string; school:string; age:number|null; gender:string; industry:string; expectedSalary:number|null; workYears:number|null; stabilityMonths:number|null; workHistory:string[]; projectHistory:string[]; certificates:string[]; highlights:string[]; risks:string[]; parsingStatus:string; fileName:string; fileType:string; fileSize:number; matchScore:number|null; matchLevel:string; updatedAt:string };
+type ScreeningData = { profiles:Profile[] };
 type ReviewStatus = '待筛选'|'已通过'|'已拒绝'|'待定'|'已失效';
+type ReviewAction = 'pass'|'pending'|'reject';
 
 const menuItems = [
   {icon:'◉',label:'候选人筛选',href:'/interviewer-candidate'},
@@ -27,15 +30,24 @@ export default function InterviewerCandidateClient() {
   const [jobId,setJobId]=useState('');
   const [selected,setSelected]=useState<string[]>([]);
   const [toast,setToast]=useState('');
+  const [profiles,setProfiles]=useState<Profile[]>([]);
+  const [detailId,setDetailId]=useState('');
+  const [savingId,setSavingId]=useState('');
 
   async function load(){
-    await fetch('/api/workbench',{cache:'no-store'}).then(async response=>{
-      if(response.status===401){window.location.assign('/');return}
-      if(!response.ok)throw new Error('load');
-      const result=await response.json() as Dataset;
-      setData(result);
-      setError('');
-    });
+    const [workbenchResponse,screeningResponse]=await Promise.all([
+      fetch('/api/workbench',{cache:'no-store'}),
+      fetch('/api/screening',{cache:'no-store'}),
+    ]);
+    if(workbenchResponse.status===401||screeningResponse.status===401){window.location.assign('/');return}
+    if(!workbenchResponse.ok)throw new Error('load');
+    const result=await workbenchResponse.json() as Dataset;
+    setData(result);
+    if(screeningResponse.ok){
+      const screening=await screeningResponse.json() as ScreeningData;
+      setProfiles(screening.profiles||[]);
+    }
+    setError('');
   }
   useEffect(()=>{void load().catch(()=>setError('候选人数据加载失败，请稍后刷新。'))},[]);
   useWorkbenchSync(()=>load().catch(()=>undefined));
@@ -50,10 +62,32 @@ export default function InterviewerCandidateClient() {
   })||[],[data,status,jobId,keyword]);
   const allSelected=candidates.length>0&&candidates.every(candidate=>selected.includes(candidate.id));
   const currentJob=jobId?data?.jobs.find(job=>job.id===jobId):null;
+  const detailCandidate=detailId?data?.candidates.find(candidate=>candidate.id===detailId):undefined;
+  const detailProfile=detailCandidate?profiles.find(profile=>profile.candidateId===detailCandidate.id):undefined;
 
   function flash(message:string){setToast(message);window.setTimeout(()=>setToast(''),2200)}
   function toggleAll(){setSelected(allSelected?selected.filter(id=>!candidates.some(candidate=>candidate.id===id)):[...new Set([...selected,...candidates.map(candidate=>candidate.id)])])}
   function runAction(message:string){flash(selected.length?`${message}：已选择 ${selected.length} 位候选人`:'请先选择候选人')}
+  async function updateReview(candidate:Candidate,action:ReviewAction){
+    if(savingId)return;
+    const next={
+      pass:{stage:'AI 初面待发起',message:'已通过，状态已更新为待AI面试'},
+      pending:{stage:'待沟通',message:'已设为待定'},
+      reject:{stage:'初筛淘汰',message:'已拒绝'},
+    }[action];
+    setSavingId(candidate.id);
+    try{
+      const response=await fetch('/api/workbench',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({resource:'candidateStage',id:candidate.id,value:next.stage})});
+      if(!response.ok)throw new Error('save');
+      announceWorkbenchChange();
+      await load();
+      flash(`${candidate.name}${next.message}，超级管理员端已同步`);
+    }catch{
+      flash('保存失败，请稍后重试');
+    }finally{
+      setSavingId('');
+    }
+  }
 
   if(!data)return <main className="interviewer-loading"><span>星</span><b>{error||'正在读取候选人数据…'}</b>{error&&<button onClick={()=>window.location.reload()}>重新加载</button>}</main>;
 
@@ -99,10 +133,10 @@ export default function InterviewerCandidateClient() {
           <div className="interviewer-filter-row"><select defaultValue=""><option value="">沟通状态</option><option>未沟通</option><option>已沟通</option></select><select defaultValue=""><option value="">推荐筛选状态</option><option>未推荐</option><option>已推荐</option></select><select defaultValue="time"><option value="time">状态变更时间　⇅</option></select></div>
           <div className="interviewer-batch-row"><label><input type="checkbox" checked={allSelected} onChange={toggleAll}/> 全选</label><button type="button" onClick={()=>runAction('发送通知')}>发送通知⌄</button><button type="button" onClick={()=>runAction('变更阶段')}>变更阶段⌄</button><button type="button" onClick={()=>runAction('下载简历')}>下载简历⌄</button><button type="button" onClick={()=>runAction('导出数据')}>导出数据⌄</button><button type="button" onClick={()=>runAction('更多操作')}>更多⌄</button></div>
           <div className="interviewer-candidate-list">
-            {candidates.length?candidates.map(candidate=>{const job=data.jobs.find(item=>item.id===candidate.jobId);return <article className="interviewer-candidate-row" key={candidate.id}>
-              <label><input type="checkbox" checked={selected.includes(candidate.id)} onChange={()=>setSelected(selected.includes(candidate.id)?selected.filter(id=>id!==candidate.id):[...selected,candidate.id])}/></label>
+            {candidates.length?candidates.map(candidate=>{const job=data.jobs.find(item=>item.id===candidate.jobId);return <article className="interviewer-candidate-row" key={candidate.id} role="button" tabIndex={0} onClick={()=>setDetailId(candidate.id)} onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();setDetailId(candidate.id)}}}>
+              <label onClick={event=>event.stopPropagation()}><input type="checkbox" checked={selected.includes(candidate.id)} onChange={()=>setSelected(selected.includes(candidate.id)?selected.filter(id=>id!==candidate.id):[...selected,candidate.id])}/></label>
               <div className="interviewer-candidate-profile"><p>{job?.title||candidate.role||'未关联职位'}　{formatDate(candidate.createdAt)}申请 <i>▣</i></p><h3>{candidate.name}<b>{candidate.score===null?'—':Math.max(1,Math.round(candidate.score/20))}</b><span>{candidate.city||'城市未填写'}</span>{candidate.years&&<span>{candidate.years}工作经验</span>}</h3><p>◼ {candidate.company||'最近公司未填写'}　{candidate.role||'职位未填写'}　{candidate.skills.slice(0,2).join('｜')||'暂无技能标签'}</p></div>
-              <div className="interviewer-candidate-owner"><p>候选人所有者： <b>{job?.ownerName||data.account.contact}</b>　<i>□</i>　<em>♧</em></p><p>推荐状态： <span>◢ {status==='已通过'?'已通过':status==='已拒绝'?'已拒绝':'未推荐'}</span></p></div>
+              <div className="interviewer-candidate-owner"><p>候选人所有者： <b>{job?.ownerName||data.account.contact}</b>　<i>□</i>　<em>♧</em></p><p>当前状态： <span>◢ {candidateDisplayStatus(candidate.stage)}</span></p></div>
               <div className="interviewer-candidate-note"><p>推荐时间：{formatDate(candidate.updatedAt)}</p><p>最近备注： -</p></div>
             </article>}):<div className="interviewer-empty"><span>⌕</span><b>暂无候选人</b><p>当前筛选条件下没有候选人记录</p></div>}
           </div>
@@ -112,11 +146,56 @@ export default function InterviewerCandidateClient() {
     </section>
     <button type="button" className="interviewer-wechat" onClick={()=>flash('微信咨询')}>微信</button>
     <div className="interviewer-floating"><button type="button" onClick={()=>flash('在线咨询')}>◉　在线咨询</button><button type="button" onClick={()=>flash('需求反馈')}>✎　需求反馈</button></div>
+    {detailCandidate&&<CandidateResumeDrawer
+      candidate={detailCandidate}
+      job={data.jobs.find(job=>job.id===detailCandidate.jobId)}
+      profile={detailProfile}
+      saving={savingId===detailCandidate.id}
+      onClose={()=>setDetailId('')}
+      onReview={action=>void updateReview(detailCandidate,action)}
+    />}
     {toast&&<div className="interviewer-toast">{toast}</div>}
   </main>;
 }
 
+function CandidateResumeDrawer({candidate,job,profile,saving,onClose,onReview}:{candidate:Candidate;job:Job|undefined;profile:Profile|undefined;saving:boolean;onClose:()=>void;onReview:(action:ReviewAction)=>void}){
+  const status=candidateDisplayStatus(candidate.stage);
+  return <div className="drawer-backdrop hr-resume-backdrop" onMouseDown={onClose}>
+    <aside className="detail-drawer candidate-drawer hr-resume-drawer" aria-label={`${candidate.name}的简历`} onMouseDown={event=>event.stopPropagation()}>
+      <button type="button" className="drawer-close" onClick={onClose} aria-label="关闭简历">×</button>
+      <p className="drawer-label">CANDIDATE RESUME</p>
+      <div className="candidate-profile hr-resume-profile"><span>{candidate.name.slice(0,1)}</span><div><h2>{candidate.name}</h2><p>{candidate.company||'公司未填写'} · {candidate.role||job?.title||'职位未填写'}</p></div><em><b>{profile?.matchScore??candidate.score??'—'}</b><small>匹配度</small></em></div>
+      <div className="hr-resume-status"><span>当前状态</span><b>{status}</b><small>招聘阶段：{candidate.stage}</small></div>
+      <div className="hr-review-actions" aria-label="候选人审核操作">
+        <button type="button" className={status==='待AI面试'?'active pass':'pass'} disabled={saving} onClick={()=>onReview('pass')}>通过<small>待 AI 面试</small></button>
+        <button type="button" className={status==='待定'?'active pending':'pending'} disabled={saving} onClick={()=>onReview('pending')}>待定<small>保留候选人</small></button>
+        <button type="button" className={status==='已拒绝'?'active reject':'reject'} disabled={saving} onClick={()=>onReview('reject')}>拒绝<small>结束初筛</small></button>
+      </div>
+      {saving&&<p className="hr-resume-saving">正在同步审核结果…</p>}
+      <section className="hr-resume-section"><h3>基本信息</h3><div className="profile-info"><p><span>应聘职位</span>{job?.title||candidate.role||'-'}</p><p><span>手机号</span>{candidate.phone||'-'}</p><p><span>邮箱</span>{candidate.email||'-'}</p><p><span>所在城市</span>{candidate.city||'-'}</p><p><span>工作经验</span>{profile?.workYears!==null&&profile?.workYears!==undefined?`${profile.workYears}年`:candidate.years||'-'}</p><p><span>期望薪资</span>{profile?.expectedSalary?`${profile.expectedSalary}元/月`:'-'}</p></div></section>
+      <section className="hr-resume-section"><h3>教育背景</h3><p className="hr-resume-copy">{[profile?.school,profile?.major,profile?.education].filter(Boolean).join(' · ')||'暂无教育背景信息'}</p></section>
+      <ResumeList title="工作经历" items={profile?.workHistory}/>
+      <ResumeList title="项目经历" items={profile?.projectHistory}/>
+      <section className="hr-resume-section"><h3>技能与证书</h3><div className="channel-tags">{[...candidate.skills,...(profile?.certificates||[])].length?[...candidate.skills,...(profile?.certificates||[])].map((item,index)=><span key={`${item}-${index}`}>{item}</span>):<p className="hr-resume-copy">暂无技能与证书信息</p>}</div></section>
+      {(profile?.highlights.length||profile?.risks.length)?<section className="hr-resume-section hr-resume-insights"><h3>AI 简历摘要</h3>{profile?.highlights.map((item,index)=><p className="highlight" key={`highlight-${index}`}>优势 · {item}</p>)}{profile?.risks.map((item,index)=><p className="risk" key={`risk-${index}`}>关注 · {item}</p>)}</section>:null}
+      {profile?.fileName?<a className="hr-resume-file" href={`/api/screening/file?candidateId=${encodeURIComponent(candidate.id)}`} target="_blank" rel="noreferrer">查看原始简历 · {profile.fileName}</a>:<p className="hr-resume-copy hr-resume-file-empty">未找到可预览的原始简历文件</p>}
+    </aside>
+  </div>;
+}
+
+function ResumeList({title,items}:{title:string;items:string[]|undefined}){
+  return <section className="hr-resume-section"><h3>{title}</h3>{items?.length?<div className="hr-resume-list">{items.map((item,index)=><p key={`${title}-${index}`}>{item}</p>)}</div>:<p className="hr-resume-copy">暂无{title}信息</p>}</section>;
+}
+
 function candidateReviewStatus(stage:string):ReviewStatus {
+  if(['初筛淘汰','淘汰人才库','已淘汰'].includes(stage))return '已拒绝';
+  if(stage==='待沟通')return '待定';
+  if(['待初筛','待复核'].includes(stage))return '待筛选';
+  return '已通过';
+}
+
+function candidateDisplayStatus(stage:string){
+  if(stage==='AI 初面待发起')return '待AI面试';
   if(['初筛淘汰','淘汰人才库','已淘汰'].includes(stage))return '已拒绝';
   if(stage==='待沟通')return '待定';
   if(['待初筛','待复核'].includes(stage))return '待筛选';

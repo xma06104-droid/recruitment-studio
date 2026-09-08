@@ -1462,3 +1462,42 @@ input[type="date"]::-webkit-calendar-picker-indicator,input[type="datetime-local
   opacity:0;
   cursor:pointer;
 }
+
+/* Candidate rows open a full resume and expose synchronized review actions. */
+.interviewer-candidate-row{
+  cursor:pointer;
+  border-radius:12px;
+  transition:border-color .18s ease,background .18s ease,transform .18s ease;
+}
+.interviewer-candidate-row:hover,
+.interviewer-candidate-row:focus-visible{
+  border-color:rgba(67,207,231,.2);
+  outline:0;
+  background:linear-gradient(100deg,rgba(24,129,158,.1),rgba(48,93,174,.07));
+}
+.interviewer-candidate-row:active{transform:translateY(1px)}
+.hr-resume-backdrop{z-index:140;background:rgba(1,6,14,.78);backdrop-filter:blur(9px)}
+.hr-resume-drawer{width:min(620px,96vw);padding:38px 36px 44px;color:#edf5ff}
+.hr-resume-profile{margin:26px 0 20px}
+.hr-resume-profile>span{width:58px;height:58px;border-radius:17px;font-size:21px}
+.hr-resume-profile h2{font-size:26px}.hr-resume-profile p{font-size:12px;line-height:1.6}
+.hr-resume-profile>em b{color:#69deeb;font-size:24px}.hr-resume-profile>em small{margin-top:3px;color:#788ba4;font-size:9px}
+.hr-resume-status{display:grid;grid-template-columns:auto 1fr;gap:5px 16px;align-items:center;padding:15px 17px;border:1px solid rgba(93,215,233,.14);border-radius:13px;background:linear-gradient(120deg,rgba(23,131,158,.12),rgba(51,93,177,.09))}
+.hr-resume-status span{color:#93a5ba;font-size:11px}.hr-resume-status b{justify-self:end;padding:5px 10px;border:1px solid rgba(91,216,234,.2);border-radius:999px;color:#67dbea;background:#123047;font-size:12px}
+.hr-resume-status small{grid-column:1/-1;color:#75879f;font-size:10px}
+.hr-review-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:17px}
+.hr-review-actions button{min-height:68px;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:5px;padding:0 15px;border:1px solid rgba(162,181,211,.13);border-radius:12px;color:#f1f6fc;background:#121f33;font-size:14px;font-weight:800;cursor:pointer;transition:.18s ease}
+.hr-review-actions button small{color:#7f91a8;font-size:9px;font-weight:500}
+.hr-review-actions button:hover{transform:translateY(-1px)}
+.hr-review-actions .pass:hover,.hr-review-actions .pass.active{border-color:rgba(64,215,229,.38);background:linear-gradient(135deg,rgba(22,155,173,.27),rgba(45,104,189,.2));box-shadow:inset 3px 0 #4fd8e8}
+.hr-review-actions .pending:hover,.hr-review-actions .pending.active{border-color:rgba(239,187,79,.35);background:rgba(146,104,29,.18);box-shadow:inset 3px 0 #efbd52}
+.hr-review-actions .reject:hover,.hr-review-actions .reject.active{border-color:rgba(239,104,122,.36);background:rgba(136,42,60,.19);box-shadow:inset 3px 0 #ef7182}
+.hr-review-actions button:disabled{cursor:wait;opacity:.58;transform:none}
+.hr-resume-saving{margin:10px 0 0!important;color:#62d8e8!important;font-size:11px!important}
+.hr-resume-section{padding-top:3px}.hr-resume-section h3{padding-bottom:10px;border-bottom:1px solid rgba(162,181,211,.09)}
+.hr-resume-copy,.hr-resume-list p{margin:0;color:#aebccd;font-size:12px;line-height:1.85}
+.hr-resume-list{display:grid;gap:9px}.hr-resume-list p{padding:12px 14px;border:1px solid rgba(162,181,211,.09);border-radius:10px;background:#0c1829;white-space:pre-wrap}
+.hr-resume-insights{display:grid;gap:9px}.hr-resume-insights p{margin:0;padding:11px 13px;border-radius:10px;font-size:11px;line-height:1.65}.hr-resume-insights .highlight{border:1px solid rgba(65,204,174,.14);color:#a8ddcf;background:rgba(33,133,111,.11)}.hr-resume-insights .risk{border:1px solid rgba(235,159,87,.14);color:#d9b391;background:rgba(136,76,28,.11)}
+.hr-resume-file{height:44px;display:flex;align-items:center;justify-content:center;margin-top:30px;border:1px solid rgba(67,207,231,.2);border-radius:11px;color:#67dbea;background:#14243a;font-size:12px;font-weight:750}
+.hr-resume-file:hover{color:#fff;background:linear-gradient(110deg,#168da8,#347ce4)}.hr-resume-file-empty{margin-top:28px;text-align:center}
+@media(max-width:620px){.hr-resume-drawer{padding:34px 22px 38px}.hr-review-actions{grid-template-columns:1fr}.hr-review-actions button{min-height:58px}}
