@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { announceWorkbenchChange, useWorkbenchSync } from '@/app/workbench-sync';
+import HrAccountMenu from '@/app/components/hr-account-menu';
 
 type Account={contact:string;phone:string;email:string};
 type Job={id:string;title:string;department:string;city:string;status:string};
@@ -31,7 +32,7 @@ export default function InterviewManagementClient(){
 }
 
 function Sidebar({active}:{active:string}){return <aside className="interviewer-rail"><a className="interviewer-logo" href="/workbench"><span>星</span><b>星鉴人才<small>HIRING DEPARTMENT</small></b></a><p className="interviewer-role-label">HR 工作台</p><nav>{menuItems.map(item=><a key={item.label} className={item.label===active?'active':''} href={item.href}><i>{item.icon}</i><span>{item.label}</span></a>)}</nav><button type="button">«</button></aside>}
-function Header({title,account,keyword,setKeyword}:{title:string;account:Account;keyword:string;setKeyword:(value:string)=>void}){return <header className="interviewer-header"><div className="interviewer-heading"><h1>{title}</h1><small>HR 候选人工作台</small></div><div className="interviewer-tools"><div className="interviewer-global-search"><input value={keyword} onChange={event=>setKeyword(event.target.value)} placeholder="搜索候选人、职位或面试官"/><button type="button">⌕</button></div><span className="interviewer-avatar">{account.contact.slice(0,1)}</span><div className="interviewer-account-copy"><b>{account.contact}</b><small>HR 招聘</small></div></div></header>}
+function Header({title,account,keyword,setKeyword}:{title:string;account:Account;keyword:string;setKeyword:(value:string)=>void}){return <header className="interviewer-header"><div className="interviewer-heading"><h1>{title}</h1><small>HR 候选人工作台</small></div><div className="interviewer-tools"><div className="interviewer-global-search"><input value={keyword} onChange={event=>setKeyword(event.target.value)} placeholder="搜索候选人、职位或面试官"/><button type="button">⌕</button></div><HrAccountMenu contact={account.contact} email={account.email}/></div></header>}
 function Crumbs({title}:{title:string}){return <div className="interviewer-open-tabs"><a href="/interviewer-candidate">候选人筛选</a><i>›</i><button type="button" className="active">{title}</button><span>当前角色：HR</span></div>}
 function Loading({error}:{error:string}){return <main className="interviewer-loading"><span>星</span><b>{error||'正在读取数据…'}</b>{error&&<button onClick={()=>window.location.reload()}>重新加载</button>}</main>}
 function Empty({title,text}:{title:string;text:string}){return <div className="interviewer-empty"><span>◷</span><b>{title}</b><p>{text}</p></div>}

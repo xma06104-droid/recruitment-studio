@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { announceWorkbenchChange, useWorkbenchSync } from '@/app/workbench-sync';
 import { AiInterviewResultPanel } from '@/app/components/ai-interview-result';
+import HrAccountMenu from '@/app/components/hr-account-menu';
 
 type Account = { contact:string; phone:string; email:string };
 type Job = { id:string; title:string; department:string; city:string; status:string; ownerName:string; createdAt:string };
@@ -111,7 +112,7 @@ export default function InterviewerCandidateClient() {
           <button type="button" className="interviewer-help" onClick={()=>flash('帮助中心')}>◉ 帮助中心</button>
           <button type="button" className="interviewer-tool-icon" onClick={()=>flash('消息中心')}>♧</button>
           <button type="button" className="interviewer-tool-icon" onClick={()=>flash('通知中心')}>♢</button>
-          <span className="interviewer-avatar">{data.account.contact.slice(0,1)}</span><div className="interviewer-account-copy"><b>{data.account.contact}</b><small>HR 招聘</small></div><i>⌄</i>
+          <HrAccountMenu contact={data.account.contact} email={data.account.email}/>
         </div>
       </header>
       <div className="interviewer-open-tabs"><a href="/workbench">招聘管理</a><i>›</i><button type="button" className="active">候选人筛选</button><span>当前角色：HR</span></div>
