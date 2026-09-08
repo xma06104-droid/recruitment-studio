@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { announceWorkbenchChange, useWorkbenchSync } from '@/app/workbench-sync';
 import HrAccountMenu from '@/app/components/hr-account-menu';
 
-type Account = { contact:string; phone:string; email:string };
+type Account = { contact:string; phone:string; email:string; role:'super_admin'|'hr' };
 type Job = { id:string; title:string; department:string; city:string; status:string; ownerName:string; createdAt:string };
 type Candidate = { id:string; jobId:string|null; name:string; role:string; company:string; years:string; stage:string; source:string; skills:string[]; score:number|null; phone:string; email:string; city:string; createdAt:string; updatedAt:string };
 type Assessment = { candidateId:string; total:number; professional:number; communication:number; culture:number; comment:string; reviewer:string; updatedAt:string };
@@ -92,7 +92,7 @@ export default function AssessmentClient() {
         <div className="interviewer-tools">
           <div className="interviewer-global-search"><input value={keyword} onChange={event=>setKeyword(event.target.value)} placeholder="全局搜索候选人或职位"/><button type="button">⌕</button></div>
           <button type="button" className="interviewer-help" onClick={()=>flash('人工评估用于记录面试官对候选人的综合判断')}>◉ 评估说明</button>
-          <HrAccountMenu contact={data.account.contact} email={data.account.email}/>
+          <HrAccountMenu contact={data.account.contact} email={data.account.email} role={data.account.role}/>
         </div>
       </header>
       <div className="interviewer-open-tabs"><a href="/interviewer-candidate">候选人筛选</a><i>›</i><button type="button" className="active">人工评估</button><span>当前角色：HR</span></div>

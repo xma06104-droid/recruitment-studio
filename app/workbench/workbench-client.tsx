@@ -4,9 +4,10 @@ import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'reac
 import ScreeningWorkspace, { preloadScreeningData } from './screening-workspace';
 import { buildSpeechHints, contextualizeSpeechTranscript, selectContextualSpeechTranscript } from '@/app/speech-context';
 import { announceWorkbenchChange, useWorkbenchSync } from '@/app/workbench-sync';
-import { AiInterviewResultPanel, parseStructuredAiResult } from '@/app/components/ai-interview-result';
+import { AiInterviewResultPanel } from '@/app/components/ai-interview-result';
+import RoleManagement from '@/app/components/role-management';
 
-type Account = { id:string; contact:string; phone:string; email:string; createdAt:string };
+type Account = { id:string; contact:string; phone:string; email:string; role:'super_admin'|'hr'; createdAt:string };
 type Job = { id:string; title:string; department:string; city:string; status:string; headcount:number; ownerName:string; createdAt:string; updatedAt:string };
 type Candidate = { id:string; jobId:string|null; name:string; role:string; company:string; years:string; stage:string; source:string; skills:string[]; score:number|null; phone:string; email:string; city:string; createdAt:string; updatedAt:string };
 type Interview = { id:string; candidateId:string; scheduledAt:string; round:string; mode:string; interviewer:string; status:string; createdAt:string; updatedAt:string };
@@ -30,7 +31,7 @@ type SpeechRecognitionConstructor = new()=>SpeechRecognitionLike;
 type Dataset = { account:Account; jobs:Job[]; candidates:Candidate[]; interviews:Interview[]; offers:Offer[]; aiQuestions:AiQuestion[]; aiInterviews:AiInterview[]; aiInvitations:AiInvitation[]; manualAssessments:ManualAssessment[] };
 type ModalName = 'job'|'candidate'|'interview'|'offer'|'question'|'questionGenerator'|'aiResult'|'profile'|'password'|null;
 
-const nav = [['⌂','工作台'],['▣','职位管理'],['♙','人才库'],['▤','简历筛选'],['◉','AI 面试'],['◴','面试管理'],['✓','Offer 管理'],['↗','招聘数据']];
+const nav = [['⌂','工作台'],['▣','职位管理'],['♙','人才库'],['▤','简历筛选'],['◉','AI 面试'],['◴','面试管理'],['✓','Offer 管理'],['↗','招聘数据'],['♜','角色管理']];
 const stages = ['待初筛','待复核','面试待安排','AI 初面待发起','已发起AI面试邀请','待沟通','一面','技术面','二面','Offer','已入职'];
 const jobStatuses = ['草稿','招聘中','急聘','已暂停','已关闭'];
 const jobStatusPriority:Record<string,number> = { '急聘':0,'招聘中':1,'草稿':2,'已暂停':3,'已关闭':4 };
@@ -62,6 +63,7 @@ export default function WorkbenchClient() {
     if (response.status === 401) { window.location.assign('/'); return; }
     if (!response.ok) { setError('真实数据暂时无法加载，请稍后刷新。'); return; }
     const nextData=await response.json() as Dataset;
+    if(nextData.account.role!=='super_admin'){window.location.assign('/interviewer-candidate');return}
     setData(nextData);
     void preloadScreeningData().catch(()=>undefined);
     setError('');
@@ -251,7 +253,7 @@ export default function WorkbenchClient() {
       <button className="back-login sidebar-logout" onClick={()=>void logout()}>← 安全退出</button>
     </aside>
     <section className="dashboard-main">
-      <header className="dashboard-header"><div className="global-search"><span>⌕</span><input value={search} onChange={event=>setSearch(event.target.value)} placeholder="搜索真实职位、候选人或来源…"/><kbd>⌘ K</kbd></div><div className="header-tools"><button className="round-button" onClick={()=>{setNotice(!notice);setAccountOpen(false)}}>♧{pendingCount>0&&<b>{pendingCount}</b>}</button><button className="round-button" onClick={()=>flash('所有指标均由当前账号记录实时计算')}>?</button><div className="account-area"><button type="button" className={'user-info account-trigger '+(accountOpen?'open':'')} aria-expanded={accountOpen} onClick={()=>{setAccountOpen(!accountOpen);setNotice(false)}}><span>{data.account.contact.slice(0,1)}</span><div><b>{data.account.phone?maskPhone(data.account.phone):data.account.email}</b><small>账号管理员</small></div><i>⌄</i></button>{accountOpen&&<div className="account-menu"><header><span>{data.account.contact.slice(0,1)}</span><div><b>{data.account.contact}</b><small>{data.account.email||(data.account.phone?maskPhone(data.account.phone):'未绑定')}</small></div></header><section><p><span>手机号</span><b>{maskPhone(data.account.phone)}</b></p><p><span>邮箱</span><b>{data.account.email||'未绑定'}</b></p></section><button type="button" className="account-switch" onClick={switchHiringDepartment}><i>⇄</i><div><b>切换用人部门</b><small>进入用人部门候选人工作台</small></div><em>›</em></button><button type="button" onClick={()=>openAccountModal('profile')}><i>◎</i><div><b>个人资料</b><small>修改账号显示姓名</small></div><em>›</em></button><button type="button" onClick={()=>openAccountModal('password')}><i>⌾</i><div><b>登录与安全</b><small>验证当前密码后修改</small></div><em>›</em></button><button type="button" className="account-logout" onClick={()=>void logout()}><i>↪</i><div><b>安全退出</b><small>退出当前登录账号</small></div></button></div>}</div>{notice&&<div className="notice-pop"><b>实时待办</b>{pendingCount===0?<p>暂无待处理记录</p>:<><p>{activeCandidates.filter(item=>['待初筛','待复核','面试待安排','AI 初面待发起','已发起AI面试邀请','待沟通'].includes(item.stage)).length} 位候选人待推进</p><p>{visibleInterviews.filter(item=>item.status==='待确认').length} 场面试待确认</p></>}</div>}</div></header>
+      <header className="dashboard-header"><div className="global-search"><span>⌕</span><input value={search} onChange={event=>setSearch(event.target.value)} placeholder="搜索真实职位、候选人或来源…"/><kbd>⌘ K</kbd></div><div className="header-tools"><button className="round-button" onClick={()=>{setNotice(!notice);setAccountOpen(false)}}>♧{pendingCount>0&&<b>{pendingCount}</b>}</button><button className="round-button" onClick={()=>flash('所有指标均由当前账号记录实时计算')}>?</button><div className="account-area"><button type="button" className={'user-info account-trigger '+(accountOpen?'open':'')} aria-expanded={accountOpen} onClick={()=>{setAccountOpen(!accountOpen);setNotice(false)}}><span>{data.account.contact.slice(0,1)}</span><div><b>{data.account.phone?maskPhone(data.account.phone):data.account.email}</b><small>超级管理员</small></div><i>⌄</i></button>{accountOpen&&<div className="account-menu"><header><span>{data.account.contact.slice(0,1)}</span><div><b>{data.account.contact}</b><small>{data.account.email||(data.account.phone?maskPhone(data.account.phone):'未绑定')}</small></div></header><section><p><span>手机号</span><b>{maskPhone(data.account.phone)}</b></p><p><span>邮箱</span><b>{data.account.email||'未绑定'}</b></p></section><button type="button" className="account-switch" onClick={switchHiringDepartment}><i>⇄</i><div><b>切换用人部门</b><small>进入用人部门候选人工作台</small></div><em>›</em></button><button type="button" onClick={()=>openAccountModal('profile')}><i>◎</i><div><b>个人资料</b><small>修改账号显示姓名</small></div><em>›</em></button><button type="button" onClick={()=>openAccountModal('password')}><i>⌾</i><div><b>登录与安全</b><small>验证当前密码后修改</small></div><em>›</em></button><button type="button" className="account-logout" onClick={()=>void logout()}><i>↪</i><div><b>安全退出</b><small>退出当前登录账号</small></div></button></div>}</div>{notice&&<div className="notice-pop"><b>实时待办</b>{pendingCount===0?<p>暂无待处理记录</p>:<><p>{activeCandidates.filter(item=>['待初筛','待复核','面试待安排','AI 初面待发起','已发起AI面试邀请','待沟通'].includes(item.stage)).length} 位候选人待推进</p><p>{visibleInterviews.filter(item=>item.status==='待确认').length} 场面试待确认</p></>}</div>}</div></header>
       <div className="dashboard-content">
         {active==='工作台'&&<Home data={{...data,interviews:visibleInterviews}} go={setActive} newJob={()=>{setEditingJob(null);setModal('job')}}/>}
         {active==='职位管理'&&<Jobs jobs={filteredJobs} candidates={data.candidates} interviews={visibleInterviews} onNew={()=>{setEditingJob(null);setModal('job')}} onPick={id=>setDrawer({type:'job',id})} updateStatus={(id,value)=>void update('jobStatus',id,value,'职位状态已更新')}/>}
@@ -270,6 +272,7 @@ export default function WorkbenchClient() {
         {active==='面试管理'&&<Interviews items={visibleInterviews} people={activeCandidates} onNew={()=>{setEditingInterview(null);setModal('interview')}} onPick={id=>{setEditingInterview(visibleInterviews.find(item=>item.id===id)||null);setModal('interview')}} updateStatus={(id,value)=>void update('interviewStatus',id,value,'面试状态已更新')}/>}
         {active==='Offer 管理'&&<Offers items={data.offers} people={data.candidates} onNew={()=>{setEditingOffer(null);setModal('offer')}} onEdit={offer=>{setEditingOffer(offer);setModal('offer')}} onDelete={offer=>void deleteOffer(offer)} updateStatus={(id,value)=>void update('offerStatus',id,value,'Offer 状态已更新')}/>}
         {active==='招聘数据'&&<Analytics data={data}/>}
+        {active==='角色管理'&&<RoleManagement flash={flash}/>}
       </div>
     </section>
     {modal==='job'&&<JobModal job={editingJob} close={()=>{if(!modalSaving){setModal(null);setEditingJob(null)}}} submitting={modalSaving} submit={form=>editingJob?void updateJob(editingJob.id,formObject(form)):void create('job',formObject(form))}/>}
@@ -555,30 +558,10 @@ function AiInterviewSession({candidate,questions,flash,close,complete}:{candidat
   </section>;
 }
 
-function parseInterviewSummary(summary:string){
-  const blocks=summary.split(/\n{2,}(?=\d+\.\s)/);
-  const intro=(blocks.shift()||'').trim();
-  const items=blocks.map(block=>{
-    const lines=block.split('\n');
-    const heading=(lines.shift()||'').match(/^(\d+)\.\s*(.*?)（(\d+)分）\s*$/);
-    if(!heading)return null;
-    const keywordLine=lines.find(line=>line.startsWith('命中关键词：'))||'';
-    const answerIndex=lines.findIndex(line=>line.startsWith('回答：'));
-    return {number:Number(heading[1]),question:heading[2].trim(),score:Number(heading[3]),keywords:keywordLine.replace(/^命中关键词：/,'').trim()||'无',answer:answerIndex>=0?lines.slice(answerIndex).join('\n').replace(/^回答：/,'').trim():'未作答'};
-  }).filter(Boolean) as {number:number;question:string;score:number;keywords:string;answer:string}[];
-  return {intro,items};
-}
-
 function AiSummary({report,person}:{report:AiInterview;person?:Candidate}){
-  const structured=parseStructuredAiResult(report.summary);
-  const parsed=parseInterviewSummary(report.summary);
   return <article className="ai-summary-report">
-    <header><div><span>{person?.name.slice(0,1)||'候'}</span><div><h2>{person?.name||'候选人'} · AI 面试总结</h2><p>{report.jobTitle} · 用时 {structured?.duration||durationText(report.durationSeconds)} · {structured?.completedAt||(report.completedAt?formatDate(report.completedAt):'时间未记录')}</p></div></div></header>
-    {structured?<AiInterviewResultPanel summary={report.summary} fallbackScore={report.score}/>:<>
-      <section className="ai-summary-overview"><div className="ai-score-ring"><strong>{report.score??'—'}</strong><small>综合得分</small></div><div><span>面试结果</span><h3>{report.status}</h3><p>{parsed.items.length?parsed.intro:report.summary}</p><time className="ai-summary-completed">回答完成时间：{report.completedAt?formatDateTime(report.completedAt):'未记录'}</time><em>记录已保存</em></div></section>
-      {parsed.items.length>0&&<section className="ai-answer-breakdown"><header><span>面试题目</span><span>候选人回答</span></header>{parsed.items.map(item=><article key={`${item.number}-${item.question}`}><div className="ai-answer-question"><span>第 {item.number} 题</span><h4>{item.question}</h4><em>{item.score} 分</em></div><div className="ai-answer-response"><p>{item.answer||'未作答'}</p><small>命中关键词：{item.keywords}</small></div></article>)}</section>}
-      <section className="ai-followup-advice"><span>✓</span><div><h3>评分说明</h3><p>自动面试按题目配置的评分关键词与参考回答进行匹配评分，并保留候选人的实际回答；人工录入的历史结果继续按原样展示。</p></div></section>
-    </>}
+    <header><div><span>{person?.name.slice(0,1)||'候'}</span><div><h2>{person?.name||'候选人'} · AI 面试总结</h2><p>{report.jobTitle} · 用时 {durationText(report.durationSeconds)} · {report.completedAt?formatDate(report.completedAt):'时间未记录'}</p></div></div></header>
+    <AiInterviewResultPanel summary={report.summary} fallbackScore={report.score} durationSeconds={report.durationSeconds} completedAt={report.completedAt}/>
   </article>
 }
 
@@ -676,18 +659,7 @@ function PasswordModal({close,submit,error,submitting}:{close:()=>void;submit:(d
 function JobDrawer({job,candidates,interviews,offers,close,edit}:{job:Job;candidates:Candidate[];interviews:Interview[];offers:Offer[];close:()=>void;edit:()=>void}){const people=candidates.filter(item=>item.jobId===job.id);const interviewCount=interviews.filter(item=>people.some(person=>person.id===item.candidateId)).length;const offerCount=offers.filter(item=>people.some(person=>person.id===item.candidateId)).length;const counts=[['收到简历',people.length],['进入流程',people.filter(item=>stageIndex(item.stage)>=1).length],['进入面试',people.filter(item=>stageIndex(item.stage)>=2).length],['Offer',offerCount]] as [string,number][];const max=Math.max(1,people.length);return <div className="drawer-backdrop" onMouseDown={close}><aside className="detail-drawer" onMouseDown={event=>event.stopPropagation()}><button className="drawer-close" onClick={close}>×</button><span className="drawer-label">真实职位详情</span><h2>{job.title}</h2><p>{jobMeta(job)}　负责人：{job.ownerName}</p><div className="drawer-actions"><button type="button" onClick={edit}>编辑职位信息</button></div><div className="drawer-kpis"><div><b>{people.length}</b><small>候选人</small></div><div><b>{people.filter(item=>!['待初筛','初筛淘汰','淘汰人才库','已淘汰'].includes(item.stage)).length}</b><small>流程中</small></div><div><b>{interviewCount}</b><small>面试记录</small></div></div><section><h3>职位进度</h3><div className="pipeline">{counts.map(([label,count])=><div key={label}><span>{label}</span><i><em style={{width:`${count/max*100}%`}}/></i><b>{count}</b></div>)}</div></section><section><h3>数据说明</h3><p className="drawer-note">以上数字均根据与该职位实际关联的候选人、面试及 Offer 记录统计。</p></section></aside></div>}
 function CandidateInterviewAssessment({report}:{report?:AiInterview}){
   if(!report)return <div className="ai-assessment"><p><b>暂无记录</b>尚未录入该候选人的已完成 AI 面试结果。</p></div>;
-  if(parseStructuredAiResult(report.summary))return <AiInterviewResultPanel summary={report.summary} fallbackScore={report.score} compact/>;
-  const parsed=parseInterviewSummary(report.summary);
-  if(!parsed.items.length)return <div className="ai-assessment"><p><b>真实总结</b>{report.summary}</p></div>;
-  return <div className="ai-assessment drawer-ai-assessment">
-    <div className="drawer-ai-overview"><b>总体评价</b><p>{parsed.intro}</p></div>
-    <div className="drawer-ai-items">{parsed.items.map(item=><article key={`${item.number}-${item.question}`}>
-      <header><span>第 {item.number} 题</span><em>{item.score} 分</em></header>
-      <h4>{item.question}</h4>
-      <div><b>候选人回答</b><p>{item.answer||'未作答'}</p></div>
-      <small>命中关键词：{item.keywords}</small>
-    </article>)}</div>
-  </div>;
+  return <AiInterviewResultPanel summary={report.summary} fallbackScore={report.score} durationSeconds={report.durationSeconds} completedAt={report.completedAt} compact/>;
 }
 
 function CandidateDrawer({person,aiInterview,assessment,close,advance}:{person:Candidate;aiInterview?:AiInterview;assessment?:ManualAssessment;close:()=>void;advance:(value:string)=>void}){

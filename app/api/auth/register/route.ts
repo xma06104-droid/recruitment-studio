@@ -19,8 +19,8 @@ export async function POST(request: NextRequest) {
   if (existing) return failure('该手机号或邮箱已注册，请直接登录。', 409);
 
   const now = new Date().toISOString();
-  await getDb().prepare(`INSERT INTO accounts (id, contact, phone, email, password_hash, created_at)
-    VALUES (?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), contact, phone, email, await createPasswordHash(password), now).run();
+  await getDb().prepare(`INSERT INTO accounts (id, contact, phone, email, password_hash, role, created_at)
+    VALUES (?, ?, ?, ?, ?, 'none', ?)`).bind(crypto.randomUUID(), contact, phone, email, await createPasswordHash(password), now).run();
   return NextResponse.json({ ok: true, email }, { status: 201 });
 }
 

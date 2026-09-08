@@ -5,7 +5,7 @@ import { announceWorkbenchChange, useWorkbenchSync } from '@/app/workbench-sync'
 import { AiInterviewResultPanel } from '@/app/components/ai-interview-result';
 import HrAccountMenu from '@/app/components/hr-account-menu';
 
-type Account = { contact:string; phone:string; email:string };
+type Account = { contact:string; phone:string; email:string; role:'super_admin'|'hr' };
 type Job = { id:string; title:string; department:string; city:string; status:string; ownerName:string; createdAt:string };
 type Candidate = { id:string; jobId:string|null; name:string; role:string; company:string; years:string; stage:string; source:string; skills:string[]; score:number|null; phone:string; email:string; city:string; createdAt:string; updatedAt:string };
 type AiInterview = { id:string; candidateId:string; jobTitle:string; status:string; score:number|null; durationSeconds:number|null; summary:string; completedAt:string|null; createdAt:string; updatedAt:string };
@@ -112,7 +112,7 @@ export default function InterviewerCandidateClient() {
           <button type="button" className="interviewer-help" onClick={()=>flash('帮助中心')}>◉ 帮助中心</button>
           <button type="button" className="interviewer-tool-icon" onClick={()=>flash('消息中心')}>♧</button>
           <button type="button" className="interviewer-tool-icon" onClick={()=>flash('通知中心')}>♢</button>
-          <HrAccountMenu contact={data.account.contact} email={data.account.email}/>
+          <HrAccountMenu contact={data.account.contact} email={data.account.email} role={data.account.role}/>
         </div>
       </header>
       <div className="interviewer-open-tabs"><a href="/workbench">招聘管理</a><i>›</i><button type="button" className="active">候选人筛选</button><span>当前角色：HR</span></div>
@@ -177,7 +177,7 @@ function CandidateResumeDrawer({candidate,job,profile,aiInterview,saving,onClose
       </div>
       {saving&&<p className="hr-resume-saving">正在同步审核结果…</p>}
       <section className="hr-resume-section"><h3>基本信息</h3><div className="profile-info"><p><span>应聘职位</span>{job?.title||candidate.role||'-'}</p><p><span>手机号</span>{candidate.phone||'-'}</p><p><span>邮箱</span>{candidate.email||'-'}</p><p><span>所在城市</span>{candidate.city||'-'}</p><p><span>工作经验</span>{profile?.workYears!==null&&profile?.workYears!==undefined?`${profile.workYears}年`:candidate.years||'-'}</p><p><span>期望薪资</span>{profile?.expectedSalary?`${profile.expectedSalary}元/月`:'-'}</p></div></section>
-      {aiInterview&&<section className="hr-resume-section hr-ai-interview-result"><h3>AI 面试结果</h3><AiInterviewResultPanel summary={aiInterview.summary} fallbackScore={aiInterview.score} compact/></section>}
+      {aiInterview&&<section className="hr-resume-section hr-ai-interview-result"><h3>AI 面试结果</h3><AiInterviewResultPanel summary={aiInterview.summary} fallbackScore={aiInterview.score} durationSeconds={aiInterview.durationSeconds} completedAt={aiInterview.completedAt} compact/></section>}
       <section className="hr-resume-section"><h3>教育背景</h3><p className="hr-resume-copy">{[profile?.school,profile?.major,profile?.education].filter(Boolean).join(' · ')||'暂无教育背景信息'}</p></section>
       <ResumeList title="工作经历" items={profile?.workHistory}/>
       <ProjectTimeline items={profile?.projectHistory}/>

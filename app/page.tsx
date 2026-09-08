@@ -16,7 +16,7 @@ export default function Home() {
     const registered = params.get('registered');
     if (registered) {
       setIdentifier(registered);
-      setMessage('注册成功，请使用刚刚设置的密码登录。');
+      setMessage('注册成功，请联系超级管理员分配角色后登录。');
       window.history.replaceState(null, '', '/');
     }
   }, []);
@@ -53,7 +53,7 @@ export default function Home() {
       setError('暂时无法连接账号服务，请稍后重试。');
       return;
     }
-    const result = await response.json().catch(() => ({})) as { message?: string };
+    const result = await response.json().catch(() => ({})) as { message?: string; role?:'super_admin'|'hr' };
     if (!response.ok) {
       setSubmitting(false);
       setError(result.message || '账号或密码错误，请检查后重新输入。');
@@ -61,7 +61,7 @@ export default function Home() {
     }
 
     setMessage('登录成功，正在进入工作台…');
-    window.setTimeout(() => window.location.assign('/workbench'), 500);
+    window.setTimeout(() => window.location.assign(result.role==='hr'?'/interviewer-candidate':'/workbench'), 500);
   }
 
   return (

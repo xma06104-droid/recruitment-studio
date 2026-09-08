@@ -7,6 +7,7 @@ export type AppAccount = {
   contact: string;
   phone: string;
   email: string;
+  role: 'super_admin' | 'hr';
   createdAt: string;
 };
 
@@ -16,6 +17,7 @@ type AccountRow = {
   phone: string;
   email: string;
   password_hash: string;
+  role: 'super_admin' | 'hr' | 'none';
   created_at: string;
 };
 
@@ -118,10 +120,10 @@ export async function accountFromRequest(request: NextRequest): Promise<AppAccou
   if (!token) return null;
   await ensureSchema();
   const tokenHash = await hashToken(token);
-  const row = await getDb().prepare(`SELECT a.id, a.contact, a.phone, a.email, a.created_at
+  const row = await getDb().prepare(`SELECT a.id, a.contact, a.phone, a.email, a.role, a.created_at
     FROM sessions s JOIN accounts a ON a.id = s.account_id
     WHERE s.token_hash = ? AND s.expires_at > ?`).bind(tokenHash, new Date().toISOString()).first<AccountRow>();
-  return row ? publicAccount(row) : null;
+  return row && row.role !== 'none' ? publicAccount(row) : null;
 }
 
 export async function removeSession(request: NextRequest) {
@@ -143,8 +145,8 @@ export function sessionExpiry() {
   return new Date(Date.now() + SESSION_SECONDS * 1000).toISOString();
 }
 
-export function publicAccount(row: Pick<AccountRow, 'id' | 'contact' | 'phone' | 'email' | 'created_at'>): AppAccount {
-  return { id: row.id, contact: row.contact, phone: row.phone, email: row.email, createdAt: row.created_at };
+export function publicAccount(row: Pick<AccountRow, 'id' | 'contact' | 'phone' | 'email' | 'role' | 'created_at'>): AppAccount {
+  return { id: row.id, contact: row.contact, phone: row.phone, email: row.email, role:row.role as AppAccount['role'], createdAt: row.created_at };
 }
 
 async function derivePassword(password: string, salt: Uint8Array) {

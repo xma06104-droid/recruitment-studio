@@ -67,6 +67,7 @@ export async function POST(request: NextRequest) {
   if (!account) return unauthorized();
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   const resource = text(body?.resource, 40);
+  if (account.role === 'hr' && !['manualAssessment', 'interview'].includes(resource)) return forbidden();
   const payload = body?.payload && typeof body.payload === 'object' ? body.payload as Record<string, unknown> : {};
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
@@ -251,6 +252,7 @@ export async function PATCH(request: NextRequest) {
   if (!account) return unauthorized();
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   const resource = text(body?.resource, 40);
+  if (account.role === 'hr' && !['candidateStage', 'interview', 'interviewStatus'].includes(resource)) return forbidden();
   const id = text(body?.id, 80);
   const payload = body?.payload && typeof body.payload === 'object' ? body.payload as Record<string, unknown> : {};
   const value = text(body?.value, 80);
@@ -350,6 +352,7 @@ export async function PATCH(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const account = await accountFromRequest(request);
   if (!account) return unauthorized();
+  if (account.role !== 'super_admin') return forbidden();
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   const resource = text(body?.resource, 40);
   const id = text(body?.id, 80);
@@ -518,4 +521,8 @@ function unauthorized() {
 
 function invalid(message: string) {
   return NextResponse.json({ ok: false, message }, { status: 400 });
+}
+
+function forbidden() {
+  return NextResponse.json({ ok: false, message: '当前 HR 账号没有管理员操作权限。' }, { status: 403 });
 }

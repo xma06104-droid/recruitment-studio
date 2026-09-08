@@ -4,7 +4,7 @@ export const AI_REPORT_PREFIX = '__AI_REPORT_V1__';
 
 export type StructuredAiInterviewResult = {
   version: 1;
-  source: 'external-report';
+  source: 'external-report' | 'system-interview';
   rating: number;
   ratingMax: number;
   duration: string;
@@ -46,13 +46,11 @@ export function parseStructuredAiResult(summary: string): StructuredAiInterviewR
 }
 
 export function aiResultScoreLabel(summary: string, fallback: number | null) {
-  const result = parseStructuredAiResult(summary);
-  return result ? `${result.rating}星` : String(fallback ?? '—');
+  return `${normalizeAiInterviewResult(summary, fallback).rating}星`;
 }
 
-export function AiInterviewResultPanel({ summary, fallbackScore, compact = false }:{ summary:string; fallbackScore:number|null; compact?:boolean }) {
-  const result = parseStructuredAiResult(summary);
-  if (!result) return null;
+export function AiInterviewResultPanel({ summary, fallbackScore, durationSeconds = null, completedAt = null, compact = false }:{ summary:string; fallbackScore:number|null; durationSeconds?:number|null; completedAt?:string|null; compact?:boolean }) {
+  const result = normalizeAiInterviewResult(summary, fallbackScore, durationSeconds, completedAt);
   const stars = Array.from({ length:result.ratingMax }, (_, index) => index < Math.round(result.rating) ? '★' : '☆').join('');
   return <div className={`structured-ai-result${compact?' compact':''}`}>
     <section className="structured-ai-hero">
@@ -61,7 +59,7 @@ export function AiInterviewResultPanel({ summary, fallbackScore, compact = false
     </section>
 
     {result.dimensions.length>0&&<section className="structured-ai-section">
-      <header><h3>核心胜任力</h3><span>原报告量纲：5 星</span></header>
+      <header><h3>能力维度与答题表现</h3><span>统一量纲：5 星</span></header>
       <div className="structured-ai-dimensions">{result.dimensions.map(item=><article key={item.name}>
         <div><b>{item.name}</b><em>{item.stars} / 5</em></div>
         <i><span style={{width:`${item.stars/5*100}%`}}/></i>
@@ -83,8 +81,72 @@ export function AiInterviewResultPanel({ summary, fallbackScore, compact = false
     </section>:null}
 
     {result.followUp&&<section className="structured-ai-followup"><span>→</span><div><h3>后续面试建议</h3><p>{result.followUp}</p></div></section>}
-    <p className="structured-ai-note">该结果来自已完成的 AI 面试报告，应结合简历、人工面试和岗位要求综合判断，不建议作为单一录用依据。{fallbackScore!==null?` 系统归一化分：${fallbackScore}。`:''}</p>
+    <p className="structured-ai-note">该结果来自已完成的 AI 面试记录，已按统一报告框架整理；应结合简历、人工面试和岗位要求综合判断，不建议作为单一录用依据。{fallbackScore!==null?` 系统原始得分：${fallbackScore}。`:''}</p>
   </div>;
+}
+
+export function normalizeAiInterviewResult(summary:string, fallbackScore:number|null, durationSeconds:number|null = null, completedAt:string|null = null):StructuredAiInterviewResult {
+  const structured=parseStructuredAiResult(summary);
+  if(structured)return structured;
+  const parsed=parseLegacyInterviewSummary(summary);
+  const score=clamp(fallbackScore,0,100);
+  const answered=parsed.items.filter(item=>item.answer&&item.answer!=='未作答').length;
+  const answerRate=parsed.items.length?Math.round(answered/parsed.items.length*100):score;
+  const weakItems=parsed.items.filter(item=>item.score<60).sort((a,b)=>a.score-b.score).slice(0,3);
+  const dimensions=parsed.items.map(item=>({
+    name:`第 ${item.number} 题 · ${item.question}`,
+    stars:Math.round(clamp(item.score,0,100)/20*10)/10,
+    suggestion:[`自动评分 ${item.score}/100`,item.keywords&&item.keywords!=='无'?`命中关键词：${item.keywords}`:'未命中配置关键词',item.answer&&item.answer!=='未作答'?`回答摘要：${item.answer.slice(0,120)}`:'本题未有效作答'].join('；'),
+  }));
+  const presentation=[
+    {name:'综合匹配度',score,max:100,comment:'基于面试题、岗位关键词和候选人实际回答生成的系统原始评分。'},
+    ...(parsed.items.length?[{name:'有效作答率',score:answerRate,max:100,comment:`共 ${parsed.items.length} 道题，其中 ${answered} 道检测到有效回答。`}]:[]),
+  ];
+  const followUp=weakItems.length
+    ? `建议后续面试重点核验：${weakItems.map(item=>item.question).join('；')}。可围绕实际项目、个人职责和量化结果继续追问。`
+    : score>=80
+      ? '整体回答与岗位要求匹配度较高，建议下一轮重点验证关键经历的真实性、复杂场景判断和协作方式。'
+      : '建议下一轮结合岗位核心职责补充追问，并要求候选人提供具体场景、个人行动和量化结果。';
+  return {
+    version:1,
+    source:'system-interview',
+    rating:Math.round(score/20*10)/10,
+    ratingMax:5,
+    duration:formatDuration(durationSeconds),
+    summary:parsed.intro||clean(summary)||'该候选人的 AI 面试已完成，暂无文字总结。',
+    dimensions,
+    presentation,
+    followUp,
+    completedAt:formatCompletedAt(completedAt),
+  };
+}
+
+function parseLegacyInterviewSummary(summary:string){
+  const blocks=summary.split(/\n{2,}(?=\d+\.\s)/);
+  const intro=(blocks.shift()||'').trim();
+  const items=blocks.map(block=>{
+    const lines=block.split('\n');
+    const heading=(lines.shift()||'').match(/^(\d+)\.\s*(.*?)（(\d+)分）\s*$/);
+    if(!heading)return null;
+    const keywordLine=lines.find(line=>line.startsWith('命中关键词：'))||'';
+    const answerIndex=lines.findIndex(line=>line.startsWith('回答：'));
+    return {number:Number(heading[1]),question:heading[2].trim(),score:Number(heading[3]),keywords:keywordLine.replace(/^命中关键词：/,'').trim()||'无',answer:answerIndex>=0?lines.slice(answerIndex).join('\n').replace(/^回答：/,'').trim():'未作答'};
+  }).filter(Boolean) as {number:number;question:string;score:number;keywords:string;answer:string}[];
+  return {intro,items};
+}
+
+function formatDuration(seconds:number|null){
+  if(seconds===null||!Number.isFinite(seconds)||seconds<=0)return '';
+  const minutes=Math.floor(seconds/60);
+  const rest=Math.round(seconds%60);
+  return minutes?`${minutes}分${rest}秒`:`${rest}秒`;
+}
+
+function formatCompletedAt(value:string|null){
+  if(!value)return '';
+  const date=new Date(value);
+  if(Number.isNaN(date.getTime()))return '';
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')} ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
 }
 
 function clean(value: unknown) {
