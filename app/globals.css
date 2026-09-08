@@ -1414,3 +1414,34 @@ input[type="date"]::-webkit-calendar-picker-indicator,input[type="datetime-local
 .hr-filter-bar select,.hr-filter-bar input{height:44px;padding:0 14px;font-size:14px}
 .hr-filter-bar button{height:44px;padding:0 16px;font-size:13px}
 .hr-filter-bar>span{font-size:14px;font-weight:650}
+
+/* Larger recruitment-progress table typography for faster scanning. */
+.progress-table-head{
+  height:52px;
+  font-size:13px;
+  font-weight:700;
+}
+.progress-row{
+  min-height:116px;
+  padding-top:18px;
+  padding-bottom:18px;
+}
+.progress-row>div{gap:9px}
+.progress-row b{
+  font-size:15px;
+  line-height:1.45;
+}
+.progress-row small,
+.progress-row time{
+  font-size:13px;
+  line-height:1.55;
+}
+.progress-record-badges span{
+  padding:5px 8px;
+  font-size:12px;
+}
+.progress-row>select{
+  height:42px;
+  padding:0 12px;
+  font-size:13px;
+}
