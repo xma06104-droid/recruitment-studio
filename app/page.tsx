@@ -12,10 +12,14 @@ export default function Home() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    const registered = new URLSearchParams(window.location.search).get('registered');
+    const params = new URLSearchParams(window.location.search);
+    const registered = params.get('registered');
     if (registered) {
       setIdentifier(registered);
       setMessage('注册成功，请使用刚刚设置的密码登录。');
+      window.history.replaceState(null, '', '/');
+    } else if (params.get('switch') === 'employer') {
+      setMessage('已退出当前用人单位，请登录需要切换到的单位账号。');
       window.history.replaceState(null, '', '/');
     }
   }, []);
