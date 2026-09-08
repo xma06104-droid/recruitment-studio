@@ -174,9 +174,9 @@ function CandidateResumeDrawer({candidate,job,profile,saving,onClose,onReview}:{
       <section className="hr-resume-section"><h3>基本信息</h3><div className="profile-info"><p><span>应聘职位</span>{job?.title||candidate.role||'-'}</p><p><span>手机号</span>{candidate.phone||'-'}</p><p><span>邮箱</span>{candidate.email||'-'}</p><p><span>所在城市</span>{candidate.city||'-'}</p><p><span>工作经验</span>{profile?.workYears!==null&&profile?.workYears!==undefined?`${profile.workYears}年`:candidate.years||'-'}</p><p><span>期望薪资</span>{profile?.expectedSalary?`${profile.expectedSalary}元/月`:'-'}</p></div></section>
       <section className="hr-resume-section"><h3>教育背景</h3><p className="hr-resume-copy">{[profile?.school,profile?.major,profile?.education].filter(Boolean).join(' · ')||'暂无教育背景信息'}</p></section>
       <ResumeList title="工作经历" items={profile?.workHistory}/>
-      <ResumeList title="项目经历" items={profile?.projectHistory}/>
+      <ProjectTimeline items={profile?.projectHistory}/>
       <section className="hr-resume-section"><h3>技能与证书</h3><div className="channel-tags">{[...candidate.skills,...(profile?.certificates||[])].length?[...candidate.skills,...(profile?.certificates||[])].map((item,index)=><span key={`${item}-${index}`}>{item}</span>):<p className="hr-resume-copy">暂无技能与证书信息</p>}</div></section>
-      {(profile?.highlights.length||profile?.risks.length)?<section className="hr-resume-section hr-resume-insights"><h3>AI 简历摘要</h3>{profile?.highlights.map((item,index)=><p className="highlight" key={`highlight-${index}`}>优势 · {item}</p>)}{profile?.risks.map((item,index)=><p className="risk" key={`risk-${index}`}>关注 · {item}</p>)}</section>:null}
+      {(profile?.highlights.length||profile?.risks.length)?<section className="hr-resume-section hr-resume-insights"><h3>AI 简历摘要</h3>{profile?.highlights.length?<div className="hr-insight-group highlight"><b>优势</b><div>{profile.highlights.map((item,index)=><span key={`highlight-${index}`}>{item}</span>)}</div></div>:null}{profile?.risks.length?<div className="hr-insight-group risk"><b>关注</b><div>{profile.risks.map((item,index)=><span key={`risk-${index}`}>{item}</span>)}</div></div>:null}</section>:null}
       {profile?.fileName?<a className="hr-resume-file" href={`/api/screening/file?candidateId=${encodeURIComponent(candidate.id)}`} target="_blank" rel="noreferrer">查看原始简历 · {profile.fileName}</a>:<p className="hr-resume-copy hr-resume-file-empty">未找到可预览的原始简历文件</p>}
     </aside>
   </div>;
@@ -184,6 +184,38 @@ function CandidateResumeDrawer({candidate,job,profile,saving,onClose,onReview}:{
 
 function ResumeList({title,items}:{title:string;items:string[]|undefined}){
   return <section className="hr-resume-section"><h3>{title}</h3>{items?.length?<div className="hr-resume-list">{items.map((item,index)=><p key={`${title}-${index}`}>{item}</p>)}</div>:<p className="hr-resume-copy">暂无{title}信息</p>}</section>;
+}
+
+function ProjectTimeline({items}:{items:string[]|undefined}){
+  const projects=groupProjectHistory(items||[]);
+  return <section className="hr-resume-section"><h3>项目经历</h3>{projects.length?<div className="hr-project-timeline">{projects.map((project,index)=><article key={`${project.period}-${index}`}><time>{project.period}</time><div>{project.details.length?project.details.map((detail,detailIndex)=><p key={`${project.period}-${detailIndex}`}>{detail}</p>):<p>暂无详细项目描述</p>}</div></article>)}</div>:<p className="hr-resume-copy">暂无项目经历信息</p>}</section>;
+}
+
+function groupProjectHistory(items:string[]){
+  const dateRange=/^((?:19|20)\d{2}(?:[.\/\-年]\d{1,2})?\s*(?:至|到|[-—–~～])\s*(?:(?:19|20)\d{2}(?:[.\/\-年]\d{1,2})?|至今|现在|今))(?:\s*[\u00b7|｜]\s*|\s+)?(.*)$/i;
+  const parsed=items.map(item=>{const match=item.trim().match(dateRange);return {period:match?.[1]?.replace(/\s+/g,'')||'',detail:match?match[2].trim():item.trim()}}).filter(item=>item.period||item.detail);
+  const dateIndexes=parsed.map((item,index)=>item.period?index:-1).filter(index=>index>=0);
+  if(!dateIndexes.length)return parsed.map((item,index)=>({period:`项目 ${String(index+1).padStart(2,'0')}`,details:[item.detail]}));
+
+  const leadingDates=dateIndexes.length>1&&dateIndexes.every((index,position)=>index===position)&&parsed.slice(dateIndexes.length).every(item=>!item.period);
+  if(leadingDates){
+    const periods=parsed.slice(0,dateIndexes.length).map(item=>item.period);
+    const details=parsed.slice(dateIndexes.length).map(item=>item.detail).filter(Boolean);
+    return periods.map((period,index)=>({period,details:details.slice(Math.floor(index*details.length/periods.length),Math.floor((index+1)*details.length/periods.length))})).sort((a,b)=>projectDateValue(b.period)-projectDateValue(a.period));
+  }
+
+  const groups:{period:string;details:string[]}[]=[];
+  for(const item of parsed){
+    if(item.period)groups.push({period:item.period,details:item.detail?[item.detail]:[]});
+    else if(groups.length)groups[groups.length-1].details.push(item.detail);
+    else groups.push({period:'时间未标注',details:[item.detail]});
+  }
+  return groups.sort((a,b)=>projectDateValue(b.period)-projectDateValue(a.period));
+}
+
+function projectDateValue(value:string){
+  const match=value.match(/((?:19|20)\d{2})[.\/年-]?(\d{1,2})?/);
+  return match?Number(match[1])*100+Number(match[2]||1):0;
 }
 
 function candidateReviewStatus(stage:string):ReviewStatus {
