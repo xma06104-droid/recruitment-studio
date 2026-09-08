@@ -8,7 +8,13 @@ type Candidate = { id:string; jobId:string|null; name:string; role:string; compa
 type Dataset = { account:Account; jobs:Job[]; candidates:Candidate[] };
 type ReviewStatus = '待筛选'|'已通过'|'已拒绝'|'待定'|'已失效';
 
-const menuItems = [['◉','候选人筛选'],['▤','人工评估'],['▣','面试管理'],['▥','招聘进展'],['⚙','设置']];
+const menuItems = [
+  {icon:'◉',label:'候选人筛选',href:'/interviewer-candidate'},
+  {icon:'▤',label:'人工评估',href:'/assessment'},
+  {icon:'▣',label:'面试管理',href:'/workbench'},
+  {icon:'▥',label:'招聘进展',href:'/workbench'},
+  {icon:'⚙',label:'设置',href:'/workbench'},
+];
 const reviewStatuses:ReviewStatus[] = ['待筛选','已通过','已拒绝','待定','已失效'];
 
 export default function InterviewerCandidateClient() {
@@ -51,7 +57,7 @@ export default function InterviewerCandidateClient() {
     <aside className="interviewer-rail">
       <a className="interviewer-logo" href="/workbench" aria-label="返回星鉴人才招聘工作台"><span>星</span><b>星鉴人才<small>HIRING DEPARTMENT</small></b></a>
       <p className="interviewer-role-label">HR 工作台</p>
-      <nav>{menuItems.map(([icon,label],index)=><a key={label} className={index===0?'active':''} href={index===0?'/interviewer-candidate':'/workbench'} title={label}><i>{icon}</i><span>{label}</span></a>)}</nav>
+      <nav>{menuItems.map((item,index)=><a key={item.label} className={index===0?'active':''} href={item.href} title={item.label}><i>{item.icon}</i><span>{item.label}</span></a>)}</nav>
       <button type="button" title="收起菜单">«</button>
     </aside>
 
