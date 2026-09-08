@@ -1318,6 +1318,27 @@ input[type="date"]::-webkit-calendar-picker-indicator,input[type="datetime-local
 .interviewer-wechat{position:fixed;z-index:36;right:23px;top:220px;width:46px;height:46px;border:0;border-radius:50%;color:#fff;background:#57bd63;box-shadow:0 2px 9px rgba(0,0,0,.14);font-size:10px;cursor:pointer}.interviewer-floating{position:fixed;z-index:35;right:16px;top:410px;display:flex;flex-direction:column;gap:11px}.interviewer-floating button{width:132px;height:44px;border:2px solid var(--iv-blue);border-radius:24px;color:#1595d7;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.04);font-size:13px;cursor:pointer}.interviewer-toast{position:fixed;z-index:60;left:50%;bottom:36px;padding:12px 20px;border-radius:4px;color:#fff;background:rgba(35,39,42,.9);box-shadow:0 9px 28px rgba(0,0,0,.18);font-size:13px;transform:translateX(-50%)}.interviewer-loading{min-height:100vh;display:grid;place-content:center;justify-items:center;gap:14px;color:#555;background:#f3f4f5}.interviewer-loading>span{width:48px;height:48px;display:grid;place-items:center;border:3px solid #fff;border-radius:50%;color:#fff;background:#159ee8;box-shadow:0 6px 20px rgba(24,159,230,.2)}.interviewer-loading>button{height:34px;padding:0 14px;border:0;border-radius:4px;color:#fff;background:#159ee8}
 @media(max-width:1120px){.interviewer-tools .interviewer-help,.interviewer-tools .interviewer-tool-icon,.interviewer-floating,.interviewer-wechat{display:none}.interviewer-global-search{width:190px}.interviewer-content{grid-template-columns:230px minmax(700px,1fr)}.interviewer-filter-panel{padding-left:11px;padding-right:11px}}
 
+/* HR subsite navigation keeps the Star Talent brand and the primary site's dark shell. */
+.interviewer-page{min-width:0}
+.interviewer-rail{width:252px;align-items:stretch;padding:28px 18px 20px;border-right:1px solid rgba(164,184,214,.1);background:linear-gradient(180deg,#050b15,#081221 55%,#0b1426);box-shadow:14px 0 45px rgba(0,4,14,.3)}
+.interviewer-logo{width:auto;height:58px;display:flex;align-items:flex-start;gap:13px;margin:0 8px 25px;border:0;border-radius:0;color:#f6f9ff;background:transparent;box-shadow:none;font-size:18px}
+.interviewer-logo>span{width:43px;height:43px;display:grid;flex:0 0 auto;place-items:center;border:1px solid rgba(255,255,255,.18);border-radius:15px;color:#fff;background:linear-gradient(145deg,#23c9df,#377dff);box-shadow:0 13px 34px rgba(47,153,224,.26);font-size:17px;font-weight:800}
+.interviewer-logo>b{display:flex;flex-direction:column;padding-top:5px;color:#f6f9ff;font-size:18px;line-height:1.1;white-space:nowrap}
+.interviewer-logo small{margin-top:11px;color:#52627a;font-size:7px;font-weight:600;letter-spacing:.18em}
+.interviewer-role-label{margin:0 13px 10px;color:#52627a;font-size:10px;font-weight:700;letter-spacing:.18em}
+.interviewer-rail nav{display:flex;flex:1;flex-direction:column}
+.interviewer-rail nav a{width:100%;height:49px;display:flex;align-items:center;gap:13px;margin:3px 0;padding:0 14px;border:1px solid transparent;border-radius:14px;color:#8d9bb0;background:transparent;font-size:14px;font-weight:600;transition:.2s ease}
+.interviewer-rail nav a:hover{border-color:rgba(162,181,211,.09);color:#eef8ff;background:rgba(64,106,152,.14)}
+.interviewer-rail nav a.active{border-color:transparent;color:#f6f9ff;background:linear-gradient(100deg,rgba(22,116,151,.28),rgba(48,91,170,.22));box-shadow:inset 3px 0 #45d3ea,0 15px 34px rgba(0,4,16,.22)}
+.interviewer-rail nav a.active:before{display:none}
+.interviewer-rail nav i{width:21px;color:#9caec4;font-size:18px;font-style:normal;text-align:center}
+.interviewer-rail nav a.active i{color:#eafcff}
+.interviewer-rail>button{height:42px;border:1px solid rgba(162,181,211,.09);border-radius:12px;color:#7f8ea5;background:#0e182b}
+.interviewer-main{margin-left:252px}
+.interviewer-heading small{display:block;color:#8796aa;font-size:10px;font-weight:500}
+.interviewer-account-copy{display:flex;min-width:74px;flex-direction:column}.interviewer-account-copy b{color:#273246;font-size:11px}.interviewer-account-copy small{margin-top:2px;color:#8e98a6;font-size:9px}
+@media(max-width:760px){.interviewer-rail{width:74px;padding:22px 10px}.interviewer-logo{justify-content:center;margin:0 0 25px}.interviewer-logo>b,.interviewer-role-label,.interviewer-rail nav a>span{display:none}.interviewer-rail nav a{justify-content:center;padding:0}.interviewer-main{margin-left:74px}.interviewer-account-copy{display:none}}
+
 /* Dashboard schedules stay legible on the dark workbench. */
 .today-panel .schedule-line{padding:12px 14px 13px 17px;border:1px solid rgba(151,177,211,.12);border-left:3px solid #7368ee;border-radius:11px;background:radial-gradient(circle at 100% 0,rgba(83,106,211,.12),transparent 48%),linear-gradient(135deg,#0c1728,#142139);box-shadow:inset 0 1px 0 rgba(255,255,255,.025)}
 .today-panel .schedule-line:before{left:-6px;top:15px;width:7px;height:7px;border:2px solid #101c30;background:#7368ee}

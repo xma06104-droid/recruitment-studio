@@ -8,7 +8,7 @@ type Candidate = { id:string; jobId:string|null; name:string; role:string; compa
 type Dataset = { account:Account; jobs:Job[]; candidates:Candidate[] };
 type ReviewStatus = '待筛选'|'已通过'|'已拒绝'|'待定'|'已失效';
 
-const menuItems = [['⌂','工作台'],['▤','候选人筛选'],['▣','招聘职位'],['◷','面试管理'],['▥','人才库'],['▦','数据报表'],['⚙','设置']];
+const menuItems = [['◉','候选人筛选'],['▤','人工评估'],['▣','面试管理'],['▥','招聘进展'],['⚙','设置']];
 const reviewStatuses:ReviewStatus[] = ['待筛选','已通过','已拒绝','待定','已失效'];
 
 export default function InterviewerCandidateClient() {
@@ -45,28 +45,29 @@ export default function InterviewerCandidateClient() {
   function toggleAll(){setSelected(allSelected?selected.filter(id=>!candidates.some(candidate=>candidate.id===id)):[...new Set([...selected,...candidates.map(candidate=>candidate.id)])])}
   function runAction(message:string){flash(selected.length?`${message}：已选择 ${selected.length} 位候选人`:'请先选择候选人')}
 
-  if(!data)return <main className="interviewer-loading"><span>得</span><b>{error||'正在读取候选人数据…'}</b>{error&&<button onClick={()=>window.location.reload()}>重新加载</button>}</main>;
+  if(!data)return <main className="interviewer-loading"><span>星</span><b>{error||'正在读取候选人数据…'}</b>{error&&<button onClick={()=>window.location.reload()}>重新加载</button>}</main>;
 
   return <main className="interviewer-page">
     <aside className="interviewer-rail">
-      <a className="interviewer-logo" href="/workbench" aria-label="返回招聘工作台">得</a>
-      <nav>{menuItems.map(([icon,label],index)=><a key={label} className={index===1?'active':''} href={index===1?'/interviewer-candidate':'/workbench'} title={label}><i>{icon}</i></a>)}</nav>
+      <a className="interviewer-logo" href="/workbench" aria-label="返回星鉴人才招聘工作台"><span>星</span><b>星鉴人才<small>HIRING DEPARTMENT</small></b></a>
+      <p className="interviewer-role-label">HR 工作台</p>
+      <nav>{menuItems.map(([icon,label],index)=><a key={label} className={index===0?'active':''} href={index===0?'/interviewer-candidate':'/workbench'} title={label}><i>{icon}</i><span>{label}</span></a>)}</nav>
       <button type="button" title="收起菜单">«</button>
     </aside>
 
     <section className="interviewer-main">
       <header className="interviewer-header">
-        <div className="interviewer-heading"><button type="button">☰</button><h1>候选人筛选</h1></div>
+        <div className="interviewer-heading"><h1>候选人筛选</h1><small>HR 候选人工作台</small></div>
         <div className="interviewer-tools">
           <div className="interviewer-global-search"><input placeholder="全局搜索，请输入关键字"/><button type="button">⌕</button></div>
           <button type="button" className="interviewer-add" onClick={()=>window.location.assign('/workbench')}>＋ 添加职位/简历</button>
           <button type="button" className="interviewer-help" onClick={()=>flash('帮助中心')}>◉ 帮助中心</button>
           <button type="button" className="interviewer-tool-icon" onClick={()=>flash('消息中心')}>♧</button>
           <button type="button" className="interviewer-tool-icon" onClick={()=>flash('通知中心')}>♢</button>
-          <span className="interviewer-avatar">{data.account.contact.slice(0,1)}</span><i>⌄</i>
+          <span className="interviewer-avatar">{data.account.contact.slice(0,1)}</span><div className="interviewer-account-copy"><b>{data.account.contact}</b><small>HR 招聘</small></div><i>⌄</i>
         </div>
       </header>
-      <div className="interviewer-open-tabs"><a href="/workbench">工作台　×</a><button type="button">人工评估　×</button><button type="button" className="active">● 候选人筛选　×</button><span>清空</span></div>
+      <div className="interviewer-open-tabs"><a href="/workbench">招聘管理</a><i>›</i><button type="button" className="active">候选人筛选</button><span>当前角色：HR</span></div>
 
       <div className="interviewer-content">
         <aside className="interviewer-filter-panel">
