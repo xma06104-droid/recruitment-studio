@@ -103,7 +103,7 @@ export default function InterviewerCandidateClient() {
               <label><input type="checkbox" checked={selected.includes(candidate.id)} onChange={()=>setSelected(selected.includes(candidate.id)?selected.filter(id=>id!==candidate.id):[...selected,candidate.id])}/></label>
               <div className="interviewer-candidate-profile"><p>{job?.title||candidate.role||'未关联职位'}　{formatDate(candidate.createdAt)}申请 <i>▣</i></p><h3>{candidate.name}<b>{candidate.score===null?'—':Math.max(1,Math.round(candidate.score/20))}</b><span>{candidate.city||'城市未填写'}</span>{candidate.years&&<span>{candidate.years}工作经验</span>}</h3><p>◼ {candidate.company||'最近公司未填写'}　{candidate.role||'职位未填写'}　{candidate.skills.slice(0,2).join('｜')||'暂无技能标签'}</p></div>
               <div className="interviewer-candidate-owner"><p>候选人所有者： <b>{job?.ownerName||data.account.contact}</b>　<i>□</i>　<em>♧</em></p><p>推荐状态： <span>◢ {status==='已通过'?'已通过':status==='已拒绝'?'已拒绝':'未推荐'}</span></p></div>
-              <div className="interviewer-candidate-note"><p>推荐人：{candidate.source||'-'}</p><p>推荐时间：{formatDate(candidate.updatedAt)}</p><p>最近备注： -</p></div>
+              <div className="interviewer-candidate-note"><p>推荐时间：{formatDate(candidate.updatedAt)}</p><p>最近备注： -</p></div>
             </article>}):<div className="interviewer-empty"><span>⌕</span><b>暂无候选人</b><p>当前筛选条件下没有候选人记录</p></div>}
           </div>
           <footer className="interviewer-pagination"><span>共 {candidates.length} 条</span><button type="button" disabled>‹</button><button type="button" className="active">1</button><button type="button" disabled>›</button><select><option>10条/页</option><option>20条/页</option></select><label>前往 <input defaultValue="1"/> 页</label></footer>
