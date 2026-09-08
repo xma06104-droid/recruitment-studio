@@ -11,8 +11,8 @@ type ReviewStatus = '待筛选'|'已通过'|'已拒绝'|'待定'|'已失效';
 const menuItems = [
   {icon:'◉',label:'候选人筛选',href:'/interviewer-candidate'},
   {icon:'▤',label:'人工评估',href:'/assessment'},
-  {icon:'▣',label:'面试管理',href:'/workbench'},
-  {icon:'▥',label:'招聘进展',href:'/workbench'},
+  {icon:'▣',label:'面试管理',href:'/interview-management'},
+  {icon:'▥',label:'招聘进展',href:'/recruitment-progress'},
   {icon:'⚙',label:'设置',href:'/workbench'},
 ];
 const reviewStatuses:ReviewStatus[] = ['待筛选','已通过','已拒绝','待定','已失效'];

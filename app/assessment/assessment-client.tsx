@@ -11,8 +11,8 @@ type Assessment = { total:number; professional:number; communication:number; cul
 const menuItems = [
   {icon:'◉',label:'候选人筛选',href:'/interviewer-candidate'},
   {icon:'▤',label:'人工评估',href:'/assessment'},
-  {icon:'▣',label:'面试管理',href:'/workbench'},
-  {icon:'▥',label:'招聘进展',href:'/workbench'},
+  {icon:'▣',label:'面试管理',href:'/interview-management'},
+  {icon:'▥',label:'招聘进展',href:'/recruitment-progress'},
   {icon:'⚙',label:'设置',href:'/workbench'},
 ];
 
