@@ -232,12 +232,12 @@ export async function POST(request: NextRequest) {
     const candidate = candidateId ? await db.prepare('SELECT role FROM candidates WHERE id = ? AND owner_id = ?').bind(candidateId, account.id).first<{ role: string }>() : null;
     if (!candidate) return invalid('请选择有效候选人。');
     const score = integer(payload.score, 0, 100, -1);
-    const summary = text(payload.summary, 4000);
+    const summary = text(payload.summary, 12000);
     if (score < 0 || !summary) return invalid('请填写真实面试得分和总结。');
     await db.batch([
       db.prepare(`INSERT INTO ai_interviews (id, owner_id, candidate_id, job_title, status, score, duration_seconds, summary, completed_at, created_at, updated_at)
         VALUES (?, ?, ?, ?, '已完成', ?, ?, ?, ?, ?, ?)`).bind(id, account.id, candidateId, text(payload.jobTitle, 100) || candidate.role, score, integer(payload.durationMinutes, 1, 600, 1) * 60, summary, now, now, now),
-      db.prepare('UPDATE candidates SET score = ?, updated_at = ? WHERE id = ? AND owner_id = ?').bind(score, now, candidateId, account.id),
+      db.prepare("UPDATE candidates SET score = ?, stage = '待沟通', updated_at = ? WHERE id = ? AND owner_id = ?").bind(score, now, candidateId, account.id),
     ]);
   } else {
     return invalid('不支持的数据类型。');

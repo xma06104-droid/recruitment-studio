@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { announceWorkbenchChange, useWorkbenchSync } from '@/app/workbench-sync';
+import { AiInterviewResultPanel } from '@/app/components/ai-interview-result';
 
 type Account = { contact:string; phone:string; email:string };
 type Job = { id:string; title:string; department:string; city:string; status:string; ownerName:string; createdAt:string };
 type Candidate = { id:string; jobId:string|null; name:string; role:string; company:string; years:string; stage:string; source:string; skills:string[]; score:number|null; phone:string; email:string; city:string; createdAt:string; updatedAt:string };
-type Dataset = { account:Account; jobs:Job[]; candidates:Candidate[] };
+type AiInterview = { id:string; candidateId:string; jobTitle:string; status:string; score:number|null; durationSeconds:number|null; summary:string; completedAt:string|null; createdAt:string; updatedAt:string };
+type Dataset = { account:Account; jobs:Job[]; candidates:Candidate[]; aiInterviews:AiInterview[] };
 type Profile = { candidateId:string; education:string; major:string; school:string; age:number|null; gender:string; industry:string; expectedSalary:number|null; workYears:number|null; stabilityMonths:number|null; workHistory:string[]; projectHistory:string[]; certificates:string[]; highlights:string[]; risks:string[]; parsingStatus:string; fileName:string; fileType:string; fileSize:number; matchScore:number|null; matchLevel:string; updatedAt:string };
 type ScreeningData = { profiles:Profile[] };
 type ReviewStatus = '待筛选'|'已通过'|'已拒绝'|'待定'|'已失效';
@@ -64,6 +66,7 @@ export default function InterviewerCandidateClient() {
   const currentJob=jobId?data?.jobs.find(job=>job.id===jobId):null;
   const detailCandidate=detailId?data?.candidates.find(candidate=>candidate.id===detailId):undefined;
   const detailProfile=detailCandidate?profiles.find(profile=>profile.candidateId===detailCandidate.id):undefined;
+  const detailAiInterview=detailCandidate?data?.aiInterviews.find(report=>report.candidateId===detailCandidate.id):undefined;
 
   function flash(message:string){setToast(message);window.setTimeout(()=>setToast(''),2200)}
   function toggleAll(){setSelected(allSelected?selected.filter(id=>!candidates.some(candidate=>candidate.id===id)):[...new Set([...selected,...candidates.map(candidate=>candidate.id)])])}
@@ -150,6 +153,7 @@ export default function InterviewerCandidateClient() {
       candidate={detailCandidate}
       job={data.jobs.find(job=>job.id===detailCandidate.jobId)}
       profile={detailProfile}
+      aiInterview={detailAiInterview}
       saving={savingId===detailCandidate.id}
       onClose={()=>setDetailId('')}
       onReview={action=>void updateReview(detailCandidate,action)}
@@ -158,7 +162,7 @@ export default function InterviewerCandidateClient() {
   </main>;
 }
 
-function CandidateResumeDrawer({candidate,job,profile,saving,onClose,onReview}:{candidate:Candidate;job:Job|undefined;profile:Profile|undefined;saving:boolean;onClose:()=>void;onReview:(action:ReviewAction)=>void}){
+function CandidateResumeDrawer({candidate,job,profile,aiInterview,saving,onClose,onReview}:{candidate:Candidate;job:Job|undefined;profile:Profile|undefined;aiInterview:AiInterview|undefined;saving:boolean;onClose:()=>void;onReview:(action:ReviewAction)=>void}){
   const status=candidateDisplayStatus(candidate.stage);
   return <div className="drawer-backdrop hr-resume-backdrop" onMouseDown={onClose}>
     <aside className="detail-drawer candidate-drawer hr-resume-drawer" aria-label={`${candidate.name}的简历`} onMouseDown={event=>event.stopPropagation()}>
@@ -172,6 +176,7 @@ function CandidateResumeDrawer({candidate,job,profile,saving,onClose,onReview}:{
       </div>
       {saving&&<p className="hr-resume-saving">正在同步审核结果…</p>}
       <section className="hr-resume-section"><h3>基本信息</h3><div className="profile-info"><p><span>应聘职位</span>{job?.title||candidate.role||'-'}</p><p><span>手机号</span>{candidate.phone||'-'}</p><p><span>邮箱</span>{candidate.email||'-'}</p><p><span>所在城市</span>{candidate.city||'-'}</p><p><span>工作经验</span>{profile?.workYears!==null&&profile?.workYears!==undefined?`${profile.workYears}年`:candidate.years||'-'}</p><p><span>期望薪资</span>{profile?.expectedSalary?`${profile.expectedSalary}元/月`:'-'}</p></div></section>
+      {aiInterview&&<section className="hr-resume-section hr-ai-interview-result"><h3>AI 面试结果</h3><AiInterviewResultPanel summary={aiInterview.summary} fallbackScore={aiInterview.score} compact/></section>}
       <section className="hr-resume-section"><h3>教育背景</h3><p className="hr-resume-copy">{[profile?.school,profile?.major,profile?.education].filter(Boolean).join(' · ')||'暂无教育背景信息'}</p></section>
       <ResumeList title="工作经历" items={profile?.workHistory}/>
       <ProjectTimeline items={profile?.projectHistory}/>

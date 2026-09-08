@@ -4,6 +4,7 @@ import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'reac
 import ScreeningWorkspace, { preloadScreeningData } from './screening-workspace';
 import { buildSpeechHints, contextualizeSpeechTranscript, selectContextualSpeechTranscript } from '@/app/speech-context';
 import { announceWorkbenchChange, useWorkbenchSync } from '@/app/workbench-sync';
+import { AiInterviewResultPanel, parseStructuredAiResult } from '@/app/components/ai-interview-result';
 
 type Account = { id:string; contact:string; phone:string; email:string; createdAt:string };
 type Job = { id:string; title:string; department:string; city:string; status:string; headcount:number; ownerName:string; createdAt:string; updatedAt:string };
@@ -569,12 +570,15 @@ function parseInterviewSummary(summary:string){
 }
 
 function AiSummary({report,person}:{report:AiInterview;person?:Candidate}){
+  const structured=parseStructuredAiResult(report.summary);
   const parsed=parseInterviewSummary(report.summary);
   return <article className="ai-summary-report">
-    <header><div><span>{person?.name.slice(0,1)||'候'}</span><div><h2>{person?.name||'候选人'} · AI 面试总结</h2><p>{report.jobTitle} · 用时 {durationText(report.durationSeconds)} · {report.completedAt?formatDate(report.completedAt):'时间未记录'}</p></div></div></header>
-    <section className="ai-summary-overview"><div className="ai-score-ring"><strong>{report.score??'—'}</strong><small>综合得分</small></div><div><span>面试结果</span><h3>{report.status}</h3><p>{parsed.items.length?parsed.intro:report.summary}</p><time className="ai-summary-completed">回答完成时间：{report.completedAt?formatDateTime(report.completedAt):'未记录'}</time><em>记录已保存</em></div></section>
-    {parsed.items.length>0&&<section className="ai-answer-breakdown"><header><span>面试题目</span><span>候选人回答</span></header>{parsed.items.map(item=><article key={`${item.number}-${item.question}`}><div className="ai-answer-question"><span>第 {item.number} 题</span><h4>{item.question}</h4><em>{item.score} 分</em></div><div className="ai-answer-response"><p>{item.answer||'未作答'}</p><small>命中关键词：{item.keywords}</small></div></article>)}</section>}
-    <section className="ai-followup-advice"><span>✓</span><div><h3>评分说明</h3><p>自动面试按题目配置的评分关键词与参考回答进行匹配评分，并保留候选人的实际回答；人工录入的历史结果继续按原样展示。</p></div></section>
+    <header><div><span>{person?.name.slice(0,1)||'候'}</span><div><h2>{person?.name||'候选人'} · AI 面试总结</h2><p>{report.jobTitle} · 用时 {structured?.duration||durationText(report.durationSeconds)} · {structured?.completedAt||(report.completedAt?formatDate(report.completedAt):'时间未记录')}</p></div></div></header>
+    {structured?<AiInterviewResultPanel summary={report.summary} fallbackScore={report.score}/>:<>
+      <section className="ai-summary-overview"><div className="ai-score-ring"><strong>{report.score??'—'}</strong><small>综合得分</small></div><div><span>面试结果</span><h3>{report.status}</h3><p>{parsed.items.length?parsed.intro:report.summary}</p><time className="ai-summary-completed">回答完成时间：{report.completedAt?formatDateTime(report.completedAt):'未记录'}</time><em>记录已保存</em></div></section>
+      {parsed.items.length>0&&<section className="ai-answer-breakdown"><header><span>面试题目</span><span>候选人回答</span></header>{parsed.items.map(item=><article key={`${item.number}-${item.question}`}><div className="ai-answer-question"><span>第 {item.number} 题</span><h4>{item.question}</h4><em>{item.score} 分</em></div><div className="ai-answer-response"><p>{item.answer||'未作答'}</p><small>命中关键词：{item.keywords}</small></div></article>)}</section>}
+      <section className="ai-followup-advice"><span>✓</span><div><h3>评分说明</h3><p>自动面试按题目配置的评分关键词与参考回答进行匹配评分，并保留候选人的实际回答；人工录入的历史结果继续按原样展示。</p></div></section>
+    </>}
   </article>
 }
 
@@ -672,6 +676,7 @@ function PasswordModal({close,submit,error,submitting}:{close:()=>void;submit:(d
 function JobDrawer({job,candidates,interviews,offers,close,edit}:{job:Job;candidates:Candidate[];interviews:Interview[];offers:Offer[];close:()=>void;edit:()=>void}){const people=candidates.filter(item=>item.jobId===job.id);const interviewCount=interviews.filter(item=>people.some(person=>person.id===item.candidateId)).length;const offerCount=offers.filter(item=>people.some(person=>person.id===item.candidateId)).length;const counts=[['收到简历',people.length],['进入流程',people.filter(item=>stageIndex(item.stage)>=1).length],['进入面试',people.filter(item=>stageIndex(item.stage)>=2).length],['Offer',offerCount]] as [string,number][];const max=Math.max(1,people.length);return <div className="drawer-backdrop" onMouseDown={close}><aside className="detail-drawer" onMouseDown={event=>event.stopPropagation()}><button className="drawer-close" onClick={close}>×</button><span className="drawer-label">真实职位详情</span><h2>{job.title}</h2><p>{jobMeta(job)}　负责人：{job.ownerName}</p><div className="drawer-actions"><button type="button" onClick={edit}>编辑职位信息</button></div><div className="drawer-kpis"><div><b>{people.length}</b><small>候选人</small></div><div><b>{people.filter(item=>!['待初筛','初筛淘汰','淘汰人才库','已淘汰'].includes(item.stage)).length}</b><small>流程中</small></div><div><b>{interviewCount}</b><small>面试记录</small></div></div><section><h3>职位进度</h3><div className="pipeline">{counts.map(([label,count])=><div key={label}><span>{label}</span><i><em style={{width:`${count/max*100}%`}}/></i><b>{count}</b></div>)}</div></section><section><h3>数据说明</h3><p className="drawer-note">以上数字均根据与该职位实际关联的候选人、面试及 Offer 记录统计。</p></section></aside></div>}
 function CandidateInterviewAssessment({report}:{report?:AiInterview}){
   if(!report)return <div className="ai-assessment"><p><b>暂无记录</b>尚未录入该候选人的已完成 AI 面试结果。</p></div>;
+  if(parseStructuredAiResult(report.summary))return <AiInterviewResultPanel summary={report.summary} fallbackScore={report.score} compact/>;
   const parsed=parseInterviewSummary(report.summary);
   if(!parsed.items.length)return <div className="ai-assessment"><p><b>真实总结</b>{report.summary}</p></div>;
   return <div className="ai-assessment drawer-ai-assessment">
