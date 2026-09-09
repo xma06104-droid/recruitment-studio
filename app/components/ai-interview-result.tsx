@@ -49,6 +49,15 @@ export function aiResultScoreLabel(summary: string, fallback: number | null) {
   return `${normalizeAiInterviewResult(summary, fallback).rating}星`;
 }
 
+export function aiInterviewQuestionTotal(summary:string,fallbackScore:number|null){
+  const result=normalizeAiInterviewResult(summary,fallbackScore);
+  if(result.source!=='system-interview'||result.dimensions.length===0)return null;
+  return {
+    score:result.dimensions.reduce((total,item)=>total+item.stars,0),
+    max:result.dimensions.length*5,
+  };
+}
+
 export function AiInterviewResultPanel({ summary, fallbackScore, durationSeconds = null, completedAt = null, compact = false }:{ summary:string; fallbackScore:number|null; durationSeconds?:number|null; completedAt?:string|null; compact?:boolean }) {
   const result = normalizeAiInterviewResult(summary, fallbackScore, durationSeconds, completedAt);
   const usesQuestionTotal=result.source==='system-interview'&&result.dimensions.length>0;
