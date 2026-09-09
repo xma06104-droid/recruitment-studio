@@ -1664,6 +1664,13 @@ input[type="date"]::-webkit-calendar-picker-indicator,input[type="datetime-local
 .hr-resume-note footer{display:flex;align-items:center;justify-content:flex-end;gap:9px}.hr-resume-note footer small{margin-right:auto;color:#70839a;font-size:10px}.hr-resume-note footer button{height:36px;padding:0 13px;border:1px solid rgba(162,181,211,.14);border-radius:9px;color:#aebed0;background:#15233a;font-size:12px;font-weight:750;cursor:pointer}.hr-resume-note footer button[type="submit"]{border:0;color:#fff;background:linear-gradient(110deg,#18afc5,#347ce4)}
 .interviewer-job-list span{font-size:16px;font-weight:750;line-height:1.35}.interviewer-job-list small{margin-top:6px;font-size:13px;line-height:1.3}.interviewer-job-list button{min-height:66px}
 .interviewer-open-tabs{height:50px}.interviewer-open-tabs a,.interviewer-open-tabs button{font-size:14px;font-weight:700}.interviewer-open-tabs>i{font-size:14px}
+
+/* Keep the assessment list legible at desktop and compact viewport widths. */
+.assessment-list-card>header>span{padding:8px 12px;font-size:13px;line-height:1.35}
+.assessment-row{min-height:176px;grid-template-columns:minmax(320px,1.2fr) minmax(205px,.72fr) minmax(205px,.66fr) 122px}
+.assessment-profile p{font-size:13px;line-height:1.5}.assessment-profile h3{font-size:20px}.assessment-profile h3 span{font-size:12px}.assessment-profile small{font-size:13px;line-height:1.65}
+.assessment-metrics p{margin-bottom:13px;font-size:13px;line-height:1.45}.assessment-metrics b{font-size:14px}
+.assessment-stars{gap:8px}.assessment-stars span{font-size:13px}.assessment-stars b{font-size:22px;line-height:1.15}.assessment-stars small{font-size:13px;line-height:1.45}
 @media(max-width:620px){.hr-project-timeline article{grid-template-columns:1fr}.hr-project-timeline article>strong{padding-bottom:8px;border-bottom:1px solid rgba(162,181,211,.08)}.hr-resume-file-actions{grid-template-columns:1fr}}
 @media print{
   body{background:#fff!important}
