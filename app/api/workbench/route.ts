@@ -152,6 +152,9 @@ export async function POST(request: NextRequest) {
     const candidateId = text(payload.candidateId, 80);
     const candidate = candidateId ? await db.prepare('SELECT name, role, email FROM candidates WHERE id = ? AND owner_id = ?').bind(candidateId, account.id).first<{ name: string; role: string; email: string }>() : null;
     if (!candidate) return invalid('请选择有效候选人。');
+    const completedInterview = await db.prepare(`SELECT id FROM interviews WHERE candidate_id = ? AND owner_id = ?
+      AND status = '已完成' AND COALESCE(round, '') <> 'AI 初面' LIMIT 1`).bind(candidateId, account.id).first<{id:string}>();
+    if (!completedInterview) return invalid('完成人工面试后，才能进入录用阶段。');
     const salary = text(payload.salary, 80);
     const deadline = text(payload.deadline, 40);
     if (!salary || !deadline || Number.isNaN(Date.parse(deadline))) return invalid('请填写薪资方案和有效截止日期。');
@@ -375,6 +378,35 @@ export async function PATCH(request: NextRequest) {
     if (!allowed.includes(value)) return invalid('更新状态无效。');
     const candidate = await accessibleCandidate(id, account.id);
     if (!candidate) return invalid('候选人不存在或无权操作。');
+    const currentStage = normalizeCandidateStage(candidate.stage);
+    if (currentStage === value) return NextResponse.json({ ok: true });
+    if (value === 'AI面试' && currentStage !== '简历筛选') return invalid('请按候选人流程顺序推进。');
+    if (value === '用人部门筛选') {
+      if (currentStage !== 'AI面试') return invalid('请先进入 AI 面试阶段。');
+      const completedAiInterview = await db.prepare("SELECT id FROM ai_interviews WHERE candidate_id = ? AND status = '已完成' LIMIT 1").bind(id).first<{id:string}>();
+      if (!completedAiInterview) return invalid('候选人完成 AI 面试后，才能进入用人部门筛选。');
+    }
+    if (value === '安排面试') {
+      if (!['用人部门筛选', '待定'].includes(currentStage)) return invalid('请先完成用人部门筛选。');
+      const assignedRecipient = await db.prepare('SELECT candidate_id FROM candidate_assignments WHERE candidate_id = ? AND hr_account_id = ? LIMIT 1').bind(id, account.id).first<{candidate_id:string}>();
+      if (!assignedRecipient) return invalid('仅接收该简历的用人部门账号可以确认通过。');
+    }
+    if (value === '录用') {
+      if (currentStage !== '安排面试') return invalid('请先进入安排面试阶段。');
+      const completedInterview = await db.prepare(`SELECT id FROM interviews WHERE candidate_id = ? AND status = '已完成'
+        AND COALESCE(round, '') <> 'AI 初面' LIMIT 1`).bind(id).first<{id:string}>();
+      if (!completedInterview) return invalid('完成人工面试后，才能进入录用阶段。');
+    }
+    if (value === '待入职') {
+      if (currentStage !== '录用') return invalid('请先进入录用阶段。');
+      const acceptedOffer = await db.prepare("SELECT id FROM offers WHERE candidate_id = ? AND status = '已接受' LIMIT 1").bind(id).first<{id:string}>();
+      if (!acceptedOffer) return invalid('候选人接受 Offer 后，才能进入待入职阶段。');
+    }
+    if (value === '已入职' && currentStage !== '待入职') return invalid('请先进入待入职阶段。');
+    if (value === '待定' || value === '已淘汰') {
+      const assignedRecipient = await db.prepare('SELECT candidate_id FROM candidate_assignments WHERE candidate_id = ? AND hr_account_id = ? LIMIT 1').bind(id, account.id).first<{candidate_id:string}>();
+      if (account.role === 'hr' && (!['用人部门筛选', '待定'].includes(currentStage) || !assignedRecipient)) return invalid('仅接收该简历的 HR 可以提交筛选结果。');
+    }
     await db.batch([
       db.prepare('UPDATE candidates SET stage = ?, updated_at = ? WHERE id = ?').bind(value, now, id),
       db.prepare('UPDATE resume_applications SET status = ? WHERE candidate_id = ? AND owner_id = ?').bind(value, id, candidate.owner_id),
@@ -435,9 +467,9 @@ async function ownedRecord(table: 'jobs' | 'candidates', id: string, ownerId: st
 }
 
 async function accessibleCandidate(id: string, accountId: string) {
-  return getDb().prepare(`SELECT id, owner_id, job_id FROM candidates WHERE id = ? AND (
+  return getDb().prepare(`SELECT id, owner_id, job_id, stage FROM candidates WHERE id = ? AND (
     owner_id = ? OR id IN (SELECT candidate_id FROM candidate_assignments WHERE hr_account_id = ?)
-  ) LIMIT 1`).bind(id, accountId, accountId).first<{id:string;owner_id:string;job_id:string|null}>();
+  ) LIMIT 1`).bind(id, accountId, accountId).first<{id:string;owner_id:string;job_id:string|null;stage:string}>();
 }
 
 function mapJob(row: DataRow) {

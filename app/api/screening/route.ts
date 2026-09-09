@@ -85,6 +85,9 @@ export async function POST(request: NextRequest) {
     const placeholders = candidateIds.map(() => '?').join(',');
     const owned = await db.prepare(`SELECT id, job_id, name FROM candidates WHERE owner_id = ? AND id IN (${placeholders})`).bind(account.id, ...candidateIds).all<DataRow>();
     if (owned.results.length !== candidateIds.length) return invalid('部分候选人不存在或无权推荐。');
+    const completedAiInterviews = await db.prepare(`SELECT DISTINCT candidate_id FROM ai_interviews
+      WHERE owner_id = ? AND status = '已完成' AND candidate_id IN (${placeholders})`).bind(account.id, ...candidateIds).all<{candidate_id:string}>();
+    if (completedAiInterviews.results.length !== candidateIds.length) return invalid('候选人完成 AI 面试后，才能进入用人部门筛选。');
     const statements: D1PreparedStatement[] = [];
     for (const row of owned.results) {
       statements.push(db.prepare(`INSERT INTO candidate_assignments (candidate_id, owner_id, hr_account_id, assigned_by, assigned_at, updated_at)
