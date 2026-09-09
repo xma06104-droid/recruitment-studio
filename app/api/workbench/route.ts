@@ -36,35 +36,21 @@ export async function GET(request: NextRequest) {
   const assignedCandidateSql = 'SELECT candidate_id FROM candidate_assignments WHERE hr_account_id = ?';
   const assignedJobSql = `SELECT c.job_id FROM candidates c JOIN candidate_assignments ca ON ca.candidate_id = c.id
     WHERE ca.hr_account_id = ? AND c.job_id IS NOT NULL`;
-  const [jobs, candidates, interviews, offers, aiQuestions, aiInterviews, aiInvitations, manualAssessments] = await Promise.all([
-    account.role === 'hr'
-      ? db.prepare(`SELECT DISTINCT j.* FROM jobs j WHERE j.owner_id = ? OR j.id IN (${assignedJobSql}) ORDER BY j.created_at DESC`).bind(account.id, account.id).all<DataRow>()
-      : db.prepare('SELECT * FROM jobs WHERE owner_id = ? ORDER BY created_at DESC').bind(account.id).all<DataRow>(),
-    account.role === 'hr'
-      ? db.prepare(`SELECT c.*, ca.hr_account_id, ca.assigned_at, a.contact AS assigned_hr_name
-          FROM candidates c LEFT JOIN candidate_assignments ca ON ca.candidate_id = c.id LEFT JOIN accounts a ON a.id = ca.hr_account_id
-          WHERE c.owner_id = ? OR c.id IN (${assignedCandidateSql}) ORDER BY COALESCE(ca.assigned_at, c.created_at) DESC`).bind(account.id, account.id).all<DataRow>()
-      : db.prepare(`SELECT c.*, ca.hr_account_id, ca.assigned_at, a.contact AS assigned_hr_name
-          FROM candidates c LEFT JOIN candidate_assignments ca ON ca.candidate_id = c.id LEFT JOIN accounts a ON a.id = ca.hr_account_id
-          WHERE c.owner_id = ? ORDER BY c.created_at DESC`).bind(account.id).all<DataRow>(),
-    account.role === 'hr'
-      ? db.prepare(`SELECT * FROM interviews WHERE owner_id = ? OR candidate_id IN (${assignedCandidateSql}) ORDER BY scheduled_at ASC`).bind(account.id, account.id).all<DataRow>()
-      : db.prepare(`SELECT * FROM interviews WHERE owner_id = ? OR candidate_id IN (SELECT id FROM candidates WHERE owner_id = ?) ORDER BY scheduled_at ASC`).bind(account.id, account.id).all<DataRow>(),
-    account.role === 'hr'
-      ? db.prepare(`SELECT * FROM offers WHERE owner_id = ? OR candidate_id IN (${assignedCandidateSql}) ORDER BY created_at DESC`).bind(account.id, account.id).all<DataRow>()
-      : db.prepare(`SELECT * FROM offers WHERE owner_id = ? OR candidate_id IN (SELECT id FROM candidates WHERE owner_id = ?) ORDER BY created_at DESC`).bind(account.id, account.id).all<DataRow>(),
-    account.role === 'hr'
-      ? db.prepare(`SELECT * FROM ai_questions WHERE owner_id = ? OR job_id IN (${assignedJobSql}) ORDER BY created_at DESC`).bind(account.id, account.id).all<DataRow>()
-      : db.prepare('SELECT * FROM ai_questions WHERE owner_id = ? ORDER BY created_at DESC').bind(account.id).all<DataRow>(),
-    account.role === 'hr'
-      ? db.prepare(`SELECT * FROM ai_interviews WHERE owner_id = ? OR candidate_id IN (${assignedCandidateSql}) ORDER BY COALESCE(completed_at, created_at) DESC`).bind(account.id, account.id).all<DataRow>()
-      : db.prepare(`SELECT * FROM ai_interviews WHERE owner_id = ? OR candidate_id IN (SELECT id FROM candidates WHERE owner_id = ?) ORDER BY COALESCE(completed_at, created_at) DESC`).bind(account.id, account.id).all<DataRow>(),
-    account.role === 'hr'
-      ? db.prepare(`SELECT * FROM ai_interview_invitations WHERE owner_id = ? OR candidate_id IN (${assignedCandidateSql}) ORDER BY created_at DESC`).bind(account.id, account.id).all<DataRow>()
-      : db.prepare(`SELECT * FROM ai_interview_invitations WHERE owner_id = ? OR candidate_id IN (SELECT id FROM candidates WHERE owner_id = ?) ORDER BY created_at DESC`).bind(account.id, account.id).all<DataRow>(),
-    account.role === 'hr'
-      ? db.prepare(`SELECT * FROM manual_assessments WHERE owner_id = ? OR candidate_id IN (${assignedCandidateSql}) ORDER BY updated_at DESC`).bind(account.id, account.id).all<DataRow>()
-      : db.prepare(`SELECT * FROM manual_assessments WHERE owner_id = ? OR candidate_id IN (SELECT id FROM candidates WHERE owner_id = ?) ORDER BY updated_at DESC`).bind(account.id, account.id).all<DataRow>(),
+  const relatedCandidateSql = `candidate_id IN (SELECT id FROM candidates WHERE owner_id = ?) OR candidate_id IN (${assignedCandidateSql})`;
+  const [jobs, candidates, interviews, offers, aiQuestions, aiInterviews, aiInvitations, manualAssessments, recipientAccounts] = await Promise.all([
+    db.prepare(`SELECT DISTINCT j.* FROM jobs j WHERE j.owner_id = ? OR j.id IN (${assignedJobSql}) ORDER BY j.created_at DESC`).bind(account.id, account.id).all<DataRow>(),
+    db.prepare(`SELECT c.*, ca.hr_account_id, ca.assigned_at, a.contact AS assigned_hr_name
+        FROM candidates c LEFT JOIN candidate_assignments ca ON ca.candidate_id = c.id LEFT JOIN accounts a ON a.id = ca.hr_account_id
+        WHERE c.owner_id = ? OR c.id IN (${assignedCandidateSql}) ORDER BY COALESCE(ca.assigned_at, c.created_at) DESC`).bind(account.id, account.id).all<DataRow>(),
+    db.prepare(`SELECT * FROM interviews WHERE owner_id = ? OR ${relatedCandidateSql} ORDER BY scheduled_at ASC`).bind(account.id, account.id, account.id).all<DataRow>(),
+    db.prepare(`SELECT * FROM offers WHERE owner_id = ? OR ${relatedCandidateSql} ORDER BY created_at DESC`).bind(account.id, account.id, account.id).all<DataRow>(),
+    db.prepare(`SELECT * FROM ai_questions WHERE owner_id = ? OR job_id IN (${assignedJobSql}) ORDER BY created_at DESC`).bind(account.id, account.id).all<DataRow>(),
+    db.prepare(`SELECT * FROM ai_interviews WHERE owner_id = ? OR ${relatedCandidateSql} ORDER BY COALESCE(completed_at, created_at) DESC`).bind(account.id, account.id, account.id).all<DataRow>(),
+    db.prepare(`SELECT * FROM ai_interview_invitations WHERE owner_id = ? OR ${relatedCandidateSql} ORDER BY created_at DESC`).bind(account.id, account.id, account.id).all<DataRow>(),
+    db.prepare(`SELECT * FROM manual_assessments WHERE owner_id = ? OR ${relatedCandidateSql} ORDER BY updated_at DESC`).bind(account.id, account.id, account.id).all<DataRow>(),
+    account.role === 'super_admin'
+      ? db.prepare("SELECT id, contact, phone, email, role FROM accounts WHERE role IN ('super_admin', 'hr') ORDER BY contact ASC, created_at ASC").all<DataRow>()
+      : Promise.resolve({ results: [] as DataRow[] }),
   ]);
   const { unique: uniqueQuestions, duplicateIds } = deduplicateAiQuestions(aiQuestions.results);
   if (duplicateIds.length) {
@@ -83,6 +69,7 @@ export async function GET(request: NextRequest) {
     aiInterviews: aiInterviews.results.map(mapAiInterview),
     aiInvitations: mappedInvitations,
     manualAssessments: manualAssessments.results.map(mapManualAssessment),
+    recipientAccounts: recipientAccounts.results.map(row => ({ id: row.id, contact: row.contact, phone: row.phone, email: row.email, role: row.role })),
   }, { headers: { 'Cache-Control': 'private, no-store' } });
 }
 

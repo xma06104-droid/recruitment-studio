@@ -17,6 +17,7 @@ type AiQuestion = { id:string; jobId:string|null; title:string; category:string;
 type AiInterview = { id:string; candidateId:string; jobTitle:string; status:string; score:number|null; durationSeconds:number|null; summary:string; completedAt:string|null; createdAt:string; updatedAt:string };
 type AiInvitation = { id:string; candidateId:string; recipientEmail:string; jobTitle:string; status:string; sentAt:string; openedAt:string|null; completedAt:string|null; expiresAt:string; interviewUrl:string; createdAt:string; updatedAt:string };
 type ManualAssessment = { candidateId:string; total:number; professional:number; communication:number; culture:number; comment:string; reviewer:string; updatedAt:string };
+type RecipientAccount = { id:string; contact:string; phone:string; email:string; role:'super_admin'|'hr' };
 type AnswerScore = { score:number; keywords:string[]; matched:string[] };
 type SpeechAlternativeLike = { transcript:string;confidence?:number };
 type SpeechResultLike = { [index:number]:SpeechAlternativeLike;length:number;isFinal?:boolean };
@@ -29,7 +30,7 @@ type SpeechRecognitionLike = {
 };
 type SpeechRecognitionPhraseLike = { phrase:string;boost:number };
 type SpeechRecognitionConstructor = new()=>SpeechRecognitionLike;
-type Dataset = { account:Account; jobs:Job[]; candidates:Candidate[]; interviews:Interview[]; offers:Offer[]; aiQuestions:AiQuestion[]; aiInterviews:AiInterview[]; aiInvitations:AiInvitation[]; manualAssessments:ManualAssessment[] };
+type Dataset = { account:Account; jobs:Job[]; candidates:Candidate[]; interviews:Interview[]; offers:Offer[]; aiQuestions:AiQuestion[]; aiInterviews:AiInterview[]; aiInvitations:AiInvitation[]; manualAssessments:ManualAssessment[]; recipientAccounts:RecipientAccount[] };
 type ModalName = 'job'|'candidateEntry'|'candidate'|'interview'|'offer'|'question'|'questionGenerator'|'aiResult'|'profile'|'password'|null;
 
 const nav = [['⌂','工作台'],['▣','职位管理'],['♙','人才库'],['▤','简历筛选'],['◉','AI 面试'],['◴','面试管理'],['✓','Offer 管理'],['↗','招聘数据'],['♜','角色管理']];
@@ -56,6 +57,8 @@ export default function WorkbenchClient() {
   const [editingQuestion,setEditingQuestion]=useState<AiQuestion|null>(null);
   const [editingInterview,setEditingInterview]=useState<Interview|null>(null);
   const [editingOffer,setEditingOffer]=useState<Offer|null>(null);
+  const [assignmentTarget,setAssignmentTarget]=useState<Candidate|null>(null);
+  const [assignmentSaving,setAssignmentSaving]=useState(false);
   const [toast,setToast]=useState<{text:string;tone:'success'|'error'|'info'}|null>(null);
   const [error,setError]=useState('');
   const saveInFlight=useRef(false);
@@ -210,6 +213,18 @@ export default function WorkbenchClient() {
     announceWorkbenchChange();await loadData();flash(success);return true;
   }
 
+  async function assignCandidate(candidate:Candidate,recipientId:string){
+    if(saveInFlight.current)return;
+    saveInFlight.current=true;setAssignmentSaving(true);
+    try{
+      const response=await fetch('/api/screening',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'assignCandidate',candidateIds:[candidate.id],hrAccountId:recipientId})});
+      const result=await response.json().catch(()=>({})) as {message?:string;recipientAccount?:RecipientAccount};
+      if(response.status===401){window.location.assign('/');return}
+      if(!response.ok){flash(result.message||'推送失败，请稍后重试。');return}
+      setAssignmentTarget(null);announceWorkbenchChange();await loadData();flash(`已推送给${result.recipientAccount?.contact||'所选接收人'}`);
+    }catch{flash('推送失败，请检查网络后重试。')}finally{saveInFlight.current=false;setAssignmentSaving(false)}
+  }
+
   function flash(text:string){const tone=text.includes('失败')||text.includes('错误')?'error':text.includes('成功')?'success':'info';setToast({text,tone});window.setTimeout(()=>setToast(null),2300)}
   async function logout(){await fetch('/api/auth/logout',{method:'POST'});window.location.assign('/')}
   function switchHiringDepartment(){setAccountOpen(false);window.location.assign('/interviewer-candidate')}
@@ -288,7 +303,8 @@ export default function WorkbenchClient() {
     {modal==='profile'&&<ProfileModal account={data.account} close={()=>setModal(null)} error={accountError} submitting={accountSaving} submit={form=>void updateAccount('profile',formObject(form))}/>}
     {modal==='password'&&<PasswordModal close={()=>setModal(null)} error={accountError} submitting={accountSaving} submit={form=>void updateAccount('password',formObject(form))}/>}
     {selectedJob&&<JobDrawer job={selectedJob} candidates={data.candidates} interviews={visibleInterviews} offers={data.offers} close={()=>setDrawer(null)} edit={()=>{setDrawer(null);setEditingJob(selectedJob);setModal('job')}}/>}
-    {selectedCandidate&&<CandidateDrawer person={selectedCandidate} aiInterview={data.aiInterviews.find(item=>item.candidateId===selectedCandidate.id)} assessment={data.manualAssessments.find(item=>item.candidateId===selectedCandidate.id)} close={()=>setDrawer(null)} advance={value=>update('candidateStage',selectedCandidate.id,value,'候选人阶段已更新')}/>}
+    {selectedCandidate&&<CandidateDrawer person={selectedCandidate} aiInterview={data.aiInterviews.find(item=>item.candidateId===selectedCandidate.id)} assessment={data.manualAssessments.find(item=>item.candidateId===selectedCandidate.id)} close={()=>setDrawer(null)} advance={value=>update('candidateStage',selectedCandidate.id,value,'候选人阶段已更新')} requestAssignment={()=>setAssignmentTarget(selectedCandidate)}/>}
+    {assignmentTarget&&<CandidateAssignmentDialog candidate={assignmentTarget} accounts={data.recipientAccounts||[]} busy={assignmentSaving} close={()=>{if(!assignmentSaving)setAssignmentTarget(null)}} submit={recipientId=>void assignCandidate(assignmentTarget,recipientId)}/>}
     {toast&&<div className={`dashboard-toast ${toast.tone}`} role="status" aria-live="polite">{toast.tone==='success'?'✓ ':toast.tone==='error'?'! ':''}{toast.text}</div>}
   </main>
 }
@@ -666,13 +682,14 @@ function CandidateInterviewAssessment({report}:{report?:AiInterview}){
   return <AiInterviewResultPanel summary={report.summary} fallbackScore={report.score} durationSeconds={report.durationSeconds} completedAt={report.completedAt} compact/>;
 }
 
-function CandidateStageStepper({stage,advance}:{stage:string;advance:(value:string)=>Promise<boolean>}){
+function CandidateStageStepper({stage,advance,requestAssignment}:{stage:string;advance:(value:string)=>Promise<boolean>;requestAssignment:()=>void}){
   const [saving,setSaving]=useState('');
   const flowStage=stage==='待定'?'用人部门筛选':stage;
   const currentIndex=stages.indexOf(flowStage);
   const terminal=stage==='已淘汰';
   async function moveNext(nextStage:string,index:number){
     if(saving||terminal||index!==currentIndex+1)return;
+    if(nextStage==='用人部门筛选'){requestAssignment();return}
     setSaving(nextStage);
     try{await advance(nextStage)}finally{setSaving('')}
   }
@@ -693,7 +710,7 @@ function CandidateStageStepper({stage,advance}:{stage:string;advance:(value:stri
   </section>;
 }
 
-function CandidateDrawer({person,aiInterview,assessment,close,advance}:{person:Candidate;aiInterview?:AiInterview;assessment?:ManualAssessment;close:()=>void;advance:(value:string)=>Promise<boolean>}){
+function CandidateDrawer({person,aiInterview,assessment,close,advance,requestAssignment}:{person:Candidate;aiInterview?:AiInterview;assessment?:ManualAssessment;close:()=>void;advance:(value:string)=>Promise<boolean>;requestAssignment:()=>void}){
   const hasInterviewScore=aiInterview?.score!==null&&aiInterview?.score!==undefined;
   const interviewTotal=aiInterview?aiInterviewQuestionTotal(aiInterview.summary,aiInterview.score):null;
   const displayedScore=assessment?.total??interviewTotal?.score??(hasInterviewScore?aiInterview.score:person.score);
@@ -701,12 +718,24 @@ function CandidateDrawer({person,aiInterview,assessment,close,advance}:{person:C
   return <div className="drawer-backdrop" onMouseDown={close}><aside className="detail-drawer candidate-drawer" onMouseDown={event=>event.stopPropagation()}>
     <button className="drawer-close" onClick={close}>×</button>
     <div className="candidate-profile"><span>{person.name.slice(0,1)}</span><div><h2>{person.name}</h2><p>{person.company||'最近公司未填写'}{person.years?` · ${person.years}`:''}</p></div><em><b>{displayedScore??'—'}</b><small>{displayedLabel}</small></em></div>
-    <CandidateStageStepper stage={person.stage} advance={advance}/>
+    <CandidateStageStepper stage={person.stage} advance={advance} requestAssignment={requestAssignment}/>
     {assessment&&<section><h3>HR 人工评估</h3><div className="profile-info"><p><span>综合得分</span>{assessment.total} 分</p><p><span>专业能力</span>{assessment.professional} 分</p><p><span>沟通表达</span>{assessment.communication} 分</p><p><span>文化匹配</span>{assessment.culture} 分</p><p><span>评估人</span>{assessment.reviewer}</p><p><span>评估意见</span>{assessment.comment||'未填写'}</p></div></section>}
     <section><h3>AI 面试记录</h3><CandidateInterviewAssessment report={aiInterview}/></section>
     <section><h3>核心技能</h3><div className="channel-tags">{person.skills.length?person.skills.map(skill=><span key={skill}>{skill}</span>):<span>未填写</span>}</div></section>
     <section><h3>候选人信息</h3><div className="profile-info"><p><span>应聘职位</span>{person.role}</p><p><span>手机号</span>{person.phone||'未填写'}</p><p><span>邮箱</span>{person.email||'未填写'}</p><p><span>所在城市</span>{person.city||'未填写'}</p></div></section>
   </aside></div>;
+}
+
+function CandidateAssignmentDialog({candidate,accounts,busy,close,submit}:{candidate:Candidate;accounts:RecipientAccount[];busy:boolean;close:()=>void;submit:(recipientId:string)=>void}){
+  const [selectedId,setSelectedId]=useState('');
+  const selected=accounts.find(account=>account.id===selectedId);
+  return <div className="flow-modal-backdrop candidate-assignment-backdrop" onMouseDown={close}><section className="rs-assignment-dialog candidate-assignment-dialog" role="dialog" aria-modal="true" aria-labelledby="candidate-assignment-title" onMouseDown={event=>event.stopPropagation()}>
+    <button type="button" className="flow-overlay-close" disabled={busy} onClick={close}>×</button>
+    <span className="eyebrow purple">HIRING DEPARTMENT REVIEW</span><h2 id="candidate-assignment-title">选择接收人</h2>
+    <p>将 <b>{candidate.name}</b> 推送至指定账号。确认后进入“用人部门筛选”，接收人可在自己的系统中立即查看该简历。</p>
+    {accounts.length?<><label className="candidate-assignment-select">接收账号<select autoFocus value={selectedId} disabled={busy} onChange={event=>setSelectedId(event.target.value)}><option value="">请选择超级管理员或 HR</option>{accounts.map(account=><option key={account.id} value={account.id}>{account.contact} · {account.role==='super_admin'?'超级管理员':'HR'}</option>)}</select></label>{selected&&<div className="candidate-assignment-recipient"><span>{selected.contact.slice(0,1)}</span><div><b>{selected.contact}</b><small>{selected.email||selected.phone||'未填写联系方式'}</small></div><em>{selected.role==='super_admin'?'超级管理员':'HR'}</em></div>}</>:<div className="rs-assignment-empty"><b>暂无可选接收人</b><p>请先在“角色管理”中新增超级管理员或 HR。</p></div>}
+    <button type="button" className="primary-button" disabled={busy||!selectedId} onClick={()=>submit(selectedId)}>{busy?'正在推送并同步…':'确认推送'} <span>→</span></button>
+  </section></div>;
 }
 
 function Empty({icon,title,text,action,click,compact=false}:{icon?:string;title:string;text:string;action?:string;click?:()=>void;compact?:boolean}){return <div className={'real-empty '+(compact?'compact':'')}>{icon&&<span>{icon}</span>}<h3>{title}</h3><p>{text}</p>{action&&click&&<button onClick={click}>{action}</button>}</div>}
