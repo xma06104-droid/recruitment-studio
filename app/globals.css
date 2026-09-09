@@ -1688,14 +1688,15 @@ input[type="date"]::-webkit-calendar-picker-indicator,input[type="datetime-local
 .interviewer-candidate-row{min-width:0;grid-template-columns:20px minmax(210px,1.1fr) minmax(170px,.8fr) minmax(140px,.65fr);gap:12px;width:100%;box-sizing:border-box}
 
 /* Dark questionnaire opened from the assessment list. */
-.assessment-questionnaire{width:min(760px,calc(100vw - 36px));padding:0;overflow:hidden}
+.assessment-questionnaire{width:min(760px,calc(100vw - 36px));display:grid;grid-template-rows:auto minmax(0,1fr) auto;padding:0;overflow:hidden}
 .assessment-questionnaire>header{position:sticky;z-index:1;top:0;padding:27px 31px 22px;border-bottom:1px solid rgba(154,188,222,.1);background:linear-gradient(145deg,rgba(14,28,47,.98),rgba(17,30,50,.98));box-shadow:0 10px 24px rgba(0,5,15,.16)}
 .assessment-questionnaire>header>p{margin:0;color:#58d7e8;font-size:12px;font-weight:850;letter-spacing:.12em}
 .assessment-questionnaire>header>h2{margin:8px 0 4px;color:#f4f9ff;font-size:25px}
 .assessment-questionnaire>header>small{color:#8fa1b7;font-size:12px}
 .assessment-questionnaire-score{position:absolute;right:82px;bottom:22px;display:flex;align-items:baseline;gap:6px;padding:9px 13px;border:1px solid rgba(72,210,231,.15);border-radius:11px;background:rgba(9,23,39,.62)}
 .assessment-questionnaire-score span{margin-right:5px;color:#91a5ba;font-size:11px}.assessment-questionnaire-score b{color:#f4f9ff;font-size:23px}.assessment-questionnaire-score em{color:#5ddaea;font-size:11px;font-style:normal}
-.assessment-question-list{display:grid;gap:14px;padding:21px 31px 4px}
+.assessment-question-list{min-height:0;display:grid;gap:14px;overflow-y:auto;overscroll-behavior:contain;padding:21px 31px 18px;scrollbar-color:rgba(86,183,211,.55) rgba(8,20,34,.5);scrollbar-width:thin}
+.assessment-question-list::-webkit-scrollbar{width:8px}.assessment-question-list::-webkit-scrollbar-track{background:rgba(8,20,34,.5)}.assessment-question-list::-webkit-scrollbar-thumb{border:2px solid transparent;border-radius:999px;background:rgba(86,183,211,.55);background-clip:padding-box}
 .assessment-question{padding:19px 20px;border:1px solid rgba(145,178,213,.11);border-radius:16px;background:radial-gradient(circle at 100% 0,rgba(38,128,181,.1),transparent 38%),#0c1728}
 .assessment-question h3{display:flex;align-items:flex-start;gap:11px;margin:0 0 16px;color:#e9f2fc;font-size:15px;line-height:1.65}
 .assessment-question h3>span{width:25px;height:25px;display:grid;flex:0 0 auto;place-items:center;border-radius:8px;color:#fff;background:linear-gradient(145deg,#19b8cf,#367fed);font-size:12px}
@@ -1703,8 +1704,8 @@ input[type="date"]::-webkit-calendar-picker-indicator,input[type="datetime-local
 .assessment-question-options button{height:42px;border:1px solid rgba(152,181,215,.15);border-radius:10px;color:#aab9ca;background:#111f33;font:700 13px inherit;cursor:pointer;transition:border-color .16s ease,color .16s ease,background .16s ease,transform .16s ease}
 .assessment-question-options button:hover{border-color:rgba(80,208,230,.34);color:#eaf8ff;transform:translateY(-1px)}
 .assessment-question-options button.active{border-color:rgba(68,210,231,.52);color:#fff;background:linear-gradient(115deg,rgba(16,158,183,.7),rgba(51,111,214,.72));box-shadow:0 8px 20px rgba(9,78,137,.22)}
-.assessment-question-stars{display:flex;gap:8px;margin:14px 0}
-.assessment-question-stars button{width:36px;height:36px;padding:0;border:0;color:#61768d;background:transparent;font-size:31px;line-height:1;cursor:pointer;transition:color .15s ease,transform .15s ease}
+.assessment-question-stars{display:flex;gap:4px;margin:10px 0 12px}
+.assessment-question-stars button{width:29px;height:29px;padding:0;border:0;color:#61768d;background:transparent;font-size:24px;line-height:1;cursor:pointer;transition:color .15s ease,transform .15s ease}
 .assessment-question-stars button:hover,.assessment-question-stars button.active{color:#f5bc45;transform:translateY(-1px)}
 .assessment-question>label{position:relative;display:block}.assessment-question textarea{box-sizing:border-box;width:100%;min-height:86px;padding:12px 13px 27px;border:1px solid rgba(151,181,214,.14);border-radius:11px;outline:0;color:#ecf5ff;background:#091525;font:13px/1.7 inherit;resize:vertical}.assessment-question textarea:focus{border-color:#47cee3;box-shadow:0 0 0 3px rgba(71,206,227,.08)}.assessment-question textarea::placeholder{color:#657a91}.assessment-question>label small{position:absolute;right:11px;bottom:9px;color:#63788e;font-size:10px}
 .assessment-questionnaire>footer{position:sticky;z-index:1;bottom:0;margin:0;padding:17px 31px 22px;border-top:1px solid rgba(154,188,222,.1);background:linear-gradient(180deg,rgba(17,26,43,.94),#111a2b 35%)}
