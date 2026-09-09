@@ -17,7 +17,7 @@ type Review = { candidateId:string; tags:string[]; comment:string; riskNote:stri
 type Log = { id:string; candidateId:string|null; jobId:string|null; operatorName:string; action:string; detail:string; createdAt:string };
 type ScreeningData = { profiles:Profile[]; applications:Application[]; rules:Rule[]; templates:Template[]; reviews:Review[]; logs:Log[] };
 type Filters = { jobId:string; stage:string; education:string; city:string; source:string; skill:string; keywordMode:string; matchLevel:string; parsingStatus:string; minYears:string; salaryMax:string };
-type Props = { people:Person[]; jobs:Job[]; questions:InterviewQuestion[]; account:Account; reload:()=>Promise<void>; openCandidate:(id:string)=>void; flash:(text:string)=>void };
+type Props = { people:Person[]; jobs:Job[]; questions:InterviewQuestion[]; account:Account; reload:()=>Promise<void>; openCandidate:(id:string)=>void; flash:(text:string)=>void; openImport?:boolean; onImportOpened?:()=>void };
 
 const emptyScreeningData:ScreeningData = { profiles:[], applications:[], rules:[], templates:[], reviews:[], logs:[] };
 let screeningDataCache:ScreeningData|null = null;
@@ -48,7 +48,7 @@ const customConditionOperators = [['contains','包含'],['not_contains','不包�
 const numericCustomFields = new Set(['workYears','age','expectedSalary','stabilityMonths']);
 const rejectedCandidateStages = new Set(['初筛淘汰','淘汰人才库','已淘汰']);
 
-export default function ScreeningWorkspace({people,jobs,questions,account,reload,openCandidate,flash}:Props){
+export default function ScreeningWorkspace({people,jobs,questions,account,reload,openCandidate,flash,openImport=false,onImportOpened}:Props){
   const [data,setData]=useState<ScreeningData>(screeningDataCache||emptyScreeningData);
   const [hydrated,setHydrated]=useState(Boolean(screeningDataCache));
   const [refreshing,setRefreshing]=useState(!screeningDataCache);
@@ -70,6 +70,7 @@ export default function ScreeningWorkspace({people,jobs,questions,account,reload
 
   async function load(force=true){setRefreshing(true);try{const next=await preloadScreeningData(force);setData(next);setHydrated(true);setError('')}catch(loadError){if(loadError instanceof Error&&loadError.message==='UNAUTHORIZED'){window.location.assign('/');return}setError('简历筛选数据暂时无法加载。')}finally{setRefreshing(false)}}
   useEffect(()=>{let active=true;void preloadScreeningData(Boolean(screeningDataCache)).then(next=>{if(!active)return;setData(next);setHydrated(true);setError('')}).catch(loadError=>{if(!active)return;if(loadError instanceof Error&&loadError.message==='UNAUTHORIZED'){window.location.assign('/');return}setError('简历筛选数据暂时无法加载。')}).finally(()=>{if(active)setRefreshing(false)});return()=>{active=false}},[]);
+  useEffect(()=>{if(!openImport)return;setTab('intake');setShowImport(true);onImportOpened?.()},[openImport,onImportOpened]);
   useWorkbenchSync(()=>mutationInFlight.current?undefined:load(true));
 
   const profileMap=useMemo(()=>new Map((data?.profiles||[]).map(item=>[item.candidateId,item])),[data]);
