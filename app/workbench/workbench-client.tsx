@@ -206,8 +206,8 @@ export default function WorkbenchClient() {
   async function update(resource:string,id:string,value:string,success:string) {
     const response=await fetch('/api/workbench',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({resource,id,value})});
     const result=await response.json().catch(()=>({})) as {message?:string};
-    if(!response.ok){flash(result.message||'更新失败，请稍后重试。');return}
-    announceWorkbenchChange();await loadData();flash(success);
+    if(!response.ok){flash(result.message||'更新失败，请稍后重试。');return false}
+    announceWorkbenchChange();await loadData();flash(success);return true;
   }
 
   function flash(text:string){const tone=text.includes('失败')||text.includes('错误')?'error':text.includes('成功')?'success':'info';setToast({text,tone});window.setTimeout(()=>setToast(null),2300)}
@@ -288,7 +288,7 @@ export default function WorkbenchClient() {
     {modal==='profile'&&<ProfileModal account={data.account} close={()=>setModal(null)} error={accountError} submitting={accountSaving} submit={form=>void updateAccount('profile',formObject(form))}/>}
     {modal==='password'&&<PasswordModal close={()=>setModal(null)} error={accountError} submitting={accountSaving} submit={form=>void updateAccount('password',formObject(form))}/>}
     {selectedJob&&<JobDrawer job={selectedJob} candidates={data.candidates} interviews={visibleInterviews} offers={data.offers} close={()=>setDrawer(null)} edit={()=>{setDrawer(null);setEditingJob(selectedJob);setModal('job')}}/>}
-    {selectedCandidate&&<CandidateDrawer person={selectedCandidate} aiInterview={data.aiInterviews.find(item=>item.candidateId===selectedCandidate.id)} assessment={data.manualAssessments.find(item=>item.candidateId===selectedCandidate.id)} close={()=>setDrawer(null)} advance={value=>void update('candidateStage',selectedCandidate.id,value,'候选人阶段已更新')}/>}
+    {selectedCandidate&&<CandidateDrawer person={selectedCandidate} aiInterview={data.aiInterviews.find(item=>item.candidateId===selectedCandidate.id)} assessment={data.manualAssessments.find(item=>item.candidateId===selectedCandidate.id)} close={()=>setDrawer(null)} advance={value=>update('candidateStage',selectedCandidate.id,value,'候选人阶段已更新')}/>}
     {toast&&<div className={`dashboard-toast ${toast.tone}`} role="status" aria-live="polite">{toast.tone==='success'?'✓ ':toast.tone==='error'?'! ':''}{toast.text}</div>}
   </main>
 }
@@ -666,7 +666,34 @@ function CandidateInterviewAssessment({report}:{report?:AiInterview}){
   return <AiInterviewResultPanel summary={report.summary} fallbackScore={report.score} durationSeconds={report.durationSeconds} completedAt={report.completedAt} compact/>;
 }
 
-function CandidateDrawer({person,aiInterview,assessment,close,advance}:{person:Candidate;aiInterview?:AiInterview;assessment?:ManualAssessment;close:()=>void;advance:(value:string)=>void}){
+function CandidateStageStepper({stage,advance}:{stage:string;advance:(value:string)=>Promise<boolean>}){
+  const [saving,setSaving]=useState('');
+  const flowStage=stage==='待定'?'用人部门筛选':stage;
+  const currentIndex=stages.indexOf(flowStage);
+  const terminal=stage==='已淘汰';
+  async function moveNext(nextStage:string,index:number){
+    if(saving||terminal||index!==currentIndex+1)return;
+    setSaving(nextStage);
+    try{await advance(nextStage)}finally{setSaving('')}
+  }
+  return <section className="candidate-stage-stepper" aria-label="候选人招聘阶段">
+    <header><div><span>候选人流程</span><small>完成当前阶段后，下一阶段自动解锁</small></div><b className={terminal?'terminal':''}>当前：{stage}</b></header>
+    <div className="candidate-stage-track">
+      {stages.map((item,index)=>{
+        const completed=!terminal&&currentIndex>=0&&index<currentIndex;
+        const current=!terminal&&index===currentIndex;
+        const next=!terminal&&index===currentIndex+1;
+        const locked=terminal||currentIndex<0||index>currentIndex+1;
+        return <button type="button" key={item} className={`${completed?'completed ':''}${current?'current ':''}${next?'next ':''}${locked?'locked':''}`} disabled={!next||Boolean(saving)} aria-current={current?'step':undefined} onClick={()=>void moveNext(item,index)}>
+          <i>{completed?'✓':locked?'⌁':String(index+1).padStart(2,'0')}</i><b>{item}</b><small>{completed?'已完成':current?(stage==='待定'?'当前待定':'当前阶段'):next?(saving===item?'正在更新…':'点击进入'):'待解锁'}</small>
+        </button>;
+      })}
+    </div>
+    {terminal&&<p>该候选人已结束流程，如需重新启用，请先在候选人列表恢复状态。</p>}
+  </section>;
+}
+
+function CandidateDrawer({person,aiInterview,assessment,close,advance}:{person:Candidate;aiInterview?:AiInterview;assessment?:ManualAssessment;close:()=>void;advance:(value:string)=>Promise<boolean>}){
   const hasInterviewScore=aiInterview?.score!==null&&aiInterview?.score!==undefined;
   const interviewTotal=aiInterview?aiInterviewQuestionTotal(aiInterview.summary,aiInterview.score):null;
   const displayedScore=assessment?.total??interviewTotal?.score??(hasInterviewScore?aiInterview.score:person.score);
@@ -674,7 +701,7 @@ function CandidateDrawer({person,aiInterview,assessment,close,advance}:{person:C
   return <div className="drawer-backdrop" onMouseDown={close}><aside className="detail-drawer candidate-drawer" onMouseDown={event=>event.stopPropagation()}>
     <button className="drawer-close" onClick={close}>×</button>
     <div className="candidate-profile"><span>{person.name.slice(0,1)}</span><div><h2>{person.name}</h2><p>{person.company||'最近公司未填写'}{person.years?` · ${person.years}`:''}</p></div><em><b>{displayedScore??'—'}</b><small>{displayedLabel}</small></em></div>
-    <label className="current-stage">当前阶段<select value={person.stage} onChange={event=>advance(event.target.value)}>{!stages.includes(person.stage)&&<option>{person.stage}</option>}{stages.map(item=><option key={item}>{item}</option>)}</select></label>
+    <CandidateStageStepper stage={person.stage} advance={advance}/>
     {assessment&&<section><h3>HR 人工评估</h3><div className="profile-info"><p><span>综合得分</span>{assessment.total} 分</p><p><span>专业能力</span>{assessment.professional} 分</p><p><span>沟通表达</span>{assessment.communication} 分</p><p><span>文化匹配</span>{assessment.culture} 分</p><p><span>评估人</span>{assessment.reviewer}</p><p><span>评估意见</span>{assessment.comment||'未填写'}</p></div></section>}
     <section><h3>AI 面试记录</h3><CandidateInterviewAssessment report={aiInterview}/></section>
     <section><h3>核心技能</h3><div className="channel-tags">{person.skills.length?person.skills.map(skill=><span key={skill}>{skill}</span>):<span>未填写</span>}</div></section>
