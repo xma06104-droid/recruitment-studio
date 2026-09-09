@@ -1649,6 +1649,7 @@ input[type="date"]::-webkit-calendar-picker-indicator,input[type="datetime-local
 
 /* Readable HR resume details and an in-page print action. */
 .hr-review-actions button b{font-size:15px}.hr-review-actions button small{font-size:11px;line-height:1.35}.hr-review-actions button i{font-size:19px}
+.hr-resume-drawer>.drawer-close{top:40px;right:24px}
 .hr-project-timeline article{grid-template-columns:148px minmax(0,1fr);padding:16px 17px}
 .hr-project-timeline article>strong{padding-top:1px;color:#6eddea;font-size:14px;font-weight:850;line-height:1.55;overflow-wrap:anywhere}
 .hr-project-timeline p{font-size:14px;line-height:1.85}
@@ -1686,6 +1687,12 @@ input[type="date"]::-webkit-calendar-picker-indicator,input[type="datetime-local
 .hr-record-card .hr-record-list>.interviewer-empty{min-height:354px}
 .interviewer-candidate-list{overflow-x:hidden}
 .interviewer-candidate-row{min-width:0;grid-template-columns:20px minmax(210px,1.1fr) minmax(170px,.8fr) minmax(140px,.65fr);gap:12px;width:100%;box-sizing:border-box}
+.progress-stage-badge{display:inline-flex;align-items:center;gap:8px;width:max-content;color:#69dcea;font-size:14px;font-weight:800;line-height:1.4}
+.progress-stage-badge::before{width:8px;height:8px;border-radius:50%;content:"";background:currentColor;box-shadow:0 0 0 4px color-mix(in srgb,currentColor 12%,transparent)}
+.progress-stage-badge[data-stage="录用"],.progress-stage-badge[data-stage="待入职"],.progress-stage-badge[data-stage="已入职"]{color:#69d9b9}
+.progress-stage-badge[data-stage="安排面试"]{color:#efc166}
+.progress-stage-badge[data-stage="待定"]{color:#a8b5c7}
+.progress-stage-badge[data-stage="已淘汰"]{color:#ed8798}
 
 /* Dark questionnaire opened from the assessment list. */
 .assessment-questionnaire{width:min(760px,calc(100vw - 36px));display:grid;grid-template-rows:auto minmax(0,1fr) auto;padding:0;overflow:hidden}
@@ -1716,7 +1723,7 @@ input[type="date"]::-webkit-calendar-picker-indicator,input[type="datetime-local
 .interviewer-batch-modal>p{margin:0;color:#59d8e8;font-size:11px;font-weight:850;letter-spacing:.13em}.interviewer-batch-modal>h2{margin:8px 0 7px;font-size:24px}.interviewer-batch-modal>small{display:block;margin-bottom:21px;color:#879ab0;font-size:12px;line-height:1.65}
 .interviewer-batch-modal>label{display:grid;gap:9px;margin-top:14px;color:#c7d5e5;font-size:13px;font-weight:750}.interviewer-batch-modal select,.interviewer-batch-modal textarea{box-sizing:border-box;width:100%;border:1px solid rgba(150,182,215,.14);border-radius:11px;outline:0;color:#edf6ff;background:#091526;font:13px/1.65 inherit}.interviewer-batch-modal select{height:48px;padding:0 13px}.interviewer-batch-modal textarea{min-height:105px;padding:11px 13px;resize:vertical}.interviewer-batch-modal select:focus,.interviewer-batch-modal textarea:focus{border-color:#49cfe4;box-shadow:0 0 0 3px rgba(73,207,228,.08)}
 .interviewer-batch-modal>footer{display:flex;justify-content:flex-end;gap:9px;margin-top:22px}.interviewer-batch-modal>footer button{height:40px;padding:0 17px;border:1px solid rgba(150,182,215,.14);border-radius:10px;color:#aebed0;background:#15243a;font-weight:750;cursor:pointer}.interviewer-batch-modal>footer button[type="submit"]{border:0;color:#fff;background:linear-gradient(110deg,#18b5cc,#367fec)}.interviewer-batch-modal>footer button:disabled{cursor:wait;opacity:.55}
-@media(max-width:620px){.hr-project-timeline article{grid-template-columns:1fr}.hr-project-timeline article>strong{padding-bottom:8px;border-bottom:1px solid rgba(162,181,211,.08)}.hr-resume-file-actions{grid-template-columns:1fr}}
+@media(max-width:620px){.hr-resume-drawer>.drawer-close{top:28px;right:16px}.hr-project-timeline article{grid-template-columns:1fr}.hr-project-timeline article>strong{padding-bottom:8px;border-bottom:1px solid rgba(162,181,211,.08)}.hr-resume-file-actions{grid-template-columns:1fr}}
 @media(max-width:620px){.assessment-questionnaire>header{padding:24px 20px 18px}.assessment-questionnaire-score{position:static;width:max-content;margin-top:14px}.assessment-question-list{padding:16px 14px 3px}.assessment-question{padding:16px 14px}.assessment-question h3{font-size:14px}.assessment-question-stars{gap:3px}.assessment-questionnaire>footer{padding:15px 20px 19px}}
 @media print{
   body{background:#fff!important}
