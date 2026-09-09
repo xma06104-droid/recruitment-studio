@@ -25,12 +25,12 @@ export function parseStructuredAiResult(summary: string): StructuredAiInterviewR
     return {
       version: 1,
       source: 'external-report',
-      rating: clamp(value.rating, 0, 5),
+      rating: Math.round(clamp(value.rating, 0, 5)),
       ratingMax: clamp(value.ratingMax, 1, 5),
       duration: clean(value.duration),
       summary: clean(value.summary),
       dimensions: Array.isArray(value.dimensions) ? value.dimensions.slice(0, 12).map(item => ({
-        name: clean(item?.name), stars: clamp(item?.stars, 0, 5), suggestion: clean(item?.suggestion),
+        name: clean(item?.name), stars: Math.round(clamp(item?.stars, 0, 5)), suggestion: clean(item?.suggestion),
       })).filter(item => item.name) : [],
       presentation: Array.isArray(value.presentation) ? value.presentation.slice(0, 8).map(item => ({
         name: clean(item?.name), score: clamp(item?.score, 0, 100), max: clamp(item?.max, 1, 100), comment: clean(item?.comment),
@@ -95,7 +95,7 @@ export function normalizeAiInterviewResult(summary:string, fallbackScore:number|
   const weakItems=parsed.items.filter(item=>item.score<60).sort((a,b)=>a.score-b.score).slice(0,3);
   const dimensions=parsed.items.map(item=>({
     name:`第 ${item.number} 题 · ${item.question}`,
-    stars:Math.round(clamp(item.score,0,100)/20*10)/10,
+    stars:Math.round(clamp(item.score,0,100)/20),
     suggestion:[`自动评分 ${item.score}/100`,item.keywords&&item.keywords!=='无'?`命中关键词：${item.keywords}`:'未命中配置关键词',item.answer&&item.answer!=='未作答'?`回答摘要：${item.answer.slice(0,120)}`:'本题未有效作答'].join('；'),
   }));
   const presentation=[
@@ -103,14 +103,14 @@ export function normalizeAiInterviewResult(summary:string, fallbackScore:number|
     ...(parsed.items.length?[{name:'有效作答率',score:answerRate,max:100,comment:`共 ${parsed.items.length} 道题，其中 ${answered} 道检测到有效回答。`}]:[]),
   ];
   const followUp=weakItems.length
-    ? `建议后续面试重点核验：${weakItems.map(item=>item.question).join('；')}。可围绕实际项目、个人职责和量化结果继续追问。`
+    ? buildCandidateFocus(weakItems,answerRate)
     : score>=80
       ? '整体回答与岗位要求匹配度较高，建议下一轮重点验证关键经历的真实性、复杂场景判断和协作方式。'
       : '建议下一轮结合岗位核心职责补充追问，并要求候选人提供具体场景、个人行动和量化结果。';
   return {
     version:1,
     source:'system-interview',
-    rating:Math.round(score/20*10)/10,
+    rating:Math.round(score/20),
     ratingMax:5,
     duration:formatDuration(durationSeconds),
     summary:parsed.intro||clean(summary)||'该候选人的 AI 面试已完成，暂无文字总结。',
@@ -133,6 +133,21 @@ function parseLegacyInterviewSummary(summary:string){
     return {number:Number(heading[1]),question:heading[2].trim(),score:Number(heading[3]),keywords:keywordLine.replace(/^命中关键词：/,'').trim()||'无',answer:answerIndex>=0?lines.slice(answerIndex).join('\n').replace(/^回答：/,'').trim():'未作答'};
   }).filter(Boolean) as {number:number;question:string;score:number;keywords:string;answer:string}[];
   return {intro,items};
+}
+
+function buildCandidateFocus(items:{question:string;score:number;answer:string}[],answerRate:number){
+  const focuses=items.map(item=>{
+    if(!item.answer||item.answer==='未作答')return '表达完整性与信息有效性：确认候选人能否在限定时间内完整陈述背景、行动、结果和个人贡献';
+    if(/系统|架构|设计|技术取舍|核心技术/.test(item.question))return '核心技术与系统设计能力：重点核验技术栈掌握深度、方案边界、关键取舍及风险意识';
+    if(/故障|难题|定位|解决|异常|问题/.test(item.question))return '复杂问题分析与闭环能力：重点考察问题拆解、定位路径、决策依据和复盘改进';
+    if(/项目|经历|案例/.test(item.question))return '项目经历真实性与个人贡献：核验候选人在代表项目中的职责边界、实际产出及量化结果';
+    if(/职责|岗位|理解|胜任/.test(item.question))return '岗位理解与胜任能力：确认候选人对核心职责、质量标准和业务目标的理解是否准确';
+    if(/目标|资源|团队|协作|推进|冲突/.test(item.question))return '目标推进与协作能力：考察资源受限场景下的优先级判断、沟通方式和结果交付';
+    return '岗位核心能力的实际应用：结合真实工作场景核验候选人的判断依据、行动过程和结果质量';
+  });
+  if(answerRate<80)focuses.push('回答稳定性与沟通表达：重点观察信息组织、重点提炼及连续追问下的表达一致性');
+  const unique=[...new Set(focuses)].slice(0,3);
+  return `建议下一步重点考察：${unique.map((focus,index)=>`${index+1}. ${focus}`).join('；')}。`;
 }
 
 function formatDuration(seconds:number|null){
