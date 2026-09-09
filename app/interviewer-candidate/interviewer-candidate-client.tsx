@@ -112,7 +112,7 @@ export default function InterviewerCandidateClient() {
           <button type="button" className="interviewer-help" onClick={()=>flash('帮助中心')}>◉ 帮助中心</button>
           <button type="button" className="interviewer-tool-icon" onClick={()=>flash('消息中心')}>♧</button>
           <button type="button" className="interviewer-tool-icon" onClick={()=>flash('通知中心')}>♢</button>
-          <HrAccountMenu contact={data.account.contact} email={data.account.email} role={data.account.role}/>
+          <HrAccountMenu contact={data.account.contact} phone={data.account.phone} email={data.account.email} role={data.account.role}/>
         </div>
       </header>
       <div className="interviewer-open-tabs"><a href="/workbench">招聘管理</a><i>›</i><button type="button" className="active">候选人筛选</button></div>

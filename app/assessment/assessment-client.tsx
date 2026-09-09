@@ -92,7 +92,7 @@ export default function AssessmentClient() {
         <div className="interviewer-tools">
           <div className="interviewer-global-search"><input value={keyword} onChange={event=>setKeyword(event.target.value)} placeholder="全局搜索候选人或职位"/><button type="button">⌕</button></div>
           <button type="button" className="interviewer-help" onClick={()=>flash('人工评估用于记录面试官对候选人的综合判断')}>◉ 评估说明</button>
-          <HrAccountMenu contact={data.account.contact} email={data.account.email} role={data.account.role}/>
+          <HrAccountMenu contact={data.account.contact} phone={data.account.phone} email={data.account.email} role={data.account.role}/>
         </div>
       </header>
       <div className="interviewer-open-tabs"><a href="/interviewer-candidate">候选人筛选</a><i>›</i><button type="button" className="active">人工评估</button></div>
