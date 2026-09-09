@@ -1599,3 +1599,38 @@ input[type="date"]::-webkit-calendar-picker-indicator,input[type="datetime-local
 .candidate-stage-track button.current{border-color:rgba(58,194,219,.42);background:linear-gradient(145deg,#0b2637,#102943);box-shadow:inset 3px 0 #31c7df,0 10px 24px rgba(0,8,22,.24)}.candidate-stage-track button.current i{border:0;color:#fff;background:linear-gradient(145deg,#18aabf,#2e75d7);box-shadow:0 5px 14px rgba(25,139,190,.22)}.candidate-stage-track button.current b{color:#f0f7ff}.candidate-stage-track button.current small{color:#64cfdf}
 .candidate-stage-track button.next{border-color:rgba(75,133,203,.34);background:linear-gradient(145deg,#101f36,#152844);box-shadow:inset 3px 0 #397edb,0 8px 20px rgba(0,8,22,.2)}.candidate-stage-track button.next i{border-color:rgba(77,171,218,.22);color:#85deec;background:#103148}.candidate-stage-track button.next b{color:#dcecff}.candidate-stage-track button.next small{color:#69cbdc}.candidate-stage-track button.next:hover{border-color:rgba(74,199,223,.55);background:linear-gradient(145deg,#103047,#18345a);box-shadow:inset 3px 0 #36c4dd,0 12px 25px rgba(0,13,32,.3)}
 .candidate-stage-track button.locked{border-color:rgba(91,116,141,.12);background:linear-gradient(145deg,#081321,#0a1727);filter:none;opacity:.68}.candidate-stage-track button.locked i{color:#4f6579;background:#0d1a2b}.candidate-stage-track button.locked b{color:#687b8d}.candidate-stage-track button.locked small{color:#495d70}
+
+/* Refined HR controls and a compact timeline-style candidate workflow. */
+.interviewer-header .hr-account-trigger{min-width:190px;height:60px;gap:12px;padding:8px 11px}
+.interviewer-header .hr-account-trigger .interviewer-account-copy{min-width:0;display:flex;flex-direction:column;gap:4px}
+.interviewer-header .hr-account-trigger .interviewer-account-copy b{overflow:hidden;font-size:15px;line-height:1.2;text-overflow:ellipsis;white-space:nowrap}
+.interviewer-header .hr-account-trigger .interviewer-account-copy small{font-size:12px;line-height:1.2}
+.interviewer-header .hr-account-trigger>i{display:grid;width:18px;height:24px;place-items:center;font-size:15px;line-height:1}
+.interviewer-batch-row button{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:38px;padding:0 14px;font-size:14px;line-height:1}
+.interviewer-batch-row button>span{line-height:1}
+.interviewer-batch-row button>i{display:grid;width:12px;height:16px;place-items:center;margin:0;font-size:13px;font-style:normal;line-height:1;transform:translateY(-1px)}
+.candidate-card footer span{padding:8px 12px;font-size:13px;line-height:1.2}
+.candidate-card footer span strong{color:#dff9ff;font-size:14px;font-weight:800}
+
+.candidate-stage-stepper{padding:22px 24px;border-color:rgba(73,171,207,.25);border-radius:18px;background:radial-gradient(circle at 100% 0,rgba(23,123,168,.16),transparent 38%),linear-gradient(155deg,#071321,#0a1a2c);box-shadow:inset 0 1px rgba(255,255,255,.04),0 20px 46px rgba(0,5,15,.22)}
+.candidate-stage-stepper>header{margin-bottom:12px;padding-bottom:16px;border-bottom:1px solid rgba(116,158,190,.12)}
+.candidate-stage-track{display:grid;grid-template-columns:1fr;gap:0}
+.candidate-stage-track button{position:relative;min-height:64px;display:grid;grid-template-columns:40px minmax(0,1fr) auto;grid-template-rows:auto auto;align-items:center;gap:2px 13px;overflow:visible;padding:9px 12px;border:1px solid transparent;border-radius:12px;background:transparent;box-shadow:none}
+.candidate-stage-track button::after{content:"";position:absolute;z-index:0;top:44px;bottom:-20px;left:31px;width:1px;background:rgba(103,139,170,.2)}
+.candidate-stage-track button:last-child::after{display:none}
+.candidate-stage-track button i{position:relative;z-index:1;grid-row:1/3;width:34px;height:34px;border:1px solid rgba(109,151,184,.18);border-radius:50%;color:#71869b;background:#0d1d30;font-size:10px}
+.candidate-stage-track button b{grid-column:2;color:#b5c4d4;font-size:15px;line-height:1.35}
+.candidate-stage-track button small{grid-column:3;grid-row:1/3;padding:5px 9px;border-radius:999px;color:#71869b;background:rgba(113,139,169,.08);font-size:11px;line-height:1.3;white-space:nowrap}
+.candidate-stage-track button.completed{border-color:transparent;background:transparent;box-shadow:none}
+.candidate-stage-track button.completed::after{background:linear-gradient(#38b99d,rgba(58,185,157,.25))}
+.candidate-stage-track button.completed i{border-color:rgba(67,211,179,.34);color:#a0ebd7;background:#10352f;box-shadow:0 0 0 4px rgba(45,177,148,.06)}
+.candidate-stage-track button.completed b{color:#9dc9be}.candidate-stage-track button.completed small{color:#78b6a7;background:rgba(39,145,121,.1)}
+.candidate-stage-track button.current{border-color:rgba(54,201,224,.28);background:linear-gradient(100deg,rgba(15,117,143,.22),rgba(29,77,135,.14));box-shadow:inset 3px 0 #31c7df,0 9px 22px rgba(0,8,22,.18)}
+.candidate-stage-track button.current i{border:0;color:#fff;background:linear-gradient(145deg,#19b9cf,#347ce4);box-shadow:0 7px 18px rgba(25,139,190,.26)}
+.candidate-stage-track button.current b{color:#f3f9ff}.candidate-stage-track button.current small{color:#77e0ed;background:rgba(24,144,166,.18)}
+.candidate-stage-track button.next{cursor:pointer;border-color:rgba(66,130,209,.24);background:linear-gradient(100deg,rgba(25,64,108,.32),rgba(30,67,128,.2));box-shadow:none}
+.candidate-stage-track button.next i{border-color:rgba(77,188,224,.3);color:#91e8f3;background:#123149}.candidate-stage-track button.next b{color:#dcecff}.candidate-stage-track button.next small{color:#83deeb;background:rgba(30,133,159,.16)}
+.candidate-stage-track button.next:hover{transform:translateX(4px);border-color:rgba(68,204,226,.48);background:linear-gradient(100deg,rgba(15,126,151,.3),rgba(43,89,170,.24));box-shadow:0 10px 24px rgba(0,10,28,.22)}
+.candidate-stage-track button.locked{border-color:transparent;background:transparent;filter:none;opacity:.52}.candidate-stage-track button.locked i{color:#53697d;background:#0b192a}.candidate-stage-track button.locked b{color:#687c90}.candidate-stage-track button.locked small{color:#52677a;background:rgba(93,116,142,.06)}
+.candidate-stage-track button.has-assignee{min-height:76px}.candidate-stage-track button.has-assignee i{grid-row:1/4}.candidate-stage-track .stage-assignee{grid-column:2;grid-row:2;margin:2px 0 0;color:#83dce8;font-size:11px}.candidate-stage-track button.has-assignee small{grid-row:1/4}
+@media(max-width:620px){.candidate-stage-stepper{padding:19px 17px}.candidate-stage-stepper>header{align-items:flex-start;flex-direction:column}.candidate-stage-track{grid-template-columns:1fr}.candidate-stage-track button{min-height:62px;padding:8px 9px;grid-template-columns:36px minmax(0,1fr) auto;gap:2px 10px}.candidate-stage-track button::after{left:26px}.candidate-stage-track button b{font-size:14px}.candidate-stage-track button small{padding:4px 7px;font-size:10px}}
