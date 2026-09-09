@@ -256,7 +256,7 @@ export async function POST(request: NextRequest) {
 
   if (action === 'saveReview') {
     const candidateId = text(body?.candidateId, 80);
-    const candidate = await ownedCandidate(candidateId, account.id);
+    const candidate = await accessibleScreeningCandidate(candidateId, account.id);
     if (!candidate) return invalid('候选人不存在。');
     const tags = list(body?.tags).slice(0, 20);
     const comment = text(body?.comment, 2000);
@@ -266,8 +266,8 @@ export async function POST(request: NextRequest) {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(candidate_id) DO UPDATE SET tags_json = excluded.tags_json, comment = excluded.comment,
       risk_note = excluded.risk_note, reject_reason = excluded.reject_reason, reviewer = excluded.reviewer,
-      updated_at = excluded.updated_at`).bind(candidateId, account.id, JSON.stringify(tags), comment, riskNote, rejectReason, account.contact, now).run();
-    await insertLog(account.id, candidateId, candidate.job_id ? String(candidate.job_id) : null, account.contact, '人工核验', comment ? '更新筛选评语与标签' : '更新人工标注');
+      updated_at = excluded.updated_at`).bind(candidateId, candidate.owner_id, JSON.stringify(tags), comment, riskNote, rejectReason, account.contact, now).run();
+    await insertLog(candidate.owner_id, candidateId, candidate.job_id ? String(candidate.job_id) : null, account.contact, '人工核验', comment ? '更新筛选评语与标签' : '更新人工标注');
     return NextResponse.json({ ok: true });
   }
 
@@ -499,6 +499,12 @@ async function ownedJob(id: string, ownerId: string) {
 
 async function ownedCandidate(id: string, ownerId: string) {
   return getDb().prepare('SELECT id, job_id FROM candidates WHERE id = ? AND owner_id = ?').bind(id, ownerId).first<DataRow>();
+}
+
+async function accessibleScreeningCandidate(id: string, accountId: string) {
+  return getDb().prepare(`SELECT id, owner_id, job_id FROM candidates WHERE id = ? AND (
+    owner_id = ? OR id IN (SELECT candidate_id FROM candidate_assignments WHERE hr_account_id = ?)
+  ) LIMIT 1`).bind(id, accountId, accountId).first<{id:string;owner_id:string;job_id:string|null}>();
 }
 
 function mapProfile(row: DataRow) {

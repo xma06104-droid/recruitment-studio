@@ -11,7 +11,8 @@ type Candidate = { id:string; jobId:string|null; name:string; role:string; compa
 type AiInterview = { id:string; candidateId:string; jobTitle:string; status:string; score:number|null; durationSeconds:number|null; summary:string; completedAt:string|null; createdAt:string; updatedAt:string };
 type Dataset = { account:Account; jobs:Job[]; candidates:Candidate[]; aiInterviews:AiInterview[] };
 type Profile = { candidateId:string; education:string; major:string; school:string; age:number|null; gender:string; industry:string; expectedSalary:number|null; workYears:number|null; stabilityMonths:number|null; workHistory:string[]; projectHistory:string[]; certificates:string[]; highlights:string[]; risks:string[]; parsingStatus:string; fileName:string; fileType:string; fileSize:number; matchScore:number|null; matchLevel:string; updatedAt:string };
-type ScreeningData = { profiles:Profile[] };
+type Review = { candidateId:string; tags:string[]; comment:string; riskNote:string; rejectReason:string; reviewer:string; updatedAt:string };
+type ScreeningData = { profiles:Profile[]; reviews:Review[] };
 type ReviewStatus = '待筛选'|'已通过'|'已拒绝'|'待定'|'已失效';
 type ReviewAction = 'pass'|'pending'|'reject';
 
@@ -34,6 +35,7 @@ export default function InterviewerCandidateClient() {
   const [selected,setSelected]=useState<string[]>([]);
   const [toast,setToast]=useState('');
   const [profiles,setProfiles]=useState<Profile[]>([]);
+  const [reviews,setReviews]=useState<Review[]>([]);
   const [detailId,setDetailId]=useState('');
   const [savingId,setSavingId]=useState('');
 
@@ -49,6 +51,7 @@ export default function InterviewerCandidateClient() {
     if(screeningResponse.ok){
       const screening=await screeningResponse.json() as ScreeningData;
       setProfiles(screening.profiles||[]);
+      setReviews(screening.reviews||[]);
     }
     setError('');
   }
@@ -67,6 +70,7 @@ export default function InterviewerCandidateClient() {
   const currentJob=jobId?data?.jobs.find(job=>job.id===jobId):null;
   const detailCandidate=detailId?data?.candidates.find(candidate=>candidate.id===detailId):undefined;
   const detailProfile=detailCandidate?profiles.find(profile=>profile.candidateId===detailCandidate.id):undefined;
+  const detailReview=detailCandidate?reviews.find(review=>review.candidateId===detailCandidate.id):undefined;
   const detailAiInterview=detailCandidate?data?.aiInterviews.find(report=>report.candidateId===detailCandidate.id):undefined;
 
   function flash(message:string){setToast(message);window.setTimeout(()=>setToast(''),2200)}
@@ -88,6 +92,25 @@ export default function InterviewerCandidateClient() {
       flash(`${candidate.name}${next.message}，超级管理员端已同步`);
     }catch{
       flash('保存失败，请稍后重试');
+    }finally{
+      setSavingId('');
+    }
+  }
+
+  async function saveNote(candidate:Candidate,note:string){
+    if(savingId)return false;
+    const previous=reviews.find(review=>review.candidateId===candidate.id);
+    setSavingId(candidate.id);
+    try{
+      const response=await fetch('/api/screening',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'saveReview',candidateId:candidate.id,tags:previous?.tags||[],comment:note,riskNote:previous?.riskNote||'',rejectReason:previous?.rejectReason||''})});
+      if(!response.ok)throw new Error('save');
+      announceWorkbenchChange();
+      await load();
+      flash(note?'候选人备注已保存':'候选人备注已清空');
+      return true;
+    }catch{
+      flash('备注保存失败，请稍后重试');
+      return false;
     }finally{
       setSavingId('');
     }
@@ -141,7 +164,7 @@ export default function InterviewerCandidateClient() {
               <label onClick={event=>event.stopPropagation()}><input type="checkbox" checked={selected.includes(candidate.id)} onChange={()=>setSelected(selected.includes(candidate.id)?selected.filter(id=>id!==candidate.id):[...selected,candidate.id])}/></label>
               <div className="interviewer-candidate-profile"><p>{job?.title||candidate.role||'未关联职位'}　{formatDate(candidate.createdAt)}申请 <i>▣</i></p><h3>{candidate.name}<b>{candidate.score===null?'—':Math.max(1,Math.round(candidate.score/20))}</b><span>{candidate.city||'城市未填写'}</span>{candidate.years&&<span>{candidate.years}工作经验</span>}</h3><p>◼ {candidate.company||'最近公司未填写'}　{candidate.role||'职位未填写'}　{candidate.skills.slice(0,2).join('｜')||'暂无技能标签'}</p></div>
               <div className="interviewer-candidate-owner"><p>接收 HR： <b>{candidate.assignedHrName||data.account.contact}</b>　<i>□</i>　<em>♧</em></p><p>当前状态： <span>◢ {candidateDisplayStatus(candidate.stage)}</span></p></div>
-              <div className="interviewer-candidate-note"><p>推荐时间：{formatDate(candidate.assignedAt||candidate.updatedAt)}</p><p>最近备注： -</p></div>
+              <div className="interviewer-candidate-note"><p>推荐时间：{formatDate(candidate.assignedAt||candidate.updatedAt)}</p><p>最近备注： {reviews.find(review=>review.candidateId===candidate.id)?.comment||'-'}</p></div>
             </article>}):<div className="interviewer-empty"><span>⌕</span><b>暂无候选人</b><p>当前筛选条件下没有候选人记录</p></div>}
           </div>
           <footer className="interviewer-pagination"><span>共 {candidates.length} 条</span><button type="button" disabled>‹</button><button type="button" className="active">1</button><button type="button" disabled>›</button><select><option>10条/页</option><option>20条/页</option></select><label>前往 <input defaultValue="1"/> 页</label></footer>
@@ -154,17 +177,21 @@ export default function InterviewerCandidateClient() {
       candidate={detailCandidate}
       job={data.jobs.find(job=>job.id===detailCandidate.jobId)}
       profile={detailProfile}
+      review={detailReview}
       aiInterview={detailAiInterview}
       saving={savingId===detailCandidate.id}
       onClose={()=>setDetailId('')}
       onReview={action=>void updateReview(detailCandidate,action)}
+      onSaveNote={note=>saveNote(detailCandidate,note)}
     />}
     {toast&&<div className="interviewer-toast">{toast}</div>}
   </main>;
 }
 
-function CandidateResumeDrawer({candidate,job,profile,aiInterview,saving,onClose,onReview}:{candidate:Candidate;job:Job|undefined;profile:Profile|undefined;aiInterview:AiInterview|undefined;saving:boolean;onClose:()=>void;onReview:(action:ReviewAction)=>void}){
+function CandidateResumeDrawer({candidate,job,profile,review,aiInterview,saving,onClose,onReview,onSaveNote}:{candidate:Candidate;job:Job|undefined;profile:Profile|undefined;review:Review|undefined;aiInterview:AiInterview|undefined;saving:boolean;onClose:()=>void;onReview:(action:ReviewAction)=>void;onSaveNote:(note:string)=>Promise<boolean>}){
   const status=candidateDisplayStatus(candidate.stage);
+  const [noteOpen,setNoteOpen]=useState(false);
+  const [note,setNote]=useState(review?.comment||'');
   return <div className="drawer-backdrop hr-resume-backdrop" onMouseDown={onClose}>
     <aside className="detail-drawer candidate-drawer hr-resume-drawer" aria-label={`${candidate.name}的简历`} onMouseDown={event=>event.stopPropagation()}>
       <button type="button" className="drawer-close" onClick={onClose} aria-label="关闭简历">×</button>
@@ -174,7 +201,9 @@ function CandidateResumeDrawer({candidate,job,profile,aiInterview,saving,onClose
         <button type="button" className={status==='已通过'?'active pass':'pass'} disabled={saving} onClick={()=>onReview('pass')}><i>✓</i><span><b>通过</b><small>进入安排面试</small></span></button>
         <button type="button" className={status==='待定'?'active pending':'pending'} disabled={saving} onClick={()=>onReview('pending')}><i>◷</i><span><b>待定</b><small>保留候选人</small></span></button>
         <button type="button" className={status==='已拒绝'?'active reject':'reject'} disabled={saving} onClick={()=>onReview('reject')}><i>×</i><span><b>拒绝</b><small>结束初筛</small></span></button>
+        <button type="button" className={noteOpen?'active note':'note'} disabled={saving} onClick={()=>setNoteOpen(current=>!current)}><i>✎</i><span><b>备注</b><small>{review?.comment?'查看或修改':'添加候选人备注'}</small></span></button>
       </div>
+      {noteOpen&&<form className="hr-resume-note" onSubmit={event=>{event.preventDefault();void onSaveNote(note).then(saved=>{if(saved)setNoteOpen(false)})}}><label>候选人备注<textarea value={note} maxLength={2000} onChange={event=>setNote(event.target.value)} placeholder="记录沟通情况、筛选意见或后续关注事项"/></label><footer><small>{note.length}/2000</small><button type="button" disabled={saving} onClick={()=>setNoteOpen(false)}>取消</button><button type="submit" disabled={saving}>{saving?'保存中…':'保存备注'}</button></footer></form>}
       {saving&&<p className="hr-resume-saving">正在同步审核结果…</p>}
       <section className="hr-resume-section"><h3>基本信息</h3><div className="profile-info"><p><span>应聘职位</span>{job?.title||candidate.role||'-'}</p><p><span>手机号</span>{candidate.phone||'-'}</p><p><span>邮箱</span>{candidate.email||'-'}</p><p><span>所在城市</span>{candidate.city||'-'}</p><p><span>工作经验</span>{profile?.workYears!==null&&profile?.workYears!==undefined?`${profile.workYears}年`:candidate.years||'-'}</p><p><span>期望薪资</span>{profile?.expectedSalary?`${profile.expectedSalary}元/月`:'-'}</p></div></section>
       {aiInterview&&<section className="hr-resume-section hr-ai-interview-result"><h3>AI 面试结果</h3><AiInterviewResultPanel summary={aiInterview.summary} fallbackScore={aiInterview.score} durationSeconds={aiInterview.durationSeconds} completedAt={aiInterview.completedAt} compact/></section>}
@@ -183,7 +212,7 @@ function CandidateResumeDrawer({candidate,job,profile,aiInterview,saving,onClose
       <ProjectTimeline items={profile?.projectHistory}/>
       <section className="hr-resume-section"><h3>技能与证书</h3><div className="channel-tags">{[...candidate.skills,...(profile?.certificates||[])].length?[...candidate.skills,...(profile?.certificates||[])].map((item,index)=><span key={`${item}-${index}`}>{item}</span>):<p className="hr-resume-copy">暂无技能与证书信息</p>}</div></section>
       {(profile?.highlights.length||profile?.risks.length)?<section className="hr-resume-section hr-resume-insights"><h3>AI 简历摘要</h3>{profile?.highlights.length?<div className="hr-insight-group highlight"><b>优势</b><div>{profile.highlights.map((item,index)=><span key={`highlight-${index}`}>{item}</span>)}</div></div>:null}{profile?.risks.length?<div className="hr-insight-group risk"><b>关注</b><div>{profile.risks.map((item,index)=><span key={`risk-${index}`}>{item}</span>)}</div></div>:null}</section>:null}
-      {profile?.fileName?<a className="hr-resume-file" href={`/api/screening/file?candidateId=${encodeURIComponent(candidate.id)}`} target="_blank" rel="noreferrer">查看原始简历 · {profile.fileName}</a>:<p className="hr-resume-copy hr-resume-file-empty">未找到可预览的原始简历文件</p>}
+      {profile?.fileName?<div className="hr-resume-file-actions"><button type="button" onClick={()=>window.print()}>打印简历</button><a className="hr-resume-file" href={`/api/screening/file?candidateId=${encodeURIComponent(candidate.id)}`} target="_blank" rel="noreferrer">查看原始简历 · {profile.fileName}</a></div>:<p className="hr-resume-copy hr-resume-file-empty">未找到可预览的原始简历文件</p>}
     </aside>
   </div>;
 }
@@ -194,29 +223,54 @@ function ResumeList({title,items}:{title:string;items:string[]|undefined}){
 
 function ProjectTimeline({items}:{items:string[]|undefined}){
   const projects=groupProjectHistory(items||[]);
-  return <section className="hr-resume-section"><h3>项目经历</h3>{projects.length?<div className="hr-project-timeline">{projects.map((project,index)=><article key={`${project.period}-${index}`}><time>{project.period}</time><div>{project.details.length?project.details.map((detail,detailIndex)=><p key={`${project.period}-${detailIndex}`}>{detail}</p>):<p>暂无详细项目描述</p>}</div></article>)}</div>:<p className="hr-resume-copy">暂无项目经历信息</p>}</section>;
+  return <section className="hr-resume-section"><h3>项目经历</h3>{projects.length?<div className="hr-project-timeline">{projects.map((project,index)=><article key={`${project.label}-${index}`}><strong>{project.label}</strong><div>{project.details.length?project.details.map((detail,detailIndex)=><p key={`${project.label}-${detailIndex}`}>{detail}</p>):<p>暂无详细项目描述</p>}</div></article>)}</div>:<p className="hr-resume-copy">暂无项目经历信息</p>}</section>;
 }
 
 function groupProjectHistory(items:string[]){
   const dateRange=/^((?:19|20)\d{2}(?:[.\/\-年]\d{1,2})?\s*(?:至|到|[-—–~～])\s*(?:(?:19|20)\d{2}(?:[.\/\-年]\d{1,2})?|至今|现在|今))(?:\s*[\u00b7|｜]\s*|\s+)?(.*)$/i;
   const parsed=items.map(item=>{const match=item.trim().match(dateRange);return {period:match?.[1]?.replace(/\s+/g,'')||'',detail:match?match[2].trim():item.trim()}}).filter(item=>item.period||item.detail);
   const dateIndexes=parsed.map((item,index)=>item.period?index:-1).filter(index=>index>=0);
-  if(!dateIndexes.length)return parsed.map((item,index)=>({period:`项目 ${String(index+1).padStart(2,'0')}`,details:[item.detail]}));
+  if(!dateIndexes.length){
+    const groups:{label:string;details:string[]}[]=[];
+    for(const item of parsed){
+      const detail=item.detail.replace(/^[-—·•\s]+/,'').trim();
+      if(!detail)continue;
+      const explicit=detail.match(/^(?:项目名称|项目名|项目)\s*[:：]\s*(.+)$/);
+      const title=explicit?.[1]?.trim()||projectTitle(detail);
+      const titleOnly=Boolean(title&&title===detail.replace(/[：:]$/,''));
+      const startsAfterResponsibilities=Boolean(title&&groups.length&&groups[groups.length-1].details.some(value=>/项目职责|工作职责|主要职责|负责/.test(value)));
+      if(explicit||titleOnly||startsAfterResponsibilities){
+        groups.push({label:title||`项目 ${String(groups.length+1).padStart(2,'0')}`,details:titleOnly||explicit?[]:[detail]});
+      }else if(groups.length){
+        groups[groups.length-1].details.push(detail);
+      }else{
+        groups.push({label:title||'项目 01',details:[detail]});
+      }
+    }
+    return groups;
+  }
 
   const leadingDates=dateIndexes.length>1&&dateIndexes.every((index,position)=>index===position)&&parsed.slice(dateIndexes.length).every(item=>!item.period);
   if(leadingDates){
     const periods=parsed.slice(0,dateIndexes.length).map(item=>item.period);
     const details=parsed.slice(dateIndexes.length).map(item=>item.detail).filter(Boolean);
-    return periods.map((period,index)=>({period,details:details.slice(Math.floor(index*details.length/periods.length),Math.floor((index+1)*details.length/periods.length))})).sort((a,b)=>projectDateValue(b.period)-projectDateValue(a.period));
+    return periods.map((label,index)=>({label,details:details.slice(Math.floor(index*details.length/periods.length),Math.floor((index+1)*details.length/periods.length))})).sort((a,b)=>projectDateValue(b.label)-projectDateValue(a.label));
   }
 
-  const groups:{period:string;details:string[]}[]=[];
+  const groups:{label:string;details:string[]}[]=[];
   for(const item of parsed){
-    if(item.period)groups.push({period:item.period,details:item.detail?[item.detail]:[]});
+    if(item.period)groups.push({label:item.period,details:item.detail?[item.detail]:[]});
     else if(groups.length)groups[groups.length-1].details.push(item.detail);
-    else groups.push({period:'时间未标注',details:[item.detail]});
+    else groups.push({label:projectTitle(item.detail)||'时间未标注',details:[item.detail]});
   }
-  return groups.sort((a,b)=>projectDateValue(b.period)-projectDateValue(a.period));
+  return groups.sort((a,b)=>projectDateValue(b.label)-projectDateValue(a.label));
+}
+
+function projectTitle(value:string){
+  const cleaned=value.replace(/[：:]$/,'').trim();
+  const title=cleaned.match(/^([\u4e00-\u9fa5A-Za-z0-9_-]{2,30}(?:系统|平台|项目|应用|小程序|APP|网站))(?=是|为|，|。|：|:|\s|$)/i)?.[1];
+  if(title)return title;
+  return cleaned.length<=30&&!/[，。；;、]/.test(cleaned)&&/(?:系统|平台|项目|应用|小程序|APP|网站)$/i.test(cleaned)?cleaned:'';
 }
 
 function projectDateValue(value:string){
