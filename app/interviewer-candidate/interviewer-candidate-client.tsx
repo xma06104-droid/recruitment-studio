@@ -171,8 +171,6 @@ export default function InterviewerCandidateClient() {
         </section>
       </div>
     </section>
-    <button type="button" className="interviewer-wechat" onClick={()=>flash('微信咨询')}>微信</button>
-    <div className="interviewer-floating"><button type="button" onClick={()=>flash('在线咨询')}>◉　在线咨询</button><button type="button" onClick={()=>flash('需求反馈')}>✎　需求反馈</button></div>
     {detailCandidate&&<CandidateResumeDrawer
       candidate={detailCandidate}
       job={data.jobs.find(job=>job.id===detailCandidate.jobId)}
