@@ -7,8 +7,9 @@ import HrAccountMenu from '@/app/components/hr-account-menu';
 type Account = { contact:string; phone:string; email:string; role:'super_admin'|'hr' };
 type Job = { id:string; title:string; department:string; city:string; status:string; ownerName:string; createdAt:string };
 type Candidate = { id:string; jobId:string|null; name:string; role:string; company:string; years:string; stage:string; source:string; skills:string[]; score:number|null; phone:string; email:string; city:string; createdAt:string; updatedAt:string };
+type AiInterview = { id:string; candidateId:string; status:string; score:number|null; completedAt:string|null; updatedAt:string };
 type Assessment = { candidateId:string; total:number; professional:number; communication:number; culture:number; comment:string; reviewer:string; updatedAt:string };
-type Dataset = { account:Account; jobs:Job[]; candidates:Candidate[]; manualAssessments:Assessment[] };
+type Dataset = { account:Account; jobs:Job[]; candidates:Candidate[]; aiInterviews:AiInterview[]; manualAssessments:Assessment[] };
 
 const menuItems = [
   {icon:'◉',label:'候选人筛选',href:'/interviewer-candidate'},
@@ -47,12 +48,13 @@ export default function AssessmentClient() {
     if(!data)return [];
     return data.candidates.filter(candidate=>{
       const job=data.jobs.find(item=>item.id===candidate.jobId);
+      const aiInterview=data.aiInterviews.find(item=>item.candidateId===candidate.id&&item.status==='已完成'&&item.score!==null);
       const text=`${candidate.name}${candidate.phone}${candidate.email}${candidate.role}${candidate.company}${candidate.city}${job?.title||''}`.toLowerCase();
       const assessed=Boolean(assessments[candidate.id]);
       return (!keyword||text.includes(keyword.toLowerCase()))
         &&(!jobId||candidate.jobId===jobId)
         &&(stateFilter==='all'||(stateFilter==='assessed'&&assessed)||(stateFilter==='pending'&&!assessed))
-        &&(contentFilter==='all'||(contentFilter==='ai'&&candidate.score!==null)||(contentFilter==='manual'&&assessed));
+        &&(contentFilter==='all'||(contentFilter==='ai'&&Boolean(aiInterview))||(contentFilter==='manual'&&assessed));
     }).sort((a,b)=>{
       if(sort==='score')return (displayScore(b,assessments)-(displayScore(a,assessments)));
       if(sort==='name')return a.name.localeCompare(b.name,'zh-CN');
@@ -91,7 +93,6 @@ export default function AssessmentClient() {
         <div className="interviewer-heading"><h1>人工评估</h1><small>HR 候选人工作台</small></div>
         <div className="interviewer-tools">
           <div className="interviewer-global-search"><input value={keyword} onChange={event=>setKeyword(event.target.value)} placeholder="全局搜索候选人或职位"/><button type="button">⌕</button></div>
-          <button type="button" className="interviewer-help" onClick={()=>flash('人工评估用于记录面试官对候选人的综合判断')}>◉ 评估说明</button>
           <HrAccountMenu contact={data.account.contact} phone={data.account.phone} email={data.account.email} role={data.account.role}/>
         </div>
       </header>
@@ -114,10 +115,11 @@ export default function AssessmentClient() {
             {candidates.length?candidates.map(candidate=>{
               const job=data.jobs.find(item=>item.id===candidate.jobId);
               const manual=assessments[candidate.id];
+              const aiInterview=data.aiInterviews.find(item=>item.candidateId===candidate.id);
               const score=displayScore(candidate,assessments);
               return <article key={candidate.id} className="assessment-row">
                 <div className="assessment-profile"><p>{job?.title||candidate.role||'未关联职位'} · {formatDate(candidate.createdAt)} 进入流程</p><h3>{candidate.name}<span>{candidate.city||'城市未填写'}</span><span>{candidate.years||'经验未填写'}</span></h3><small>{candidate.company||'最近公司未填写'} · {candidate.role||'职位未填写'} · {candidate.skills.slice(0,3).join(' / ')||'暂无技能标签'}</small></div>
-                <div className="assessment-metrics"><p>人工评估 <b className={manual?'done':''}>{manual?`${manual.total} 分`:'待评估'}</b></p><p>AI 面试评分 <b>{candidate.score===null?'暂无':`${candidate.score} 分`}</b></p><p>流程阶段 <b>{candidate.stage}</b></p></div>
+                <div className="assessment-metrics"><p>人工评估 <b className={manual?'done':''}>{manual?`${manual.total} 分`:'待评估'}</b></p><p>AI 面试评分 <b>{displayAiInterview(aiInterview,candidate.stage)}</b></p><p>流程阶段 <b>{candidate.stage}</b></p></div>
                 <div className="assessment-stars"><span>综合匹配度</span><b>{score?stars(score):'☆☆☆☆☆'}</b><small>{manual?.comment||'尚未填写人工评语'}</small></div>
                 <button type="button" className="assessment-action" onClick={()=>setEditing(candidate)}>{manual?'查看 / 修改评估':'开始评估'}</button>
               </article>;
@@ -133,30 +135,56 @@ export default function AssessmentClient() {
 }
 
 function AssessmentDialog({candidate,job,value,saving,onClose,onSave}:{candidate:Candidate;job?:Job;value?:Assessment;saving:boolean;onClose:()=>void;onSave:(value:Omit<Assessment,'candidateId'|'reviewer'>)=>void}) {
-  const [professional,setProfessional]=useState(value?.professional||80);
-  const [communication,setCommunication]=useState(value?.communication||80);
-  const [culture,setCulture]=useState(value?.culture||80);
-  const [comment,setComment]=useState(value?.comment||'');
+  const [resumeDecision,setResumeDecision]=useState(assessmentDecision(value?.professional,'是','否'));
+  const [resumeStars,setResumeStars]=useState(scoreToStars(value?.professional));
+  const [resumeComment,setResumeComment]=useState(extractAssessmentDetail(value?.comment,'简历意向'));
+  const [videoDecision,setVideoDecision]=useState(assessmentDecision(value?.communication,'通过','拒绝'));
+  const [videoStars,setVideoStars]=useState(scoreToStars(value?.communication));
+  const [videoComment,setVideoComment]=useState(extractAssessmentDetail(value?.comment,'视频面试'));
+  const [overallDecision,setOverallDecision]=useState(assessmentDecision(value?.culture,'通过','拒绝'));
+  const [overallStars,setOverallStars]=useState(scoreToStars(value?.culture));
+  const [overallComment,setOverallComment]=useState(extractAssessmentDetail(value?.comment,'综合推荐')||(!value?.comment?.includes('简历意向：')?value?.comment||'':''));
+  const professional=resumeStars*20;
+  const communication=videoStars*20;
+  const culture=overallStars*20;
   const total=Math.round((professional+communication+culture)/3);
-  function submit(event:FormEvent){event.preventDefault();onSave({total,professional,communication,culture,comment:comment.trim(),updatedAt:new Date().toISOString()})}
+  function submit(event:FormEvent){
+    event.preventDefault();
+    const comment=[
+      assessmentSummary('简历意向',resumeDecision,resumeStars,resumeComment),
+      assessmentSummary('视频面试',videoDecision,videoStars,videoComment),
+      assessmentSummary('综合推荐',overallDecision,overallStars,overallComment),
+    ].join('\n');
+    onSave({total,professional,communication,culture,comment,updatedAt:new Date().toISOString()});
+  }
   return <div className="assessment-modal-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)onClose()}}>
-    <form className="assessment-modal" onSubmit={submit}>
+    <form className="assessment-modal assessment-questionnaire" onSubmit={submit}>
       <button type="button" className="assessment-modal-close" onClick={onClose} aria-label="关闭">×</button>
-      <p>人工评估</p><h2>{candidate.name}</h2><small>{job?.title||candidate.role||'未关联职位'} · {candidate.company||'公司未填写'}</small>
-      <div className="assessment-total"><span>综合得分</span><strong>{total}</strong><em>分</em></div>
-      <ScoreField label="专业能力" value={professional} onChange={setProfessional}/>
-      <ScoreField label="沟通表达" value={communication} onChange={setCommunication}/>
-      <ScoreField label="团队与文化匹配" value={culture} onChange={setCulture}/>
-      <label className="assessment-comment"><span>评估意见</span><textarea value={comment} onChange={event=>setComment(event.target.value)} placeholder="记录候选人的优势、风险和后续建议" rows={4}/></label>
-      <footer><button type="button" disabled={saving} onClick={onClose}>取消</button><button type="submit" disabled={saving}>{saving?'保存中…':'保存评估'}</button></footer>
+      <header><p>人工综合评价</p><h2>{candidate.name}</h2><small>{job?.title||candidate.role||'未关联职位'} · {candidate.company||'公司未填写'}</small><div className="assessment-questionnaire-score"><span>当前综合评分</span><b>{total}</b><em>分</em></div></header>
+      <div className="assessment-question-list">
+        <AssessmentQuestion number={1} title="您看完候选人的简历之后，还想面试 TA 吗？" options={['是','否','待定']} decision={resumeDecision} onDecision={setResumeDecision} rating={resumeStars} onRating={setResumeStars} comment={resumeComment} onComment={setResumeComment}/>
+        <AssessmentQuestion number={2} title="请对候选人视频面试的表现进行五星评价" options={['通过','拒绝','待定']} decision={videoDecision} onDecision={setVideoDecision} rating={videoStars} onRating={setVideoStars} comment={videoComment} onComment={setVideoComment}/>
+        <AssessmentQuestion number={3} title="请对候选人的综合表现进行五星评价，并决定是否推荐进入下一轮面试" options={['通过','拒绝','待定']} decision={overallDecision} onDecision={setOverallDecision} rating={overallStars} onRating={setOverallStars} comment={overallComment} onComment={setOverallComment}/>
+      </div>
+      <footer><button type="button" disabled={saving} onClick={onClose}>取消</button><button type="submit" disabled={saving}>{saving?'提交中…':'提交评估'}</button></footer>
     </form>
   </div>;
 }
 
-function ScoreField({label,value,onChange}:{label:string;value:number;onChange:(value:number)=>void}){
-  return <label className="assessment-score-field"><span>{label}</span><input type="range" min="0" max="100" step="5" value={value} onChange={event=>onChange(Number(event.target.value))}/><b>{value}</b></label>;
+function AssessmentQuestion({number,title,options,decision,onDecision,rating,onRating,comment,onComment}:{number:number;title:string;options:string[];decision:string;onDecision:(value:string)=>void;rating:number;onRating:(value:number)=>void;comment:string;onComment:(value:string)=>void}){
+  return <section className="assessment-question">
+    <h3><span>{number}</span>{title}</h3>
+    <div className="assessment-question-options" role="group" aria-label={`${number}. ${title}`}>{options.map(option=><button key={option} type="button" className={decision===option?'active':''} aria-pressed={decision===option} onClick={()=>onDecision(option)}>{option}</button>)}</div>
+    <div className="assessment-question-stars" role="group" aria-label={`${number}. 五星评分`}>{[1,2,3,4,5].map(star=><button key={star} type="button" className={star<=rating?'active':''} aria-label={`${star} 星`} aria-pressed={rating===star} onClick={()=>onRating(star)}>{star<=rating?'★':'☆'}</button>)}</div>
+    <label><textarea value={comment} maxLength={500} rows={3} onChange={event=>onComment(event.target.value)} placeholder="请填写具体评价"/><small>{comment.length}/500</small></label>
+  </section>;
 }
 
 function displayScore(candidate:Candidate,assessments:Record<string,Assessment>){return assessments[candidate.id]?.total??candidate.score??0}
+function displayAiInterview(interview:AiInterview|undefined,stage:string){return interview?.status==='已完成'&&interview.score!==null?`${interview.score} 分`:interview||stage==='AI面试'?'待确认':'暂无'}
 function stars(score:number){const filled=Math.max(1,Math.min(5,Math.round(score/20)));return `${'★'.repeat(filled)}${'☆'.repeat(5-filled)}`}
+function scoreToStars(score:number|undefined){return Math.max(1,Math.min(5,Math.round((score??80)/20)))}
+function assessmentDecision(score:number|undefined,positive:string,negative:string){return (score??80)>=70?positive:(score??80)<=40?negative:'待定'}
+function extractAssessmentDetail(comment:string|undefined,label:string){const line=comment?.split('\n').find(item=>item.startsWith(`${label}：`));return line?.split('｜').slice(2).join('｜').trim()||''}
+function assessmentSummary(label:string,decision:string,rating:number,comment:string){return `${label}：${decision}｜${rating}星${comment.trim()?`｜${comment.trim()}`:''}`}
 function formatDate(value:string){const date=new Date(value);return Number.isNaN(date.getTime())?'-':`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`}

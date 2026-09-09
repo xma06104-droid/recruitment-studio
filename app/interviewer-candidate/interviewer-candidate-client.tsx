@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { announceWorkbenchChange, useWorkbenchSync } from '@/app/workbench-sync';
 import { AiInterviewResultPanel } from '@/app/components/ai-interview-result';
 import HrAccountMenu from '@/app/components/hr-account-menu';
+import { CANDIDATE_STAGES } from '@/app/candidate-stages';
 
 type Account = { contact:string; phone:string; email:string; role:'super_admin'|'hr' };
 type Job = { id:string; title:string; department:string; city:string; status:string; ownerName:string; createdAt:string };
@@ -38,6 +39,10 @@ export default function InterviewerCandidateClient() {
   const [reviews,setReviews]=useState<Review[]>([]);
   const [detailId,setDetailId]=useState('');
   const [savingId,setSavingId]=useState('');
+  const [batchStageOpen,setBatchStageOpen]=useState(false);
+  const [batchStage,setBatchStage]=useState<string>('待定');
+  const [batchReason,setBatchReason]=useState('');
+  const [batchSaving,setBatchSaving]=useState(false);
 
   async function load(){
     const [workbenchResponse,screeningResponse]=await Promise.all([
@@ -75,7 +80,75 @@ export default function InterviewerCandidateClient() {
 
   function flash(message:string){setToast(message);window.setTimeout(()=>setToast(''),2200)}
   function toggleAll(){setSelected(allSelected?selected.filter(id=>!candidates.some(candidate=>candidate.id===id)):[...new Set([...selected,...candidates.map(candidate=>candidate.id)])])}
-  function runAction(message:string){flash(selected.length?`${message}：已选择 ${selected.length} 位候选人`:'请先选择候选人')}
+  function selectedCandidates(){return data?.candidates.filter(candidate=>selected.includes(candidate.id))||[]}
+  function sendBatchNotification(){
+    const people=selectedCandidates();
+    if(!people.length){flash('请先选择候选人');return}
+    const recipients=[...new Set(people.map(person=>person.email.trim()).filter(email=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)))];
+    if(!recipients.length){flash('所选候选人没有可用邮箱');return}
+    const subject=encodeURIComponent('招聘流程通知');
+    const body=encodeURIComponent(`您好，\n\n您的招聘流程有新的进展，请留意后续安排。\n\n${data?.account.contact||'招聘团队'}`);
+    window.location.href=`mailto:?bcc=${encodeURIComponent(recipients.join(','))}&subject=${subject}&body=${body}`;
+    flash(`已打开邮件通知，共 ${recipients.length} 位候选人`);
+  }
+  function openBatchStage(){
+    const people=selectedCandidates();
+    if(!people.length){flash('请先选择候选人');return}
+    setBatchStage(people.every(person=>person.stage===people[0].stage)?people[0].stage:'待定');
+    setBatchReason('');
+    setBatchStageOpen(true);
+  }
+  async function changeBatchStage(){
+    const people=selectedCandidates();
+    if(!people.length||batchSaving)return;
+    if(batchStage==='已淘汰'&&!batchReason.trim()){flash('淘汰候选人时请填写原因');return}
+    setBatchSaving(true);
+    let updated=0;
+    let firstError='';
+    try{
+      for(const person of people){
+        const response=await fetch('/api/workbench',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({resource:'candidateStage',id:person.id,value:batchStage})});
+        if(response.ok){
+          updated+=1;
+          if(batchStage==='已淘汰'){
+            const previous=reviews.find(review=>review.candidateId===person.id);
+            await fetch('/api/screening',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'saveReview',candidateId:person.id,tags:previous?.tags||[],comment:previous?.comment||'',riskNote:previous?.riskNote||'',rejectReason:batchReason.trim()})});
+          }
+        }else if(!firstError){
+          const result=await response.json().catch(()=>({})) as {message?:string};
+          firstError=result.message||'阶段更新失败';
+        }
+      }
+      if(updated){announceWorkbenchChange();await load();setSelected([])}
+      if(updated===people.length){setBatchStageOpen(false);flash(`已更新 ${updated} 位候选人的流程阶段`)}
+      else flash(`${updated} 位更新成功；${firstError||`${people.length-updated} 位更新失败`}`);
+    }catch{
+      flash(updated?`${updated} 位更新成功，其余更新失败`:'阶段更新失败，请稍后重试');
+    }finally{
+      setBatchSaving(false);
+    }
+  }
+  function downloadBatchResumes(){
+    const people=selectedCandidates();
+    if(!people.length){flash('请先选择候选人');return}
+    const downloadable=people.filter(person=>profiles.some(profile=>profile.candidateId===person.id&&profile.fileName));
+    if(!downloadable.length){flash('所选候选人没有原始简历附件');return}
+    downloadable.forEach((person,index)=>window.setTimeout(()=>{
+      const link=document.createElement('a');
+      link.href=`/api/screening/file?candidateId=${encodeURIComponent(person.id)}`;
+      link.download=profiles.find(profile=>profile.candidateId===person.id)?.fileName||`${person.name}-简历`;
+      document.body.appendChild(link);link.click();link.remove();
+    },index*180));
+    flash(`正在下载 ${downloadable.length} 份简历`);
+  }
+  function exportBatchData(){
+    const people=selectedCandidates();
+    if(!people.length){flash('请先选择候选人');return}
+    const rows=[['姓名','应聘职位','手机号','邮箱','城市','工作经验','最近公司','流程阶段','接收HR','推荐时间','技能'],...people.map(person=>[person.name,person.role,person.phone,person.email,person.city,person.years,person.company,person.stage,person.assignedHrName||'',formatDate(person.assignedAt||person.updatedAt),person.skills.join('、')])];
+    const csv=`\uFEFF${rows.map(row=>row.map(csvCell).join(',')).join('\r\n')}`;
+    downloadText(csv,`候选人数据-${new Date().toISOString().slice(0,10)}.csv`,'text/csv;charset=utf-8');
+    flash(`已导出 ${people.length} 位候选人数据`);
+  }
   async function updateReview(candidate:Candidate,action:ReviewAction){
     if(savingId)return;
     const next={
@@ -158,7 +231,7 @@ export default function InterviewerCandidateClient() {
         <section className="interviewer-list-panel">
           <h2>{status}{currentJob?<small>{currentJob.title}</small>:null}</h2>
           <div className="interviewer-filter-row"><select defaultValue=""><option value="">沟通状态</option><option>未沟通</option><option>已沟通</option></select><select defaultValue=""><option value="">推荐筛选状态</option><option>未推荐</option><option>已推荐</option></select><select defaultValue="time"><option value="time">状态变更时间　⇅</option></select></div>
-          <div className="interviewer-batch-row"><label><input type="checkbox" checked={allSelected} onChange={toggleAll}/> 全选</label><button type="button" onClick={()=>runAction('发送通知')}><span>发送通知</span><i aria-hidden="true">⌄</i></button><button type="button" onClick={()=>runAction('变更阶段')}><span>变更阶段</span><i aria-hidden="true">⌄</i></button><button type="button" onClick={()=>runAction('下载简历')}><span>下载简历</span><i aria-hidden="true">⌄</i></button><button type="button" onClick={()=>runAction('导出数据')}><span>导出数据</span><i aria-hidden="true">⌄</i></button><button type="button" onClick={()=>runAction('更多操作')}><span>更多</span><i aria-hidden="true">⌄</i></button></div>
+          <div className="interviewer-batch-row"><label><input type="checkbox" checked={allSelected} onChange={toggleAll}/> 全选</label><button type="button" onClick={sendBatchNotification}><span>发送通知</span></button><button type="button" onClick={openBatchStage}><span>变更阶段</span><i aria-hidden="true">⌄</i></button><button type="button" onClick={downloadBatchResumes}><span>下载简历</span></button><button type="button" onClick={exportBatchData}><span>导出数据</span></button><button type="button" onClick={()=>flash(selected.length?'更多批量操作正在完善':'请先选择候选人')}><span>更多</span><i aria-hidden="true">⌄</i></button></div>
           <div className="interviewer-candidate-list">
             {candidates.length?candidates.map(candidate=>{const job=data.jobs.find(item=>item.id===candidate.jobId);return <article className="interviewer-candidate-row" key={candidate.id} role="button" tabIndex={0} onClick={()=>setDetailId(candidate.id)} onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();setDetailId(candidate.id)}}}>
               <label onClick={event=>event.stopPropagation()}><input type="checkbox" checked={selected.includes(candidate.id)} onChange={()=>setSelected(selected.includes(candidate.id)?selected.filter(id=>id!==candidate.id):[...selected,candidate.id])}/></label>
@@ -171,6 +244,7 @@ export default function InterviewerCandidateClient() {
         </section>
       </div>
     </section>
+    {batchStageOpen&&<div className="interviewer-batch-modal-backdrop" onMouseDown={event=>{if(event.target===event.currentTarget&&!batchSaving)setBatchStageOpen(false)}}><form className="interviewer-batch-modal" onSubmit={event=>{event.preventDefault();void changeBatchStage()}}><button type="button" className="assessment-modal-close" aria-label="关闭" disabled={batchSaving} onClick={()=>setBatchStageOpen(false)}>×</button><p>批量操作</p><h2>变更流程阶段</h2><small>已选择 {selected.length} 位候选人，将按候选人流程规则逐一更新。</small><label>目标阶段<select value={batchStage} onChange={event=>setBatchStage(event.target.value)}>{[...CANDIDATE_STAGES,'待定','已淘汰'].map(stage=><option key={stage}>{stage}</option>)}</select></label>{batchStage==='已淘汰'&&<label>淘汰原因<textarea value={batchReason} onChange={event=>setBatchReason(event.target.value)} placeholder="请填写淘汰原因" maxLength={500}/></label>}<footer><button type="button" disabled={batchSaving} onClick={()=>setBatchStageOpen(false)}>取消</button><button type="submit" disabled={batchSaving}>{batchSaving?'更新中…':'确认变更'}</button></footer></form></div>}
     {detailCandidate&&<CandidateResumeDrawer
       candidate={detailCandidate}
       job={data.jobs.find(job=>job.id===detailCandidate.jobId)}
@@ -320,4 +394,20 @@ function formatDate(value:string){
   const date=new Date(value);
   if(Number.isNaN(date.getTime()))return '-';
   return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+}
+
+function csvCell(value:unknown){
+  const text=String(value??'');
+  return /[",\r\n]/.test(text)?`"${text.replaceAll('"','""')}"`:text;
+}
+
+function downloadText(content:string,fileName:string,type:string){
+  const url=URL.createObjectURL(new Blob([content],{type}));
+  const link=document.createElement('a');
+  link.href=url;
+  link.download=fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
