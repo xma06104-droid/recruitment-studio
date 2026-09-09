@@ -682,11 +682,12 @@ function CandidateInterviewAssessment({report}:{report?:AiInterview}){
   return <AiInterviewResultPanel summary={report.summary} fallbackScore={report.score} durationSeconds={report.durationSeconds} completedAt={report.completedAt} compact/>;
 }
 
-function CandidateStageStepper({stage,advance,requestAssignment}:{stage:string;advance:(value:string)=>Promise<boolean>;requestAssignment:()=>void}){
+function CandidateStageStepper({stage,assignedName,advance,requestAssignment}:{stage:string;assignedName?:string;advance:(value:string)=>Promise<boolean>;requestAssignment:()=>void}){
   const [saving,setSaving]=useState('');
   const flowStage=stage==='待定'?'用人部门筛选':stage;
   const currentIndex=stages.indexOf(flowStage);
   const terminal=stage==='已淘汰';
+  const awaitingDepartmentDecision=flowStage==='用人部门筛选';
   async function moveNext(nextStage:string,index:number){
     if(saving||terminal||index!==currentIndex+1)return;
     if(nextStage==='用人部门筛选'){requestAssignment();return}
@@ -699,10 +700,12 @@ function CandidateStageStepper({stage,advance,requestAssignment}:{stage:string;a
       {stages.map((item,index)=>{
         const completed=!terminal&&currentIndex>=0&&index<currentIndex;
         const current=!terminal&&index===currentIndex;
-        const next=!terminal&&index===currentIndex+1;
-        const locked=terminal||currentIndex<0||index>currentIndex+1;
-        return <button type="button" key={item} className={`${completed?'completed ':''}${current?'current ':''}${next?'next ':''}${locked?'locked':''}`} disabled={!next||Boolean(saving)} aria-current={current?'step':undefined} onClick={()=>void moveNext(item,index)}>
-          <i>{completed?'✓':locked?'⌁':String(index+1).padStart(2,'0')}</i><b>{item}</b><small>{completed?'已完成':current?(stage==='待定'?'当前待定':'当前阶段'):next?(saving===item?'正在更新…':'点击进入'):'待解锁'}</small>
+        const next=!terminal&&!awaitingDepartmentDecision&&index===currentIndex+1;
+        const locked=terminal||currentIndex<0||index>currentIndex+1||(awaitingDepartmentDecision&&index>currentIndex);
+        const showsAssignee=item==='用人部门筛选'&&Boolean(assignedName);
+        return <button type="button" key={item} className={`${completed?'completed ':''}${current?'current ':''}${next?'next ':''}${locked?'locked ':''}${showsAssignee?'has-assignee':''}`} disabled={!next||Boolean(saving)} aria-current={current?'step':undefined} onClick={()=>void moveNext(item,index)}>
+          <i>{completed?'✓':locked?'⌁':String(index+1).padStart(2,'0')}</i><b>{item}</b><small>{completed?'已完成':current?(stage==='待定'?'当前待定':'当前阶段'):next?(saving===item?'正在更新…':'点击进入'):awaitingDepartmentDecision&&index===currentIndex+1?'待用人部门通过':'待解锁'}</small>
+          {showsAssignee&&<em className="stage-assignee" title={assignedName}>已推送：{assignedName}</em>}
         </button>;
       })}
     </div>
@@ -718,7 +721,7 @@ function CandidateDrawer({person,aiInterview,assessment,close,advance,requestAss
   return <div className="drawer-backdrop" onMouseDown={close}><aside className="detail-drawer candidate-drawer" onMouseDown={event=>event.stopPropagation()}>
     <button className="drawer-close" onClick={close}>×</button>
     <div className="candidate-profile"><span>{person.name.slice(0,1)}</span><div><h2>{person.name}</h2><p>{person.company||'最近公司未填写'}{person.years?` · ${person.years}`:''}</p></div><em><b>{displayedScore??'—'}</b><small>{displayedLabel}</small></em></div>
-    <CandidateStageStepper stage={person.stage} advance={advance} requestAssignment={requestAssignment}/>
+    <CandidateStageStepper stage={person.stage} assignedName={person.assignedHrName} advance={advance} requestAssignment={requestAssignment}/>
     {assessment&&<section><h3>HR 人工评估</h3><div className="profile-info"><p><span>综合得分</span>{assessment.total} 分</p><p><span>专业能力</span>{assessment.professional} 分</p><p><span>沟通表达</span>{assessment.communication} 分</p><p><span>文化匹配</span>{assessment.culture} 分</p><p><span>评估人</span>{assessment.reviewer}</p><p><span>评估意见</span>{assessment.comment||'未填写'}</p></div></section>}
     <section><h3>AI 面试记录</h3><CandidateInterviewAssessment report={aiInterview}/></section>
     <section><h3>核心技能</h3><div className="channel-tags">{person.skills.length?person.skills.map(skill=><span key={skill}>{skill}</span>):<span>未填写</span>}</div></section>
