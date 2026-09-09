@@ -163,7 +163,7 @@ export function parseResumeText(value: string): ParsedResume {
     skills: listedSkills.length ? listedSkills : inferSkills(text, role),
     certificates: splitResumeList(certificateText),
     workHistory: detectedWorkHistory.length ? detectedWorkHistory : sectionLines(text, ['工作经历', '工作经验', '职业经历'], ['项目经验', '教育经历', '教育背景', '专业技能', '技能', '证书']),
-    projectHistory: detectedProjectHistory.length ? detectedProjectHistory : sectionLines(text, ['项目经验', '项目经历'], ['教育经历', '教育背景', '专业技能', '技能', '证书', '自我评价']),
+    projectHistory: detectedProjectHistory.length ? detectedProjectHistory : mergeWrappedProjectLines(sectionLines(text, ['项目经验', '项目经历'], ['教育经历', '教育背景', '专业技能', '技能', '证书', '自我评价'])),
   };
 }
 
@@ -456,6 +456,24 @@ function sectionText(text: string, starts: string[], ends: string[], maxLength: 
 
 function sectionLines(text: string, starts: string[], ends: string[]) {
   return sectionText(text, starts, ends, 2400).split(/\n+/).map(item => cleanField(item)).filter(isReadableHistoryLine).slice(0, 20);
+}
+
+export function mergeWrappedProjectLines(items: string[]) {
+  const merged: string[] = [];
+  const heading = /^(?:项目职责|工作职责|主要职责|项目描述|工作内容|技术栈|项目周期)\s*[:：]?$/;
+  const structured = /^(?:\d{1,2}|[一二三四五六七八九十])[、.．)）]\s*/;
+  const projectTitle = /^(?:项目(?:名称|名)?|项目[一二三四五六七八九十\d]+)\s*[:：]/;
+  for (const rawItem of items) {
+    const item = cleanField(rawItem);
+    if (!item) continue;
+    const previous = merged.at(-1);
+    const continuation = Boolean(previous && !heading.test(item) && !structured.test(item) && !projectTitle.test(item) && (
+      !/[。！？!?；;：:]$/.test(previous) || /^(?:并|且|及|与|以及|同时|通过|根据|确保|保证|提高|完成|支持|由|从|尽可能|测试范围|试范围)/.test(item)
+    ));
+    if (continuation) merged[merged.length - 1] = `${previous}${item}`;
+    else merged.push(item);
+  }
+  return merged;
 }
 
 function datedHistoryEntries(text: string, kind: 'work' | 'project') {

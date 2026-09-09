@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { accountFromRequest, ensureSchema, getDb, getResumeBucket } from '@/app/server/db';
 import { extractResumeFileText, ResumeFileExtraction } from '@/app/server/resume-file-text';
 import { getResumeJobs } from '@/app/server/resume-jobs';
-import { buildSystemResumeJob, matchResumeJob, parseResumeFileName, parseResumeText, ParsedResume, ResumeJob, scoreResumeForJob } from '@/app/server/resume-parser';
+import { buildSystemResumeJob, matchResumeJob, mergeWrappedProjectLines, parseResumeFileName, parseResumeText, ParsedResume, ResumeJob, scoreResumeForJob } from '@/app/server/resume-parser';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const allowedExtensions = ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'webp', 'txt', 'html', 'htm'];
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
   const expectedSalary = numberField(form, 'expectedSalary', 1, 1_000_000) ?? parsed.expectedSalary;
   const stabilityMonths = numberField(form, 'stabilityMonths', 1, 600) ?? parsed.stabilityMonths;
   const suppliedWorkHistory = splitLines(field(form, 'workHistory', 10_000));
-  const suppliedProjectHistory = splitLines(field(form, 'projectHistory', 10_000));
+  const suppliedProjectHistory = mergeWrappedProjectLines(splitLines(field(form, 'projectHistory', 10_000)));
   const workHistory = suppliedWorkHistory.length ? suppliedWorkHistory : parsed.workHistory;
   const projectHistory = suppliedProjectHistory.length ? suppliedProjectHistory : parsed.projectHistory;
   const city = field(form, 'city', 80) || parsed.city;

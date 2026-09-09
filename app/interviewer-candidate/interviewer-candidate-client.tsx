@@ -235,8 +235,8 @@ function groupProjectHistory(items:string[]){
     for(const item of parsed){
       const detail=item.detail.replace(/^[-—·•\s]+/,'').trim();
       if(!detail)continue;
-      const explicit=detail.match(/^(?:项目名称|项目名|项目)\s*[:：]\s*(.+)$/);
-      const title=explicit?.[1]?.trim()||projectTitle(detail);
+      const explicit=explicitProjectTitle(detail);
+      const title=explicit||projectTitle(detail);
       const titleOnly=Boolean(title&&title===detail.replace(/[：:]$/,''));
       const startsAfterResponsibilities=Boolean(title&&groups.length&&groups[groups.length-1].details.some(value=>/项目职责|工作职责|主要职责|负责/.test(value)));
       if(explicit||titleOnly||startsAfterResponsibilities){
@@ -247,14 +247,14 @@ function groupProjectHistory(items:string[]){
         groups.push({label:title||'项目 01',details:[detail]});
       }
     }
-    return groups;
+    return finishProjectGroups(groups);
   }
 
   const leadingDates=dateIndexes.length>1&&dateIndexes.every((index,position)=>index===position)&&parsed.slice(dateIndexes.length).every(item=>!item.period);
   if(leadingDates){
     const periods=parsed.slice(0,dateIndexes.length).map(item=>item.period);
     const details=parsed.slice(dateIndexes.length).map(item=>item.detail).filter(Boolean);
-    return periods.map((label,index)=>({label,details:details.slice(Math.floor(index*details.length/periods.length),Math.floor((index+1)*details.length/periods.length))})).sort((a,b)=>projectDateValue(b.label)-projectDateValue(a.label));
+    return finishProjectGroups(periods.map((label,index)=>({label,details:details.slice(Math.floor(index*details.length/periods.length),Math.floor((index+1)*details.length/periods.length))})).sort((a,b)=>projectDateValue(b.label)-projectDateValue(a.label)));
   }
 
   const groups:{label:string;details:string[]}[]=[];
@@ -263,14 +263,40 @@ function groupProjectHistory(items:string[]){
     else if(groups.length)groups[groups.length-1].details.push(item.detail);
     else groups.push({label:projectTitle(item.detail)||'时间未标注',details:[item.detail]});
   }
-  return groups.sort((a,b)=>projectDateValue(b.label)-projectDateValue(a.label));
+  return finishProjectGroups(groups.sort((a,b)=>projectDateValue(b.label)-projectDateValue(a.label)));
+}
+
+function explicitProjectTitle(value:string){
+  return value.match(/^(?:项目(?:名称|名)?|项目[一二三四五六七八九十\d]+)\s*[:：]\s*(.+)$/)?.[1]?.trim()||'';
+}
+
+function finishProjectGroups(groups:{label:string;details:string[]}[]){
+  return groups.map(group=>({...group,details:mergeProjectDetails(group.details)}));
+}
+
+function mergeProjectDetails(items:string[]){
+  const details:string[]=[];
+  const heading=/^(?:项目职责|工作职责|主要职责|项目描述|工作内容|技术栈|项目周期)\s*[:：]?$/;
+  const structured=/^(?:\d{1,2}|[一二三四五六七八九十])[、.．)）]\s*/;
+  for(const rawItem of items){
+    const item=rawItem.trim();
+    if(!item)continue;
+    const previous=details.at(-1);
+    const continuation=Boolean(previous&&!heading.test(item)&&!structured.test(item)&&!explicitProjectTitle(item)&&(
+      !/[。！？!?；;：:]$/.test(previous)||/^(?:并|且|及|与|以及|同时|通过|根据|确保|保证|提高|完成|支持|由|从|尽可能|测试范围|试范围)/.test(item)
+    ));
+    if(continuation)details[details.length-1]=`${previous}${item}`;
+    else details.push(item);
+  }
+  return details;
 }
 
 function projectTitle(value:string){
   const cleaned=value.replace(/[：:]$/,'').trim();
   const title=cleaned.match(/^([\u4e00-\u9fa5A-Za-z0-9_-]{2,30}(?:系统|平台|项目|应用|小程序|APP|网站))(?=是|为|，|。|：|:|\s|$)/i)?.[1];
-  if(title)return title;
-  return cleaned.length<=30&&!/[，。；;、]/.test(cleaned)&&/(?:系统|平台|项目|应用|小程序|APP|网站)$/i.test(cleaned)?cleaned:'';
+  const sentenceVerb=/(?:用于|提供|查询|抓取|报送|提高|负责|参与|完成|实现|进行|根据|支持|需要|以及|并)/;
+  if(title&&!sentenceVerb.test(title))return title;
+  return cleaned.length<=30&&!sentenceVerb.test(cleaned)&&!/[，。；;、]/.test(cleaned)&&/(?:系统|平台|项目|应用|小程序|APP|网站)$/i.test(cleaned)?cleaned:'';
 }
 
 function projectDateValue(value:string){
