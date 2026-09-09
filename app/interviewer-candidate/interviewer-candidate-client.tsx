@@ -115,7 +115,7 @@ export default function InterviewerCandidateClient() {
           <HrAccountMenu contact={data.account.contact} email={data.account.email} role={data.account.role}/>
         </div>
       </header>
-      <div className="interviewer-open-tabs"><a href="/workbench">招聘管理</a><i>›</i><button type="button" className="active">候选人筛选</button><span>当前角色：HR</span></div>
+      <div className="interviewer-open-tabs"><a href="/workbench">招聘管理</a><i>›</i><button type="button" className="active">候选人筛选</button></div>
 
       <div className="interviewer-content">
         <aside className="interviewer-filter-panel">

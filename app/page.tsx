@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { isValidIdentifier, normalizeIdentifier } from './auth-rules';
 
 export default function Home() {
+  const [loginRole, setLoginRole] = useState<'super_admin' | 'hr'>('super_admin');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [identifier, setIdentifier] = useState('');
@@ -46,22 +47,22 @@ export default function Home() {
       response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier: accountInput, password, remember }),
+        body: JSON.stringify({ identifier: accountInput, password, remember, loginRole }),
       });
     } catch {
       setSubmitting(false);
       setError('暂时无法连接账号服务，请稍后重试。');
       return;
     }
-    const result = await response.json().catch(() => ({})) as { message?: string; role?:'super_admin'|'hr' };
+    const result = await response.json().catch(() => ({})) as { message?: string; entryRole?:'super_admin'|'hr' };
     if (!response.ok) {
       setSubmitting(false);
       setError(result.message || '账号或密码错误，请检查后重新输入。');
       return;
     }
 
-    setMessage('登录成功，正在进入工作台…');
-    window.setTimeout(() => window.location.assign(result.role==='hr'?'/interviewer-candidate':'/workbench'), 500);
+    setMessage(`登录成功，正在进入${loginRole === 'super_admin' ? '超级管理员' : 'HR'}工作台…`);
+    window.setTimeout(() => window.location.assign(result.entryRole === 'hr' ? '/interviewer-candidate' : '/workbench'), 500);
   }
 
   return (
@@ -94,12 +95,34 @@ export default function Home() {
             <span className="eyebrow purple">WELCOME BACK</span>
             <h2>欢迎登录</h2>
           </div>
+          <div className="login-role-switch" role="tablist" aria-label="选择登录入口">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={loginRole === 'super_admin'}
+              className={loginRole === 'super_admin' ? 'active' : ''}
+              onClick={() => { setLoginRole('super_admin'); setError(''); setMessage(''); }}
+            >
+              <span>超级管理员</span>
+              <small>管理全部招聘业务</small>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={loginRole === 'hr'}
+              className={loginRole === 'hr' ? 'active' : ''}
+              onClick={() => { setLoginRole('hr'); setError(''); setMessage(''); }}
+            >
+              <span>HR</span>
+              <small>进入候选人工作台</small>
+            </button>
+          </div>
           <form noValidate onSubmit={submitLogin}>
             <label>手机号 / 邮箱<input name="identifier" value={identifier} onChange={event=>setIdentifier(event.target.value)} autoComplete="username" inputMode="email" aria-invalid={Boolean(error)} placeholder="请输入手机号或邮箱" /></label>
             <label>密码<a href="/forgot-password">忘记密码？</a><input name="password" value={password} onChange={event=>setPassword(event.target.value)} type="password" autoComplete="current-password" aria-invalid={Boolean(error)} placeholder="请输入登录密码" /></label>
             <div className="form-meta"><label className="check"><input type="checkbox" checked={remember} onChange={event=>setRemember(event.target.checked)} /> 记住我</label></div>
             {error && <div className="auth-error" role="alert" aria-live="assertive"><span>!</span><div><b>登录失败</b><p>{error}</p></div></div>}
-            <button className="primary-button" type="submit" disabled={submitting}>{submitting ? '正在验证…' : '登录工作台'} <span>→</span></button>
+            <button className="primary-button" type="submit" disabled={submitting}>{submitting ? '正在验证…' : `登录${loginRole === 'super_admin' ? '超级管理员' : 'HR'}工作台`} <span>→</span></button>
           </form>
           {message && <p className="success-message" role="status">{message}</p>}
           <p className="switch-auth">还没有账号？ <a href="/register">免费注册</a></p>

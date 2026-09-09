@@ -95,7 +95,7 @@ export default function AssessmentClient() {
           <HrAccountMenu contact={data.account.contact} email={data.account.email} role={data.account.role}/>
         </div>
       </header>
-      <div className="interviewer-open-tabs"><a href="/interviewer-candidate">候选人筛选</a><i>›</i><button type="button" className="active">人工评估</button><span>当前角色：HR</span></div>
+      <div className="interviewer-open-tabs"><a href="/interviewer-candidate">候选人筛选</a><i>›</i><button type="button" className="active">人工评估</button></div>
 
       <div className="assessment-content">
         <aside className="assessment-filter-card">

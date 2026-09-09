@@ -42,9 +42,8 @@ export default function HrAccountMenu({contact,email,role}:HrAccountMenuProps){
     {open&&<div className="hr-account-dropdown" role="menu">
       <header>
         <span className="interviewer-avatar">{contact.slice(0,1)}</span>
-        <div><b>{contact}</b><small>{email||'HR 招聘账号'}</small></div>
+        <div><b>{contact}<em>HR</em></b><small>{email||'HR 招聘账号'}</small></div>
       </header>
-      <div className="hr-account-role"><span>当前角色</span><b>HR 招聘</b></div>
       {role==='super_admin'?<button type="button" role="menuitem" onClick={()=>window.location.assign('/workbench')}>
         <i aria-hidden="true">⇄</i>
         <span><b>切换至管理员页面</b><small>进入超级管理员招聘工作台</small></span>

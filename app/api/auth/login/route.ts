@@ -18,12 +18,16 @@ export async function POST(request: NextRequest) {
   const identifier = normalizeIdentifier(String(body?.identifier ?? ''));
   const password = String(body?.password ?? '');
   const remember = body?.remember === true;
+  const requestedRole = body?.loginRole === 'hr' ? 'hr' : 'super_admin';
   if (!isValidIdentifier(identifier) || !password) return failure();
 
   await ensureSchema();
   const account = await getDb().prepare('SELECT id, password_hash, role FROM accounts WHERE phone = ? OR email = ? LIMIT 1').bind(identifier, identifier).first<LoginRow>();
   if (!account || !(await verifyPassword(password, account.password_hash))) return failure();
   if (account.role === 'none') return failure('账号尚未分配系统角色，请联系超级管理员。', 403);
+  if (requestedRole === 'super_admin' && account.role !== 'super_admin') {
+    return failure('该账号没有超级管理员权限，请切换至 HR 入口登录。', 403);
+  }
 
   const token = createSessionToken();
   const now = new Date().toISOString();
@@ -31,7 +35,7 @@ export async function POST(request: NextRequest) {
     getDb().prepare('DELETE FROM sessions WHERE expires_at <= ?').bind(now),
     getDb().prepare('INSERT INTO sessions (token_hash, account_id, expires_at, created_at) VALUES (?, ?, ?, ?)').bind(await hashToken(token), account.id, sessionExpiry(), now),
   ]);
-  const response = NextResponse.json({ ok: true, role:account.role });
+  const response = NextResponse.json({ ok: true, role:account.role, entryRole:requestedRole });
   response.cookies.set(sessionCookie(), token, {
     httpOnly: true,
     sameSite: 'lax',
