@@ -58,6 +58,17 @@ export const SCHEMA_STATEMENTS = [
     FOREIGN KEY (owner_id) REFERENCES accounts(id) ON DELETE CASCADE,
     FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE SET NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS candidate_assignments (
+    candidate_id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    hr_account_id TEXT NOT NULL,
+    assigned_by TEXT NOT NULL,
+    assigned_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE,
+    FOREIGN KEY (owner_id) REFERENCES accounts(id) ON DELETE CASCADE,
+    FOREIGN KEY (hr_account_id) REFERENCES accounts(id) ON DELETE CASCADE
+  )`,
   `CREATE TABLE IF NOT EXISTS interviews (
     id TEXT PRIMARY KEY,
     owner_id TEXT NOT NULL,
@@ -318,6 +329,8 @@ export const SCHEMA_STATEMENTS = [
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_owner_identity ON jobs(owner_id, title COLLATE NOCASE, department COLLATE NOCASE, city COLLATE NOCASE)`,
   `CREATE INDEX IF NOT EXISTS idx_candidates_owner_created ON candidates(owner_id, created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_candidates_owner_stage ON candidates(owner_id, stage)`,
+  `CREATE INDEX IF NOT EXISTS idx_candidate_assignments_hr_time ON candidate_assignments(hr_account_id, assigned_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_candidate_assignments_owner_time ON candidate_assignments(owner_id, assigned_at)`,
   `CREATE INDEX IF NOT EXISTS idx_interviews_owner_schedule ON interviews(owner_id, scheduled_at)`,
   `CREATE INDEX IF NOT EXISTS idx_offers_owner_created ON offers(owner_id, created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_ai_questions_owner_created ON ai_questions(owner_id, created_at)`,

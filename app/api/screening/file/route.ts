@@ -6,8 +6,10 @@ export async function GET(request: NextRequest) {
   if (!account) return NextResponse.json({ message: '请先登录。' }, { status: 401 });
   await ensureSchema();
   const candidateId = request.nextUrl.searchParams.get('candidateId')?.trim() || '';
-  const row = await getDb().prepare(`SELECT file_key, file_name, file_type FROM resume_profiles
-    WHERE candidate_id = ? AND owner_id = ?`).bind(candidateId, account.id).first<{ file_key: string | null; file_name: string; file_type: string }>();
+  const row = await getDb().prepare(`SELECT p.file_key, p.file_name, p.file_type FROM resume_profiles p
+    WHERE p.candidate_id = ? AND (
+      p.owner_id = ? OR p.candidate_id IN (SELECT candidate_id FROM candidate_assignments WHERE hr_account_id = ?)
+    )`).bind(candidateId, account.id, account.id).first<{ file_key: string | null; file_name: string; file_type: string }>();
   if (!row?.file_key) return NextResponse.json({ message: '该候选人没有原始简历附件。' }, { status: 404 });
   const object = await getResumeBucket().get(row.file_key);
   if (!object) return NextResponse.json({ message: '原始简历附件不存在。' }, { status: 404 });

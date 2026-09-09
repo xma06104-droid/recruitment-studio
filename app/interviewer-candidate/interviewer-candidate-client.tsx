@@ -7,7 +7,7 @@ import HrAccountMenu from '@/app/components/hr-account-menu';
 
 type Account = { contact:string; phone:string; email:string; role:'super_admin'|'hr' };
 type Job = { id:string; title:string; department:string; city:string; status:string; ownerName:string; createdAt:string };
-type Candidate = { id:string; jobId:string|null; name:string; role:string; company:string; years:string; stage:string; source:string; skills:string[]; score:number|null; phone:string; email:string; city:string; createdAt:string; updatedAt:string };
+type Candidate = { id:string; jobId:string|null; name:string; role:string; company:string; years:string; stage:string; source:string; skills:string[]; score:number|null; phone:string; email:string; city:string; assignedHrId?:string; assignedHrName?:string; assignedAt?:string; createdAt:string; updatedAt:string };
 type AiInterview = { id:string; candidateId:string; jobTitle:string; status:string; score:number|null; durationSeconds:number|null; summary:string; completedAt:string|null; createdAt:string; updatedAt:string };
 type Dataset = { account:Account; jobs:Job[]; candidates:Candidate[]; aiInterviews:AiInterview[] };
 type Profile = { candidateId:string; education:string; major:string; school:string; age:number|null; gender:string; industry:string; expectedSalary:number|null; workYears:number|null; stabilityMonths:number|null; workHistory:string[]; projectHistory:string[]; certificates:string[]; highlights:string[]; risks:string[]; parsingStatus:string; fileName:string; fileType:string; fileSize:number; matchScore:number|null; matchLevel:string; updatedAt:string };
@@ -75,9 +75,9 @@ export default function InterviewerCandidateClient() {
   async function updateReview(candidate:Candidate,action:ReviewAction){
     if(savingId)return;
     const next={
-      pass:{stage:'AI 初面待发起',message:'已通过，状态已更新为待AI面试'},
-      pending:{stage:'待沟通',message:'已设为待定'},
-      reject:{stage:'初筛淘汰',message:'已拒绝'},
+      pass:{stage:'安排面试',message:'已通过，状态已更新为安排面试'},
+      pending:{stage:'待定',message:'已设为待定'},
+      reject:{stage:'已淘汰',message:'已拒绝'},
     }[action];
     setSavingId(candidate.id);
     try{
@@ -140,8 +140,8 @@ export default function InterviewerCandidateClient() {
             {candidates.length?candidates.map(candidate=>{const job=data.jobs.find(item=>item.id===candidate.jobId);return <article className="interviewer-candidate-row" key={candidate.id} role="button" tabIndex={0} onClick={()=>setDetailId(candidate.id)} onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();setDetailId(candidate.id)}}}>
               <label onClick={event=>event.stopPropagation()}><input type="checkbox" checked={selected.includes(candidate.id)} onChange={()=>setSelected(selected.includes(candidate.id)?selected.filter(id=>id!==candidate.id):[...selected,candidate.id])}/></label>
               <div className="interviewer-candidate-profile"><p>{job?.title||candidate.role||'未关联职位'}　{formatDate(candidate.createdAt)}申请 <i>▣</i></p><h3>{candidate.name}<b>{candidate.score===null?'—':Math.max(1,Math.round(candidate.score/20))}</b><span>{candidate.city||'城市未填写'}</span>{candidate.years&&<span>{candidate.years}工作经验</span>}</h3><p>◼ {candidate.company||'最近公司未填写'}　{candidate.role||'职位未填写'}　{candidate.skills.slice(0,2).join('｜')||'暂无技能标签'}</p></div>
-              <div className="interviewer-candidate-owner"><p>候选人所有者： <b>{job?.ownerName||data.account.contact}</b>　<i>□</i>　<em>♧</em></p><p>当前状态： <span>◢ {candidateDisplayStatus(candidate.stage)}</span></p></div>
-              <div className="interviewer-candidate-note"><p>推荐时间：{formatDate(candidate.updatedAt)}</p><p>最近备注： -</p></div>
+              <div className="interviewer-candidate-owner"><p>接收 HR： <b>{candidate.assignedHrName||data.account.contact}</b>　<i>□</i>　<em>♧</em></p><p>当前状态： <span>◢ {candidateDisplayStatus(candidate.stage)}</span></p></div>
+              <div className="interviewer-candidate-note"><p>推荐时间：{formatDate(candidate.assignedAt||candidate.updatedAt)}</p><p>最近备注： -</p></div>
             </article>}):<div className="interviewer-empty"><span>⌕</span><b>暂无候选人</b><p>当前筛选条件下没有候选人记录</p></div>}
           </div>
           <footer className="interviewer-pagination"><span>共 {candidates.length} 条</span><button type="button" disabled>‹</button><button type="button" className="active">1</button><button type="button" disabled>›</button><select><option>10条/页</option><option>20条/页</option></select><label>前往 <input defaultValue="1"/> 页</label></footer>
@@ -169,9 +169,9 @@ function CandidateResumeDrawer({candidate,job,profile,aiInterview,saving,onClose
     <aside className="detail-drawer candidate-drawer hr-resume-drawer" aria-label={`${candidate.name}的简历`} onMouseDown={event=>event.stopPropagation()}>
       <button type="button" className="drawer-close" onClick={onClose} aria-label="关闭简历">×</button>
       <p className="drawer-label">CANDIDATE RESUME</p>
-      <div className="candidate-profile hr-resume-profile"><span>{candidate.name.slice(0,1)}</span><div><div className="hr-resume-name-line"><h2>{candidate.name}</h2><em><b>{profile?.matchScore??candidate.score??'—'}</b><small>匹配度</small></em><strong className={`hr-resume-inline-status ${status==='已拒绝'?'reject':status==='待定'?'pending':status==='待AI面试'?'pass':'screen'}`}>{status}</strong></div><p>{candidate.company||'公司未填写'} · {candidate.role||job?.title||'职位未填写'}</p></div></div>
+      <div className="candidate-profile hr-resume-profile"><span>{candidate.name.slice(0,1)}</span><div><div className="hr-resume-name-line"><h2>{candidate.name}</h2><em><b>{profile?.matchScore??candidate.score??'—'}</b><small>匹配度</small></em><strong className={`hr-resume-inline-status ${status==='已拒绝'?'reject':status==='待定'?'pending':status==='已通过'?'pass':'screen'}`}>{status}</strong></div><p>{candidate.company||'公司未填写'} · {candidate.role||job?.title||'职位未填写'}</p></div></div>
       <div className="hr-review-actions" aria-label="候选人审核操作">
-        <button type="button" className={status==='待AI面试'?'active pass':'pass'} disabled={saving} onClick={()=>onReview('pass')}><i>✓</i><span><b>通过</b><small>进入待 AI 面试</small></span></button>
+        <button type="button" className={status==='已通过'?'active pass':'pass'} disabled={saving} onClick={()=>onReview('pass')}><i>✓</i><span><b>通过</b><small>进入安排面试</small></span></button>
         <button type="button" className={status==='待定'?'active pending':'pending'} disabled={saving} onClick={()=>onReview('pending')}><i>◷</i><span><b>待定</b><small>保留候选人</small></span></button>
         <button type="button" className={status==='已拒绝'?'active reject':'reject'} disabled={saving} onClick={()=>onReview('reject')}><i>×</i><span><b>拒绝</b><small>结束初筛</small></span></button>
       </div>
@@ -225,17 +225,16 @@ function projectDateValue(value:string){
 }
 
 function candidateReviewStatus(stage:string):ReviewStatus {
-  if(['初筛淘汰','淘汰人才库','已淘汰'].includes(stage))return '已拒绝';
-  if(stage==='待沟通')return '待定';
-  if(['待初筛','待复核'].includes(stage))return '待筛选';
+  if(stage==='已淘汰')return '已拒绝';
+  if(stage==='待定')return '待定';
+  if(['简历筛选','AI面试','用人部门筛选'].includes(stage))return '待筛选';
   return '已通过';
 }
 
 function candidateDisplayStatus(stage:string){
-  if(stage==='AI 初面待发起')return '待AI面试';
-  if(['初筛淘汰','淘汰人才库','已淘汰'].includes(stage))return '已拒绝';
-  if(stage==='待沟通')return '待定';
-  if(['待初筛','待复核'].includes(stage))return '待筛选';
+  if(stage==='已淘汰')return '已拒绝';
+  if(stage==='待定')return '待定';
+  if(['简历筛选','AI面试','用人部门筛选'].includes(stage))return '待筛选';
   return '已通过';
 }
 

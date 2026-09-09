@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
   if (!existing) {
     await db.prepare(`INSERT INTO candidates (
       id, owner_id, job_id, name, role, company, years, stage, source, skills_json, score, phone, email, city, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, '待初筛', ?, ?, ?, ?, ?, ?, ?, ?)`).bind(
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, '简历筛选', ?, ?, ?, ?, ?, ?, ?, ?)`).bind(
       candidateId, account.id, jobId, name, role, company, workYears === null ? '' : `${workYears} 年`, channel,
       JSON.stringify(skills), match?.score ?? null, phone, email, city, now, now,
     ).run();
@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
       match?.score ?? null, match?.level || '', match ? now : null, now, now,
     ),
     db.prepare(`INSERT INTO resume_applications (id, owner_id, candidate_id, job_id, channel, applied_at, status, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, '待初筛', ?)`).bind(crypto.randomUUID(), account.id, candidateId, jobId, channel, now, now),
+      VALUES (?, ?, ?, ?, ?, ?, '简历筛选', ?)`).bind(crypto.randomUUID(), account.id, candidateId, jobId, channel, now, now),
     db.prepare(`INSERT INTO screening_logs (id, owner_id, candidate_id, job_id, operator_name, action, detail, created_at)
       VALUES (?, ?, ?, ?, ?, '简历入库', ?, ?)`).bind(
       crypto.randomUUID(), account.id, candidateId, jobId, account.contact,

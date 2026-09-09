@@ -3,6 +3,7 @@ import { accountFromRequest, ensureSchema, getDb, getResumeBucket } from '@/app/
 import { repairResumeProfiles } from '@/app/server/resume-repair';
 import { getResumeJobs } from '@/app/server/resume-jobs';
 import { buildSystemResumeJob, matchResumeJob, parseResumeText, ResumeJob } from '@/app/server/resume-parser';
+import { CANDIDATE_STAGES } from '@/app/candidate-stages';
 
 type DataRow = Record<string, string | number | null>;
 type RuleRow = DataRow & {
@@ -26,7 +27,7 @@ type RuleRow = DataRow & {
 
 type CustomCondition = { field: string; operator: string; value: string };
 
-const transitionStages = ['面试待安排', '待复核', '初筛淘汰', '淘汰人才库', 'AI 初面待发起'];
+const transitionStages: string[] = [...CANDIDATE_STAGES, '已淘汰'];
 const educationRanks: Record<string, number> = { '高中': 1, '中专': 1, '大专': 2, '本科': 3, '硕士': 4, '博士': 5 };
 
 export async function GET(request: NextRequest) {
@@ -39,13 +40,28 @@ export async function GET(request: NextRequest) {
     candidate_id, owner_id, parsing_status, created_at, updated_at
   ) SELECT id, owner_id, '结构化完成', created_at, updated_at FROM candidates WHERE owner_id = ?`).bind(account.id).run();
 
-  const [profiles, applications, rules, templates, reviews, logs] = await Promise.all([
-    db.prepare('SELECT * FROM resume_profiles WHERE owner_id = ? ORDER BY updated_at DESC').bind(account.id).all<DataRow>(),
-    db.prepare('SELECT * FROM resume_applications WHERE owner_id = ? ORDER BY applied_at DESC').bind(account.id).all<DataRow>(),
+  const assignedCandidateSql = 'SELECT candidate_id FROM candidate_assignments WHERE hr_account_id = ?';
+  const [profiles, applications, rules, templates, reviews, logs, hrAccounts, assignments] = await Promise.all([
+    account.role === 'hr'
+      ? db.prepare(`SELECT * FROM resume_profiles WHERE owner_id = ? OR candidate_id IN (${assignedCandidateSql}) ORDER BY updated_at DESC`).bind(account.id, account.id).all<DataRow>()
+      : db.prepare('SELECT * FROM resume_profiles WHERE owner_id = ? ORDER BY updated_at DESC').bind(account.id).all<DataRow>(),
+    account.role === 'hr'
+      ? db.prepare(`SELECT * FROM resume_applications WHERE owner_id = ? OR candidate_id IN (${assignedCandidateSql}) ORDER BY applied_at DESC`).bind(account.id, account.id).all<DataRow>()
+      : db.prepare('SELECT * FROM resume_applications WHERE owner_id = ? ORDER BY applied_at DESC').bind(account.id).all<DataRow>(),
     db.prepare('SELECT * FROM screening_rules WHERE owner_id = ? ORDER BY updated_at DESC').bind(account.id).all<DataRow>(),
     db.prepare('SELECT * FROM screening_templates WHERE owner_id = ? ORDER BY updated_at DESC').bind(account.id).all<DataRow>(),
-    db.prepare('SELECT * FROM screening_reviews WHERE owner_id = ? ORDER BY updated_at DESC').bind(account.id).all<DataRow>(),
-    db.prepare('SELECT * FROM screening_logs WHERE owner_id = ? ORDER BY created_at DESC LIMIT 300').bind(account.id).all<DataRow>(),
+    account.role === 'hr'
+      ? db.prepare(`SELECT * FROM screening_reviews WHERE owner_id = ? OR candidate_id IN (${assignedCandidateSql}) ORDER BY updated_at DESC`).bind(account.id, account.id).all<DataRow>()
+      : db.prepare('SELECT * FROM screening_reviews WHERE owner_id = ? ORDER BY updated_at DESC').bind(account.id).all<DataRow>(),
+    account.role === 'hr'
+      ? db.prepare(`SELECT * FROM screening_logs WHERE owner_id = ? OR candidate_id IN (${assignedCandidateSql}) ORDER BY created_at DESC LIMIT 300`).bind(account.id, account.id).all<DataRow>()
+      : db.prepare('SELECT * FROM screening_logs WHERE owner_id = ? ORDER BY created_at DESC LIMIT 300').bind(account.id).all<DataRow>(),
+    account.role === 'super_admin'
+      ? db.prepare("SELECT id, contact, phone, email FROM accounts WHERE role = 'hr' ORDER BY contact ASC, created_at ASC").all<DataRow>()
+      : Promise.resolve({ results: [] as DataRow[] }),
+    account.role === 'hr'
+      ? db.prepare(`SELECT ca.*, a.contact AS hr_name, a.email AS hr_email FROM candidate_assignments ca JOIN accounts a ON a.id = ca.hr_account_id WHERE ca.hr_account_id = ? ORDER BY ca.assigned_at DESC`).bind(account.id).all<DataRow>()
+      : db.prepare(`SELECT ca.*, a.contact AS hr_name, a.email AS hr_email FROM candidate_assignments ca JOIN accounts a ON a.id = ca.hr_account_id WHERE ca.owner_id = ? ORDER BY ca.assigned_at DESC`).bind(account.id).all<DataRow>(),
   ]);
 
   return NextResponse.json({
@@ -55,6 +71,8 @@ export async function GET(request: NextRequest) {
     templates: templates.results.map(mapTemplate),
     reviews: reviews.results.map(mapReview),
     logs: logs.results.map(mapLog),
+    hrAccounts: hrAccounts.results.map(row => ({ id: row.id, contact: row.contact, phone: row.phone, email: row.email })),
+    assignments: assignments.results.map(row => ({ candidateId: row.candidate_id, hrAccountId: row.hr_account_id, hrName: row.hr_name, hrEmail: row.hr_email, assignedBy: row.assigned_by, assignedAt: row.assigned_at })),
   }, { headers: { 'Cache-Control': 'private, no-store' } });
 }
 
@@ -65,6 +83,31 @@ export async function POST(request: NextRequest) {
   const action = text(body?.action, 50);
   const db = getDb();
   const now = new Date().toISOString();
+
+  if (action === 'assignToHr') {
+    if (account.role !== 'super_admin') return forbidden();
+    const candidateIds = list(body?.candidateIds).slice(0, 100);
+    const hrAccountId = text(body?.hrAccountId, 80);
+    if (!candidateIds.length || !hrAccountId) return invalid('请选择候选人和接收简历的 HR。');
+    const hrAccount = await db.prepare("SELECT id, contact, email FROM accounts WHERE id = ? AND role = 'hr' LIMIT 1").bind(hrAccountId).first<{id:string;contact:string;email:string}>();
+    if (!hrAccount) return invalid('所选人员不是有效的 HR 用户。');
+    const placeholders = candidateIds.map(() => '?').join(',');
+    const owned = await db.prepare(`SELECT id, job_id, name FROM candidates WHERE owner_id = ? AND id IN (${placeholders})`).bind(account.id, ...candidateIds).all<DataRow>();
+    if (owned.results.length !== candidateIds.length) return invalid('部分候选人不存在或无权推荐。');
+    const statements: D1PreparedStatement[] = [];
+    for (const row of owned.results) {
+      statements.push(db.prepare(`INSERT INTO candidate_assignments (candidate_id, owner_id, hr_account_id, assigned_by, assigned_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(candidate_id) DO UPDATE SET hr_account_id = excluded.hr_account_id, assigned_by = excluded.assigned_by,
+        assigned_at = excluded.assigned_at, updated_at = excluded.updated_at`).bind(row.id, account.id, hrAccount.id, account.contact, now, now));
+      statements.push(db.prepare("UPDATE candidates SET stage = '用人部门筛选', updated_at = ? WHERE id = ? AND owner_id = ?").bind(now, row.id, account.id));
+      statements.push(db.prepare("UPDATE resume_applications SET status = '用人部门筛选' WHERE candidate_id = ? AND owner_id = ?").bind(row.id, account.id));
+      statements.push(db.prepare(`INSERT INTO screening_logs (id, owner_id, candidate_id, job_id, operator_name, action, detail, created_at)
+        VALUES (?, ?, ?, ?, ?, '用人部门推荐', ?, ?)`).bind(crypto.randomUUID(), account.id, row.id, row.job_id, account.contact, `已将${row.name}推荐给 HR「${hrAccount.contact}」`, now));
+    }
+    await executeBatches(db, statements);
+    return NextResponse.json({ ok: true, count: owned.results.length, hrAccount: { id: hrAccount.id, contact: hrAccount.contact, email: hrAccount.email } });
+  }
 
   if (action === 'saveRule') {
     const jobId = text(body?.jobId, 80);
@@ -149,7 +192,7 @@ export async function POST(request: NextRequest) {
     const statements: D1PreparedStatement[] = [];
     for (const row of target) {
       const outcome = scoreCandidate(row, rule);
-      const stage = outcome.knockout ? '初筛淘汰' : '面试待安排';
+      const stage = outcome.knockout ? '已淘汰' : 'AI面试';
       statements.push(db.prepare(`UPDATE resume_profiles SET keyword_score = ?, experience_score = ?, education_score = ?,
         stability_score = ?, match_score = ?, match_level = ?, highlights_json = ?, risks_json = ?, screened_at = ?, updated_at = ?
         WHERE candidate_id = ? AND owner_id = ?`).bind(
@@ -189,7 +232,7 @@ export async function POST(request: NextRequest) {
 
     row.job_id = resolved.job.id;
     const outcome = scoreCandidate(row, rule);
-    const stage = outcome.knockout ? '初筛淘汰' : '面试待安排';
+    const stage = outcome.knockout ? '已淘汰' : 'AI面试';
     const statements: D1PreparedStatement[] = [
       db.prepare(`UPDATE resume_profiles SET keyword_score = ?, experience_score = ?, education_score = ?,
         stability_score = ?, match_score = ?, match_level = ?, highlights_json = ?, risks_json = ?, screened_at = ?, updated_at = ?
@@ -281,7 +324,7 @@ export async function POST(request: NextRequest) {
     const stage = text(body?.stage, 40);
     const reason = text(body?.reason, 500);
     if (!candidateIds.length || !transitionStages.includes(stage)) return invalid('请选择候选人和有效流转动作。');
-    if (['初筛淘汰', '淘汰人才库'].includes(stage) && !reason) return invalid('淘汰操作必须填写淘汰原因。');
+    if (stage === '已淘汰' && !reason) return invalid('淘汰操作必须填写淘汰原因。');
     const placeholders = candidateIds.map(() => '?').join(',');
     const owned = await db.prepare(`SELECT id, job_id FROM candidates WHERE owner_id = ? AND id IN (${placeholders})`).bind(account.id, ...candidateIds).all<DataRow>();
     if (owned.results.length !== candidateIds.length) return invalid('部分候选人不存在或无权操作。');
@@ -527,4 +570,5 @@ function customFieldValue(row: DataRow, field: string) {
 }
 function jsonObject(value: unknown) { try { const parsed = JSON.parse(String(value || '{}')); return parsed && typeof parsed === 'object' ? parsed : {}; } catch { return {}; } }
 function unauthorized() { return NextResponse.json({ ok: false, message: '请先登录。' }, { status: 401 }); }
+function forbidden() { return NextResponse.json({ ok: false, message: '仅超级管理员可以向 HR 推荐候选人。' }, { status: 403 }); }
 function invalid(message: string) { return NextResponse.json({ ok: false, message }, { status: 400 }); }

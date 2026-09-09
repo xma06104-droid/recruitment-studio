@@ -21,8 +21,8 @@ export async function GET(_request:NextRequest, context:{ params:Promise<{ token
     const now = new Date().toISOString();
     await getDb().batch([
       getDb().prepare(`UPDATE ai_interview_invitations SET status = '已超时', updated_at = ? WHERE id = ?`).bind(now, invitation.id),
-      getDb().prepare(`UPDATE candidates SET stage = '待复核', updated_at = ?
-        WHERE id = ? AND owner_id = ? AND stage IN ('AI 初面待发起', '已发起AI面试邀请')`).bind(now, invitation.candidate_id, invitation.owner_id),
+      getDb().prepare(`UPDATE candidates SET stage = 'AI面试', updated_at = ?
+        WHERE id = ? AND owner_id = ? AND stage IN ('AI面试', 'AI 初面待发起', '已发起AI面试邀请')`).bind(now, invitation.candidate_id, invitation.owner_id),
     ]);
     return failure('面试地址已过期，请联系招聘负责人重新发送。', 410);
   }
@@ -77,7 +77,7 @@ export async function POST(request:NextRequest, context:{ params:Promise<{ token
       crypto.randomUUID(), invitation.owner_id, invitation.candidate_id, invitation.job_title, score, durationSeconds, summary, now, now, now,
     ),
     db.prepare(`UPDATE ai_interview_invitations SET status = '已完成', completed_at = ?, updated_at = ? WHERE id = ?`).bind(now, now, invitation.id),
-    db.prepare(`UPDATE candidates SET score = ?, stage = '待沟通', updated_at = ? WHERE id = ? AND owner_id = ?`).bind(score, now, invitation.candidate_id, invitation.owner_id),
+    db.prepare(`UPDATE candidates SET score = ?, stage = 'AI面试', updated_at = ? WHERE id = ? AND owner_id = ?`).bind(score, now, invitation.candidate_id, invitation.owner_id),
     db.prepare(`UPDATE interviews SET status = '已完成', updated_at = ? WHERE candidate_id = ? AND owner_id = ? AND round = 'AI 初面' AND status NOT IN ('已完成', '已取消')`).bind(now, invitation.candidate_id, invitation.owner_id),
   ]);
   return NextResponse.json({ ok:true, completed:true });

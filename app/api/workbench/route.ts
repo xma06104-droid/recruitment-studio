@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { CANDIDATE_STAGES, normalizeCandidateStage } from '@/app/candidate-stages';
 import { env } from 'cloudflare:workers';
 import { accountFromRequest, createInvitationShareToken, ensureSchema, getDb, hashToken } from '@/app/server/db';
 import { repairResumeProfiles } from '@/app/server/resume-repair';
@@ -14,8 +15,8 @@ export async function GET(request: NextRequest) {
   const now = new Date().toISOString();
   await db.prepare(`UPDATE ai_interview_invitations SET status = '已超时', updated_at = ?
     WHERE owner_id = ? AND expires_at <= ? AND status IN ('待发送', '已发送', '进行中')`).bind(now, account.id, now).run();
-  await db.prepare(`UPDATE candidates SET stage = '已发起AI面试邀请', updated_at = ?
-    WHERE owner_id = ? AND stage IN ('AI 初面待发起', '待复核') AND id IN (
+  await db.prepare(`UPDATE candidates SET stage = 'AI面试', updated_at = ?
+    WHERE owner_id = ? AND stage IN ('简历筛选', 'AI面试', 'AI 初面待发起', '待复核') AND id IN (
       SELECT latest.candidate_id FROM ai_interview_invitations latest
       WHERE latest.owner_id = ? AND latest.status IN ('待发送', '已发送', '进行中')
         AND latest.created_at = (
@@ -23,8 +24,8 @@ export async function GET(request: NextRequest) {
           WHERE previous.owner_id = latest.owner_id AND previous.candidate_id = latest.candidate_id
         )
     )`).bind(now, account.id, account.id).run();
-  await db.prepare(`UPDATE candidates SET stage = '待复核', updated_at = ?
-    WHERE owner_id = ? AND stage IN ('AI 初面待发起', '已发起AI面试邀请') AND id IN (
+  await db.prepare(`UPDATE candidates SET stage = 'AI面试', updated_at = ?
+    WHERE owner_id = ? AND stage IN ('AI面试', 'AI 初面待发起', '已发起AI面试邀请') AND id IN (
       SELECT latest.candidate_id FROM ai_interview_invitations latest
       WHERE latest.owner_id = ? AND latest.status = '已超时'
         AND latest.created_at = (
@@ -32,15 +33,38 @@ export async function GET(request: NextRequest) {
           WHERE previous.owner_id = latest.owner_id AND previous.candidate_id = latest.candidate_id
         )
     )`).bind(now, account.id, account.id).run();
+  const assignedCandidateSql = 'SELECT candidate_id FROM candidate_assignments WHERE hr_account_id = ?';
+  const assignedJobSql = `SELECT c.job_id FROM candidates c JOIN candidate_assignments ca ON ca.candidate_id = c.id
+    WHERE ca.hr_account_id = ? AND c.job_id IS NOT NULL`;
   const [jobs, candidates, interviews, offers, aiQuestions, aiInterviews, aiInvitations, manualAssessments] = await Promise.all([
-    db.prepare('SELECT * FROM jobs WHERE owner_id = ? ORDER BY created_at DESC').bind(account.id).all<DataRow>(),
-    db.prepare('SELECT * FROM candidates WHERE owner_id = ? ORDER BY created_at DESC').bind(account.id).all<DataRow>(),
-    db.prepare('SELECT * FROM interviews WHERE owner_id = ? ORDER BY scheduled_at ASC').bind(account.id).all<DataRow>(),
-    db.prepare('SELECT * FROM offers WHERE owner_id = ? ORDER BY created_at DESC').bind(account.id).all<DataRow>(),
-    db.prepare('SELECT * FROM ai_questions WHERE owner_id = ? ORDER BY created_at DESC').bind(account.id).all<DataRow>(),
-    db.prepare('SELECT * FROM ai_interviews WHERE owner_id = ? ORDER BY COALESCE(completed_at, created_at) DESC').bind(account.id).all<DataRow>(),
-    db.prepare('SELECT * FROM ai_interview_invitations WHERE owner_id = ? ORDER BY created_at DESC').bind(account.id).all<DataRow>(),
-    db.prepare('SELECT * FROM manual_assessments WHERE owner_id = ? ORDER BY updated_at DESC').bind(account.id).all<DataRow>(),
+    account.role === 'hr'
+      ? db.prepare(`SELECT DISTINCT j.* FROM jobs j WHERE j.owner_id = ? OR j.id IN (${assignedJobSql}) ORDER BY j.created_at DESC`).bind(account.id, account.id).all<DataRow>()
+      : db.prepare('SELECT * FROM jobs WHERE owner_id = ? ORDER BY created_at DESC').bind(account.id).all<DataRow>(),
+    account.role === 'hr'
+      ? db.prepare(`SELECT c.*, ca.hr_account_id, ca.assigned_at, a.contact AS assigned_hr_name
+          FROM candidates c LEFT JOIN candidate_assignments ca ON ca.candidate_id = c.id LEFT JOIN accounts a ON a.id = ca.hr_account_id
+          WHERE c.owner_id = ? OR c.id IN (${assignedCandidateSql}) ORDER BY COALESCE(ca.assigned_at, c.created_at) DESC`).bind(account.id, account.id).all<DataRow>()
+      : db.prepare(`SELECT c.*, ca.hr_account_id, ca.assigned_at, a.contact AS assigned_hr_name
+          FROM candidates c LEFT JOIN candidate_assignments ca ON ca.candidate_id = c.id LEFT JOIN accounts a ON a.id = ca.hr_account_id
+          WHERE c.owner_id = ? ORDER BY c.created_at DESC`).bind(account.id).all<DataRow>(),
+    account.role === 'hr'
+      ? db.prepare(`SELECT * FROM interviews WHERE owner_id = ? OR candidate_id IN (${assignedCandidateSql}) ORDER BY scheduled_at ASC`).bind(account.id, account.id).all<DataRow>()
+      : db.prepare(`SELECT * FROM interviews WHERE owner_id = ? OR candidate_id IN (SELECT id FROM candidates WHERE owner_id = ?) ORDER BY scheduled_at ASC`).bind(account.id, account.id).all<DataRow>(),
+    account.role === 'hr'
+      ? db.prepare(`SELECT * FROM offers WHERE owner_id = ? OR candidate_id IN (${assignedCandidateSql}) ORDER BY created_at DESC`).bind(account.id, account.id).all<DataRow>()
+      : db.prepare(`SELECT * FROM offers WHERE owner_id = ? OR candidate_id IN (SELECT id FROM candidates WHERE owner_id = ?) ORDER BY created_at DESC`).bind(account.id, account.id).all<DataRow>(),
+    account.role === 'hr'
+      ? db.prepare(`SELECT * FROM ai_questions WHERE owner_id = ? OR job_id IN (${assignedJobSql}) ORDER BY created_at DESC`).bind(account.id, account.id).all<DataRow>()
+      : db.prepare('SELECT * FROM ai_questions WHERE owner_id = ? ORDER BY created_at DESC').bind(account.id).all<DataRow>(),
+    account.role === 'hr'
+      ? db.prepare(`SELECT * FROM ai_interviews WHERE owner_id = ? OR candidate_id IN (${assignedCandidateSql}) ORDER BY COALESCE(completed_at, created_at) DESC`).bind(account.id, account.id).all<DataRow>()
+      : db.prepare(`SELECT * FROM ai_interviews WHERE owner_id = ? OR candidate_id IN (SELECT id FROM candidates WHERE owner_id = ?) ORDER BY COALESCE(completed_at, created_at) DESC`).bind(account.id, account.id).all<DataRow>(),
+    account.role === 'hr'
+      ? db.prepare(`SELECT * FROM ai_interview_invitations WHERE owner_id = ? OR candidate_id IN (${assignedCandidateSql}) ORDER BY created_at DESC`).bind(account.id, account.id).all<DataRow>()
+      : db.prepare(`SELECT * FROM ai_interview_invitations WHERE owner_id = ? OR candidate_id IN (SELECT id FROM candidates WHERE owner_id = ?) ORDER BY created_at DESC`).bind(account.id, account.id).all<DataRow>(),
+    account.role === 'hr'
+      ? db.prepare(`SELECT * FROM manual_assessments WHERE owner_id = ? OR candidate_id IN (${assignedCandidateSql}) ORDER BY updated_at DESC`).bind(account.id, account.id).all<DataRow>()
+      : db.prepare(`SELECT * FROM manual_assessments WHERE owner_id = ? OR candidate_id IN (SELECT id FROM candidates WHERE owner_id = ?) ORDER BY updated_at DESC`).bind(account.id, account.id).all<DataRow>(),
   ]);
   const { unique: uniqueQuestions, duplicateIds } = deduplicateAiQuestions(aiQuestions.results);
   if (duplicateIds.length) {
@@ -97,10 +121,11 @@ export async function POST(request: NextRequest) {
     if (jobId && !(await ownedRecord('jobs', jobId, account.id))) return invalid('所选职位不存在。');
     const skills = list(payload.skills).slice(0, 12);
     await db.prepare(`INSERT INTO candidates (id, owner_id, job_id, name, role, company, years, stage, source, skills_json, score, phone, email, city, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, '待初筛', ?, ?, NULL, ?, ?, ?, ?, ?)`).bind(id, account.id, jobId, name, role, text(payload.company, 100), text(payload.years, 40), text(payload.source, 80), JSON.stringify(skills), text(payload.phone, 30), text(payload.email, 120), text(payload.city, 80), now, now).run();
+      VALUES (?, ?, ?, ?, ?, ?, ?, '简历筛选', ?, ?, NULL, ?, ?, ?, ?, ?)`).bind(id, account.id, jobId, name, role, text(payload.company, 100), text(payload.years, 40), text(payload.source, 80), JSON.stringify(skills), text(payload.phone, 30), text(payload.email, 120), text(payload.city, 80), now, now).run();
   } else if (resource === 'manualAssessment') {
     const candidateId = text(payload.candidateId, 80);
-    if (!candidateId || !(await ownedRecord('candidates', candidateId, account.id))) return invalid('请选择有效候选人。');
+    const candidate = candidateId ? await accessibleCandidate(candidateId, account.id) : null;
+    if (!candidate) return invalid('请选择有效候选人。');
     const professional = integer(payload.professional, 0, 100, -1);
     const communication = integer(payload.communication, 0, 100, -1);
     const culture = integer(payload.culture, 0, 100, -1);
@@ -119,18 +144,23 @@ export async function POST(request: NextRequest) {
         reviewer = excluded.reviewer,
         updated_at = excluded.updated_at
       WHERE manual_assessments.owner_id = excluded.owner_id`).bind(
-        candidateId, account.id, total, professional, communication, culture,
+        candidateId, candidate.owner_id, total, professional, communication, culture,
         text(payload.comment, 4000), account.contact, now, now,
       ),
-      db.prepare('UPDATE candidates SET updated_at = ? WHERE id = ? AND owner_id = ?').bind(now, candidateId, account.id),
+      db.prepare('UPDATE candidates SET updated_at = ? WHERE id = ?').bind(now, candidateId),
     ]);
   } else if (resource === 'interview') {
     const candidateId = text(payload.candidateId, 80);
-    if (!candidateId || !(await ownedRecord('candidates', candidateId, account.id))) return invalid('请选择有效候选人。');
+    const candidate = candidateId ? await accessibleCandidate(candidateId, account.id) : null;
+    if (!candidate) return invalid('请选择有效候选人。');
     const scheduledAt = text(payload.scheduledAt, 80);
     if (!scheduledAt || Number.isNaN(Date.parse(scheduledAt))) return invalid('请选择有效的面试日期和时间。');
-    await db.prepare(`INSERT INTO interviews (id, owner_id, candidate_id, scheduled_at, round, mode, interviewer, status, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, '待确认', ?, ?)`).bind(id, account.id, candidateId, new Date(scheduledAt).toISOString(), text(payload.round, 80) || '业务一面', text(payload.mode, 100) || '待确认', account.contact, now, now).run();
+    await db.batch([
+      db.prepare(`INSERT INTO interviews (id, owner_id, candidate_id, scheduled_at, round, mode, interviewer, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, '待确认', ?, ?)`).bind(id, candidate.owner_id, candidateId, new Date(scheduledAt).toISOString(), text(payload.round, 80) || '业务一面', text(payload.mode, 100) || '待确认', account.contact, now, now),
+      db.prepare("UPDATE candidates SET stage = '安排面试', updated_at = ? WHERE id = ?").bind(now, candidateId),
+      db.prepare("UPDATE resume_applications SET status = '安排面试' WHERE candidate_id = ? AND owner_id = ?").bind(candidateId, candidate.owner_id),
+    ]);
   } else if (resource === 'offer') {
     const candidateId = text(payload.candidateId, 80);
     const candidate = candidateId ? await db.prepare('SELECT name, role, email FROM candidates WHERE id = ? AND owner_id = ?').bind(candidateId, account.id).first<{ name: string; role: string; email: string }>() : null;
@@ -142,8 +172,12 @@ export async function POST(request: NextRequest) {
     const recipientEmail = text(payload.recipientEmail, 120) || candidate.email;
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail)) return invalid('该候选人尚未填写有效邮箱，请补充收件邮箱。');
     const content = text(payload.content, 6000) || createOfferContent(candidate.name, jobTitle, salary, deadline);
-    await db.prepare(`INSERT INTO offers (id, owner_id, candidate_id, job_title, salary, recipient_email, content, owner_name, status, deadline, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, '待审批', ?, ?, ?)`).bind(id, account.id, candidateId, jobTitle, salary, recipientEmail, content, account.contact, deadline, now, now).run();
+    await db.batch([
+      db.prepare(`INSERT INTO offers (id, owner_id, candidate_id, job_title, salary, recipient_email, content, owner_name, status, deadline, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, '待审批', ?, ?, ?)`).bind(id, account.id, candidateId, jobTitle, salary, recipientEmail, content, account.contact, deadline, now, now),
+      db.prepare("UPDATE candidates SET stage = '录用', updated_at = ? WHERE id = ? AND owner_id = ?").bind(now, candidateId, account.id),
+      db.prepare("UPDATE resume_applications SET status = '录用' WHERE candidate_id = ? AND owner_id = ?").bind(candidateId, account.id),
+    ]);
   } else if (resource === 'generateAiQuestions') {
     const jobId = text(payload.jobId, 80);
     const job = jobId ? await db.prepare('SELECT id, title, department FROM jobs WHERE id = ? AND owner_id = ?').bind(jobId, account.id).first<{id:string;title:string;department:string}>() : null;
@@ -220,7 +254,7 @@ export async function POST(request: NextRequest) {
         invitationId, account.id, candidateId, await hashToken(token), candidate.email, candidate.role, JSON.stringify(questions),
         '待发送', now, expiresAt, now, now,
       ),
-      db.prepare(`UPDATE candidates SET stage = '已发起AI面试邀请', updated_at = ? WHERE id = ? AND owner_id = ?`).bind(now, candidateId, account.id),
+      db.prepare(`UPDATE candidates SET stage = 'AI面试', updated_at = ? WHERE id = ? AND owner_id = ?`).bind(now, candidateId, account.id),
     ]);
     const delivery = await deliverInterviewEmail(candidate.email, subject, content);
     if (delivery.sent) await db.prepare(`UPDATE ai_interview_invitations SET status = '已发送', updated_at = ? WHERE id = ?`).bind(new Date().toISOString(), invitationId).run();
@@ -238,7 +272,7 @@ export async function POST(request: NextRequest) {
     await db.batch([
       db.prepare(`INSERT INTO ai_interviews (id, owner_id, candidate_id, job_title, status, score, duration_seconds, summary, completed_at, created_at, updated_at)
         VALUES (?, ?, ?, ?, '已完成', ?, ?, ?, ?, ?, ?)`).bind(id, account.id, candidateId, text(payload.jobTitle, 100) || candidate.role, score, integer(payload.durationMinutes, 1, 600, 1) * 60, summary, now, now, now),
-      db.prepare("UPDATE candidates SET score = ?, stage = '待沟通', updated_at = ? WHERE id = ? AND owner_id = ?").bind(score, now, candidateId, account.id),
+      db.prepare("UPDATE candidates SET score = ?, stage = 'AI面试', updated_at = ? WHERE id = ? AND owner_id = ?").bind(score, now, candidateId, account.id),
     ]);
   } else {
     return invalid('不支持的数据类型。');
@@ -307,14 +341,16 @@ export async function PATCH(request: NextRequest) {
   }
 
   if (resource === 'interview') {
-    const owned = await db.prepare('SELECT id FROM interviews WHERE id = ? AND owner_id = ?').bind(id, account.id).first<{id:string}>();
-    if (!owned) return invalid('面试安排不存在。');
+    const accessible = await db.prepare(`SELECT i.id FROM interviews i WHERE i.id = ? AND (
+      i.owner_id = ? OR i.candidate_id IN (SELECT candidate_id FROM candidate_assignments WHERE hr_account_id = ?)
+    )`).bind(id, account.id, account.id).first<{id:string}>();
+    if (!accessible) return invalid('面试安排不存在。');
     const candidateId = text(payload.candidateId, 80);
-    if (!candidateId || !(await ownedRecord('candidates', candidateId, account.id))) return invalid('请选择有效候选人。');
+    if (!candidateId || !(await accessibleCandidate(candidateId, account.id))) return invalid('请选择有效候选人。');
     const scheduledAt = text(payload.scheduledAt, 80);
     if (!scheduledAt || Number.isNaN(Date.parse(scheduledAt))) return invalid('请选择有效的面试日期和时间。');
     await db.prepare(`UPDATE interviews SET candidate_id = ?, scheduled_at = ?, round = ?, mode = ?, updated_at = ?
-      WHERE id = ? AND owner_id = ?`).bind(candidateId, new Date(scheduledAt).toISOString(), text(payload.round, 80) || '业务一面', text(payload.mode, 100) || '待确认', now, id, account.id).run();
+      WHERE id = ?`).bind(candidateId, new Date(scheduledAt).toISOString(), text(payload.round, 80) || '业务一面', text(payload.mode, 100) || '待确认', now, id).run();
     return NextResponse.json({ ok: true });
   }
 
@@ -337,11 +373,45 @@ export async function PATCH(request: NextRequest) {
   }
 
   if (!value) return invalid('缺少更新内容。');
+  if (resource === 'interviewStatus') {
+    const allowed = ['待确认', '已确认', '已完成', '已取消'];
+    if (!allowed.includes(value)) return invalid('更新状态无效。');
+    const accessible = await db.prepare(`SELECT i.id FROM interviews i WHERE i.id = ? AND (
+      i.owner_id = ? OR i.candidate_id IN (SELECT candidate_id FROM candidate_assignments WHERE hr_account_id = ?)
+    ) LIMIT 1`).bind(id, account.id, account.id).first<{id:string}>();
+    if (!accessible) return invalid('面试安排不存在或无权操作。');
+    await db.prepare('UPDATE interviews SET status = ?, updated_at = ? WHERE id = ?').bind(value, now, id).run();
+    return NextResponse.json({ ok: true });
+  }
+  if (resource === 'candidateStage') {
+    const allowed: string[] = [...CANDIDATE_STAGES, '待定', '已淘汰'];
+    if (!allowed.includes(value)) return invalid('更新状态无效。');
+    const candidate = await accessibleCandidate(id, account.id);
+    if (!candidate) return invalid('候选人不存在或无权操作。');
+    await db.batch([
+      db.prepare('UPDATE candidates SET stage = ?, updated_at = ? WHERE id = ?').bind(value, now, id),
+      db.prepare('UPDATE resume_applications SET status = ? WHERE candidate_id = ? AND owner_id = ?').bind(value, id, candidate.owner_id),
+      db.prepare(`INSERT INTO screening_logs (id, owner_id, candidate_id, job_id, operator_name, action, detail, created_at)
+        VALUES (?, ?, ?, ?, ?, '用人部门反馈', ?, ?)`).bind(crypto.randomUUID(), candidate.owner_id, id, candidate.job_id, account.contact, `候选人状态更新为${value}`, now),
+    ]);
+    return NextResponse.json({ ok: true });
+  }
+  if (resource === 'offerStatus') {
+    const allowed = ['待审批', '已发放', '已接受', '已拒绝', '已撤回'];
+    if (!allowed.includes(value)) return invalid('更新状态无效。');
+    const offer = await db.prepare('SELECT candidate_id FROM offers WHERE id = ? AND owner_id = ? LIMIT 1').bind(id, account.id).first<{candidate_id:string}>();
+    if (!offer) return invalid('Offer 不存在或无权操作。');
+    const nextStage = value === '已接受' ? '待入职' : ['待审批', '已发放'].includes(value) ? '录用' : '';
+    const statements: D1PreparedStatement[] = [db.prepare('UPDATE offers SET status = ?, updated_at = ? WHERE id = ? AND owner_id = ?').bind(value, now, id, account.id)];
+    if (nextStage) {
+      statements.push(db.prepare('UPDATE candidates SET stage = ?, updated_at = ? WHERE id = ? AND owner_id = ?').bind(nextStage, now, offer.candidate_id, account.id));
+      statements.push(db.prepare('UPDATE resume_applications SET status = ? WHERE candidate_id = ? AND owner_id = ?').bind(nextStage, offer.candidate_id, account.id));
+    }
+    await db.batch(statements);
+    return NextResponse.json({ ok: true });
+  }
   const configs: Record<string, { table: string; field: string; allowed: string[] }> = {
-    candidateStage: { table: 'candidates', field: 'stage', allowed: ['待初筛', '待复核', '面试待安排', 'AI 初面待发起', '已发起AI面试邀请', '初筛淘汰', '淘汰人才库', '待沟通', '一面', '技术面', '二面', 'Offer', '已入职', '已淘汰'] },
     jobStatus: { table: 'jobs', field: 'status', allowed: ['草稿', '招聘中', '急聘', '已暂停', '已关闭'] },
-    interviewStatus: { table: 'interviews', field: 'status', allowed: ['待确认', '已确认', '已完成', '已取消'] },
-    offerStatus: { table: 'offers', field: 'status', allowed: ['待审批', '已发放', '已接受', '已拒绝', '已撤回'] },
   };
   const config = configs[resource];
   if (!config || !config.allowed.includes(value)) return invalid('更新状态无效。');
@@ -377,6 +447,12 @@ async function ownedRecord(table: 'jobs' | 'candidates', id: string, ownerId: st
   return Boolean(await getDb().prepare(`SELECT id FROM ${table} WHERE id = ? AND owner_id = ?`).bind(id, ownerId).first());
 }
 
+async function accessibleCandidate(id: string, accountId: string) {
+  return getDb().prepare(`SELECT id, owner_id, job_id FROM candidates WHERE id = ? AND (
+    owner_id = ? OR id IN (SELECT candidate_id FROM candidate_assignments WHERE hr_account_id = ?)
+  ) LIMIT 1`).bind(id, accountId, accountId).first<{id:string;owner_id:string;job_id:string|null}>();
+}
+
 function mapJob(row: DataRow) {
   return { id: row.id, title: row.title, department: row.department, city: row.city, status: row.status, headcount: row.headcount, ownerName: row.owner_name, createdAt: row.created_at, updatedAt: row.updated_at };
 }
@@ -384,7 +460,7 @@ function mapJob(row: DataRow) {
 function mapCandidate(row: DataRow) {
   let skills: string[] = [];
   try { skills = JSON.parse(String(row.skills_json || '[]')); } catch {}
-  return { id: row.id, jobId: row.job_id, name: row.name, role: row.role, company: row.company, years: row.years, stage: row.stage, source: row.source, skills, score: row.score, phone: row.phone, email: row.email, city: row.city, createdAt: row.created_at, updatedAt: row.updated_at };
+  return { id: row.id, jobId: row.job_id, name: row.name, role: row.role, company: row.company, years: row.years, stage: normalizeCandidateStage(String(row.stage || '')), source: row.source, skills, score: row.score, phone: row.phone, email: row.email, city: row.city, assignedHrId: row.hr_account_id, assignedHrName: row.assigned_hr_name, assignedAt: row.assigned_at, createdAt: row.created_at, updatedAt: row.updated_at };
 }
 
 function mapInterview(row: DataRow) {
