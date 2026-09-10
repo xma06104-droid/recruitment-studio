@@ -262,6 +262,7 @@ function CandidateResumeDrawer({candidate,job,profile,review,aiInterview,saving,
   const status=candidateDisplayStatus(candidate.stage);
   const [noteOpen,setNoteOpen]=useState(false);
   const [note,setNote]=useState(review?.comment||'');
+  const [detailView,setDetailView]=useState<'resume'|'ai'>('resume');
   return <div className="drawer-backdrop hr-resume-backdrop" onMouseDown={onClose}>
     <aside className="detail-drawer candidate-drawer hr-resume-drawer" aria-label={`${candidate.name}的简历`} onMouseDown={event=>event.stopPropagation()}>
       <button type="button" className="drawer-close" onClick={onClose} aria-label="关闭简历">×</button>
@@ -275,14 +276,21 @@ function CandidateResumeDrawer({candidate,job,profile,review,aiInterview,saving,
       </div>
       {noteOpen&&<form className="hr-resume-note" onSubmit={event=>{event.preventDefault();void onSaveNote(note).then(saved=>{if(saved)setNoteOpen(false)})}}><label>候选人备注<textarea value={note} maxLength={2000} onChange={event=>setNote(event.target.value)} placeholder="记录沟通情况、筛选意见或后续关注事项"/></label><footer><small>{note.length}/2000</small><button type="button" disabled={saving} onClick={()=>setNoteOpen(false)}>取消</button><button type="submit" disabled={saving}>{saving?'保存中…':'保存备注'}</button></footer></form>}
       {saving&&<p className="hr-resume-saving">正在同步审核结果…</p>}
-      <section className="hr-resume-section"><h3>基本信息</h3><div className="profile-info"><p><span>应聘职位</span>{job?.title||candidate.role||'-'}</p><p><span>手机号</span>{candidate.phone||'-'}</p><p><span>邮箱</span>{candidate.email||'-'}</p><p><span>所在城市</span>{candidate.city||'-'}</p><p><span>工作经验</span>{profile?.workYears!==null&&profile?.workYears!==undefined?`${profile.workYears}年`:candidate.years||'-'}</p><p><span>期望薪资</span>{profile?.expectedSalary?`${profile.expectedSalary}元/月`:'-'}</p></div></section>
-      {aiInterview&&<section className="hr-resume-section hr-ai-interview-result"><h3>AI 面试结果</h3><AiInterviewResultPanel summary={aiInterview.summary} fallbackScore={aiInterview.score} durationSeconds={aiInterview.durationSeconds} completedAt={aiInterview.completedAt} compact/></section>}
-      <section className="hr-resume-section"><h3>教育背景</h3><p className="hr-resume-copy">{[profile?.school,profile?.major,profile?.education].filter(Boolean).join(' · ')||'暂无教育背景信息'}</p></section>
-      <ResumeList title="工作经历" items={profile?.workHistory}/>
-      <ProjectTimeline items={profile?.projectHistory}/>
-      <section className="hr-resume-section"><h3>技能与证书</h3><div className="channel-tags">{[...candidate.skills,...(profile?.certificates||[])].length?[...candidate.skills,...(profile?.certificates||[])].map((item,index)=><span key={`${item}-${index}`}>{item}</span>):<p className="hr-resume-copy">暂无技能与证书信息</p>}</div></section>
-      {(profile?.highlights.length||profile?.risks.length)?<section className="hr-resume-section hr-resume-insights"><h3>AI 简历摘要</h3>{profile?.highlights.length?<div className="hr-insight-group highlight"><b>优势</b><div>{profile.highlights.map((item,index)=><span key={`highlight-${index}`}>{item}</span>)}</div></div>:null}{profile?.risks.length?<div className="hr-insight-group risk"><b>关注</b><div>{profile.risks.map((item,index)=><span key={`risk-${index}`}>{item}</span>)}</div></div>:null}</section>:null}
-      {profile?.fileName?<div className="hr-resume-file-actions"><button type="button" onClick={()=>window.print()}>打印简历</button><a className="hr-resume-file" href={`/api/screening/file?candidateId=${encodeURIComponent(candidate.id)}`} target="_blank" rel="noreferrer">查看原始简历 · {profile.fileName}</a></div>:<p className="hr-resume-copy hr-resume-file-empty">未找到可预览的原始简历文件</p>}
+      <div className="hr-resume-tabs" role="tablist" aria-label="候选人详情内容">
+        <button type="button" role="tab" aria-selected={detailView==='resume'} className={detailView==='resume'?'active':''} onClick={()=>setDetailView('resume')}>基本信息</button>
+        <button type="button" role="tab" aria-selected={detailView==='ai'} className={detailView==='ai'?'active':''} onClick={()=>setDetailView('ai')}>AI 面试结果 <span>{aiInterview?.score!==null&&aiInterview?.score!==undefined?`${aiInterview.score} 分`:aiInterview?'待确认':'暂无'}</span></button>
+      </div>
+      {detailView==='resume'?<div className="hr-resume-tab-panel" role="tabpanel">
+        <section className="hr-resume-section hr-resume-basic"><div className="profile-info"><p><span>应聘职位</span>{job?.title||candidate.role||'-'}</p><p><span>手机号</span>{candidate.phone||'-'}</p><p><span>邮箱</span>{candidate.email||'-'}</p><p><span>所在城市</span>{candidate.city||'-'}</p><p><span>工作经验</span>{profile?.workYears!==null&&profile?.workYears!==undefined?`${profile.workYears}年`:candidate.years||'-'}</p><p><span>期望薪资</span>{profile?.expectedSalary?`${profile.expectedSalary}元/月`:'-'}</p></div></section>
+        <section className="hr-resume-section"><h3>教育背景</h3><p className="hr-resume-copy">{[profile?.school,profile?.major,profile?.education].filter(Boolean).join(' · ')||'暂无教育背景信息'}</p></section>
+        <ResumeList title="工作经历" items={profile?.workHistory}/>
+        <ProjectTimeline items={profile?.projectHistory}/>
+        <section className="hr-resume-section"><h3>技能与证书</h3><div className="channel-tags">{[...candidate.skills,...(profile?.certificates||[])].length?[...candidate.skills,...(profile?.certificates||[])].map((item,index)=><span key={`${item}-${index}`}>{item}</span>):<p className="hr-resume-copy">暂无技能与证书信息</p>}</div></section>
+        {(profile?.highlights.length||profile?.risks.length)?<section className="hr-resume-section hr-resume-insights"><h3>AI 简历摘要</h3>{profile?.highlights.length?<div className="hr-insight-group highlight"><b>优势</b><div>{profile.highlights.map((item,index)=><span key={`highlight-${index}`}>{item}</span>)}</div></div>:null}{profile?.risks.length?<div className="hr-insight-group risk"><b>关注</b><div>{profile.risks.map((item,index)=><span key={`risk-${index}`}>{item}</span>)}</div></div>:null}</section>:null}
+        {profile?.fileName?<div className="hr-resume-file-actions"><button type="button" onClick={()=>window.print()}>打印简历</button><a className="hr-resume-file" href={`/api/screening/file?candidateId=${encodeURIComponent(candidate.id)}`} target="_blank" rel="noreferrer">查看原始简历 · {profile.fileName}</a></div>:<p className="hr-resume-copy hr-resume-file-empty">未找到可预览的原始简历文件</p>}
+      </div>:<div className="hr-resume-tab-panel hr-resume-ai-panel" role="tabpanel">
+        {aiInterview?<section className="hr-resume-section hr-ai-interview-result"><AiInterviewResultPanel summary={aiInterview.summary} fallbackScore={aiInterview.score} durationSeconds={aiInterview.durationSeconds} completedAt={aiInterview.completedAt} compact/></section>:<div className="hr-resume-ai-empty"><span>AI</span><b>暂无 AI 面试结果</b><p>候选人完成 AI 面试后，评分、能力维度和面试摘要会显示在这里。</p></div>}
+      </div>}
     </aside>
   </div>;
 }

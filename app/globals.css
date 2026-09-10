@@ -1494,7 +1494,7 @@ input[type="date"]::-webkit-calendar-picker-indicator,input[type="datetime-local
 }
 .interviewer-candidate-row:active{transform:translateY(1px)}
 .hr-resume-backdrop{z-index:1100;background:rgba(1,6,14,.78);backdrop-filter:blur(9px)}
-.hr-resume-drawer{width:min(620px,96vw);padding:38px 36px 44px;color:#edf5ff}
+.hr-resume-drawer{box-sizing:border-box;width:100vw;max-width:none;padding:38px clamp(36px,8vw,120px) 56px;color:#edf5ff}
 .hr-resume-profile{margin:26px 0 22px}
 .hr-resume-profile>span{width:58px;height:58px;border-radius:17px;font-size:21px}
 .hr-resume-profile h2{font-size:26px}.hr-resume-profile p{margin-top:7px;font-size:12px;line-height:1.6}
@@ -1517,6 +1517,15 @@ input[type="date"]::-webkit-calendar-picker-indicator,input[type="datetime-local
 .hr-review-actions button.active{outline:2px solid rgba(255,255,255,.8);outline-offset:2px}
 .hr-review-actions button:disabled{cursor:wait;opacity:.58;transform:none}
 .hr-resume-saving{margin:10px 0 0!important;color:#62d8e8!important;font-size:11px!important}
+.hr-resume-tabs{display:flex;align-items:flex-end;gap:26px;margin-top:34px;border-bottom:1px solid rgba(162,181,211,.12)}
+.hr-resume-tabs button{position:relative;display:flex;align-items:center;gap:9px;padding:0 2px 13px;border:0;color:#8191a7;background:transparent;font:700 15px/1.2 inherit;cursor:pointer;transition:color .18s ease}
+.hr-resume-tabs button:after{position:absolute;right:0;bottom:-1px;left:0;height:2px;border-radius:2px;content:"";background:transparent;transition:background .18s ease,box-shadow .18s ease}
+.hr-resume-tabs button:hover{color:#d9e8f7}.hr-resume-tabs button.active{color:#f4f9ff}.hr-resume-tabs button.active:after{background:#4fd4e8;box-shadow:0 0 16px rgba(79,212,232,.42)}
+.hr-resume-tabs button span{padding:4px 8px;border:1px solid rgba(91,216,234,.16);border-radius:999px;color:#66dbe9;background:rgba(30,139,164,.12);font-size:10px}
+.hr-resume-tab-panel{min-height:320px}.hr-resume-tab-panel>.hr-resume-section:first-child{margin-top:24px}.hr-resume-basic{padding-top:0}
+.hr-resume-ai-panel{padding-top:1px}.hr-resume-ai-panel>.hr-ai-interview-result{margin-top:24px}
+.hr-resume-ai-empty{min-height:330px;display:grid;place-content:center;justify-items:center;margin-top:24px;border:1px dashed rgba(103,198,220,.2);border-radius:18px;background:linear-gradient(145deg,rgba(19,50,75,.32),rgba(22,37,66,.25));text-align:center}
+.hr-resume-ai-empty>span{width:56px;height:56px;display:grid;place-items:center;border-radius:17px;color:#fff;background:linear-gradient(145deg,#1ab8cf,#347eea);font-size:15px;font-weight:850}.hr-resume-ai-empty>b{margin-top:16px;color:#f0f7ff;font-size:17px}.hr-resume-ai-empty>p{max-width:420px;margin:8px 24px 0;color:#8395ab;font-size:12px;line-height:1.7}
 .hr-resume-section{padding-top:3px}.hr-resume-section h3{padding-bottom:10px;border-bottom:1px solid rgba(162,181,211,.09)}
 .hr-resume-copy,.hr-resume-list p{margin:0;color:#aebccd;font-size:12px;line-height:1.85}
 .hr-resume-list{display:grid;gap:9px}.hr-resume-list p{padding:12px 14px;border:1px solid rgba(162,181,211,.09);border-radius:10px;background:#0c1829;white-space:pre-wrap}
@@ -1726,7 +1735,7 @@ input[type="date"]::-webkit-calendar-picker-indicator,input[type="datetime-local
 .interviewer-batch-modal>p{margin:0;color:#59d8e8;font-size:11px;font-weight:850;letter-spacing:.13em}.interviewer-batch-modal>h2{margin:8px 0 7px;font-size:24px}.interviewer-batch-modal>small{display:block;margin-bottom:21px;color:#879ab0;font-size:12px;line-height:1.65}
 .interviewer-batch-modal>label{display:grid;gap:9px;margin-top:14px;color:#c7d5e5;font-size:13px;font-weight:750}.interviewer-batch-modal select,.interviewer-batch-modal textarea{box-sizing:border-box;width:100%;border:1px solid rgba(150,182,215,.14);border-radius:11px;outline:0;color:#edf6ff;background:#091526;font:13px/1.65 inherit}.interviewer-batch-modal select{height:48px;padding:0 13px}.interviewer-batch-modal textarea{min-height:105px;padding:11px 13px;resize:vertical}.interviewer-batch-modal select:focus,.interviewer-batch-modal textarea:focus{border-color:#49cfe4;box-shadow:0 0 0 3px rgba(73,207,228,.08)}
 .interviewer-batch-modal>footer{display:flex;justify-content:flex-end;gap:9px;margin-top:22px}.interviewer-batch-modal>footer button{height:40px;padding:0 17px;border:1px solid rgba(150,182,215,.14);border-radius:10px;color:#aebed0;background:#15243a;font-weight:750;cursor:pointer}.interviewer-batch-modal>footer button[type="submit"]{border:0;color:#fff;background:linear-gradient(110deg,#18b5cc,#367fec)}.interviewer-batch-modal>footer button:disabled{cursor:wait;opacity:.55}
-@media(max-width:620px){.hr-resume-drawer>.drawer-close{top:82px;right:16px}.hr-resume-profile{padding-right:50px}.hr-project-timeline article{grid-template-columns:1fr}.hr-project-timeline article>strong{padding-bottom:8px;border-bottom:1px solid rgba(162,181,211,.08)}.hr-resume-file-actions{grid-template-columns:1fr}}
+@media(max-width:620px){.hr-resume-drawer{padding:32px 22px 46px}.hr-resume-drawer>.drawer-close{top:82px;right:16px}.hr-resume-profile{padding-right:50px}.hr-resume-tabs{gap:18px}.hr-resume-tabs button{font-size:13px}.hr-project-timeline article{grid-template-columns:1fr}.hr-project-timeline article>strong{padding-bottom:8px;border-bottom:1px solid rgba(162,181,211,.08)}.hr-resume-file-actions{grid-template-columns:1fr}}
 @media(max-width:620px){.assessment-questionnaire>header{padding:24px 20px 18px}.assessment-questionnaire-score{position:static;width:max-content;margin-top:14px}.assessment-question-list{padding:16px 14px 3px}.assessment-question{padding:16px 14px}.assessment-question h3{font-size:14px}.assessment-question-stars{gap:3px}.assessment-questionnaire>footer{padding:15px 20px 19px}}
 @media print{
   body{background:#fff!important}
