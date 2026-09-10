@@ -343,4 +343,10 @@ export const SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_screening_rules_owner_job ON screening_rules(owner_id, job_id)`,
   `CREATE INDEX IF NOT EXISTS idx_screening_logs_owner_created ON screening_logs(owner_id, created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_manual_assessments_owner_updated ON manual_assessments(owner_id, updated_at)`,
+  `CREATE TABLE IF NOT EXISTS deleted_accounts (
+    account_id TEXT PRIMARY KEY,
+    deleted_by TEXT NOT NULL,
+    deleted_at TEXT NOT NULL
+  )`,
+  `DELETE FROM accounts WHERE id IN (SELECT account_id FROM deleted_accounts)`,
 ] as const;

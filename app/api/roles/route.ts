@@ -59,5 +59,43 @@ export async function PATCH(request:NextRequest){
   return NextResponse.json({ok:true});
 }
 
+export async function DELETE(request:NextRequest){
+  const account=await accountFromRequest(request);
+  if(!account)return NextResponse.json({message:'请先登录。'},{status:401});
+  if(account.role!=='super_admin')return forbidden();
+  const body=await request.json().catch(()=>null) as Record<string,unknown>|null;
+  const id=String(body?.id??'').trim();
+  if(!id)return invalid('请选择需要删除的 HR 账号。');
+  if(id===account.id)return invalid('不能删除当前登录账号。');
+  const db=getDb();
+  const target=await db.prepare('SELECT id, contact, role FROM accounts WHERE id = ?').bind(id).first<{id:string;contact:string;role:ManagedRole}>();
+  if(!target)return invalid('HR 账号不存在或已被删除。',404);
+  if(target.role!=='hr')return invalid('仅支持删除 HR 账号。');
+  const now=new Date().toISOString();
+  const statements:D1PreparedStatement[]=[
+    db.prepare('INSERT OR REPLACE INTO deleted_accounts (account_id, deleted_by, deleted_at) VALUES (?, ?, ?)').bind(id,account.id,now),
+    db.prepare('DELETE FROM sessions WHERE account_id = ?').bind(id),
+    db.prepare('DELETE FROM candidate_assignments WHERE hr_account_id = ?').bind(id),
+    db.prepare('UPDATE candidate_assignments SET owner_id = ? WHERE owner_id = ?').bind(account.id,id),
+    db.prepare('UPDATE jobs SET owner_id = ?, owner_name = ?, updated_at = ? WHERE owner_id = ?').bind(account.id,account.contact,now,id),
+    db.prepare('UPDATE candidates SET owner_id = ?, updated_at = ? WHERE owner_id = ?').bind(account.id,now,id),
+    db.prepare('UPDATE interviews SET owner_id = ?, updated_at = ? WHERE owner_id = ?').bind(account.id,now,id),
+    db.prepare('UPDATE offers SET owner_id = ?, owner_name = ?, updated_at = ? WHERE owner_id = ?').bind(account.id,account.contact,now,id),
+    db.prepare('UPDATE ai_questions SET owner_id = ?, updated_at = ? WHERE owner_id = ?').bind(account.id,now,id),
+    db.prepare('UPDATE ai_interviews SET owner_id = ?, updated_at = ? WHERE owner_id = ?').bind(account.id,now,id),
+    db.prepare('UPDATE ai_interview_invitations SET owner_id = ?, updated_at = ? WHERE owner_id = ?').bind(account.id,now,id),
+    db.prepare('UPDATE resume_profiles SET owner_id = ?, updated_at = ? WHERE owner_id = ?').bind(account.id,now,id),
+    db.prepare('UPDATE resume_applications SET owner_id = ? WHERE owner_id = ?').bind(account.id,id),
+    db.prepare('UPDATE screening_rules SET owner_id = ?, updated_at = ? WHERE owner_id = ?').bind(account.id,now,id),
+    db.prepare('UPDATE screening_templates SET owner_id = ?, updated_at = ? WHERE owner_id = ?').bind(account.id,now,id),
+    db.prepare('UPDATE screening_reviews SET owner_id = ?, updated_at = ? WHERE owner_id = ?').bind(account.id,now,id),
+    db.prepare('UPDATE screening_logs SET owner_id = ? WHERE owner_id = ?').bind(account.id,id),
+    db.prepare('UPDATE manual_assessments SET owner_id = ?, updated_at = ? WHERE owner_id = ?').bind(account.id,now,id),
+    db.prepare('DELETE FROM accounts WHERE id = ? AND role = ?').bind(id,'hr'),
+  ];
+  try{await db.batch(statements)}catch{return invalid('删除失败，请稍后重试。',500)}
+  return NextResponse.json({ok:true,deleted:{id:target.id,contact:target.contact}});
+}
+
 function invalid(message:string,status=400){return NextResponse.json({message},{status})}
 function forbidden(){return NextResponse.json({message:'仅超级管理员可以管理角色。'},{status:403})}
