@@ -206,8 +206,6 @@ export default function InterviewerCandidateClient() {
           <div className="interviewer-global-search"><input placeholder="全局搜索，请输入关键字"/><button type="button">⌕</button></div>
           <button type="button" className="interviewer-add" onClick={()=>window.location.assign('/workbench')}>＋ 添加职位/简历</button>
           <button type="button" className="interviewer-help" onClick={()=>flash('帮助中心')}>◉ 帮助中心</button>
-          <button type="button" className="interviewer-tool-icon" onClick={()=>flash('消息中心')}>♧</button>
-          <button type="button" className="interviewer-tool-icon" onClick={()=>flash('通知中心')}>♢</button>
           <HrAccountMenu contact={data.account.contact} phone={data.account.phone} email={data.account.email} role={data.account.role}/>
         </div>
       </header>
