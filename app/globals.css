@@ -1685,8 +1685,9 @@ input[type="date"]::-webkit-calendar-picker-indicator,input[type="datetime-local
 
 /* Center empty schedules and keep HR candidate rows within the available panel. */
 .hr-record-card .hr-record-list>.interviewer-empty{min-height:354px}
-.interviewer-candidate-list{overflow-x:hidden}
-.interviewer-candidate-row{min-width:0;grid-template-columns:20px minmax(210px,1.1fr) minmax(170px,.8fr) minmax(140px,.65fr);gap:12px;width:100%;box-sizing:border-box}
+.interviewer-candidate-list{overflow-x:auto;overscroll-behavior-x:contain;scrollbar-color:rgba(86,183,211,.55) rgba(8,20,34,.5);scrollbar-width:thin}
+.interviewer-candidate-list::-webkit-scrollbar{width:8px;height:8px}.interviewer-candidate-list::-webkit-scrollbar-track{background:rgba(8,20,34,.5)}.interviewer-candidate-list::-webkit-scrollbar-thumb{border:2px solid transparent;border-radius:999px;background:rgba(86,183,211,.55);background-clip:padding-box}
+.interviewer-candidate-row{min-width:760px;grid-template-columns:20px minmax(250px,1.1fr) minmax(190px,.8fr) minmax(200px,.65fr);gap:12px;width:100%;box-sizing:border-box}
 .progress-stage-badge{display:inline-flex;align-items:center;gap:8px;width:max-content;color:#69dcea;font-size:14px;font-weight:800;line-height:1.4}
 .progress-stage-badge::before{width:8px;height:8px;border-radius:50%;content:"";background:currentColor;box-shadow:0 0 0 4px color-mix(in srgb,currentColor 12%,transparent)}
 .progress-stage-badge[data-stage="录用"],.progress-stage-badge[data-stage="待入职"],.progress-stage-badge[data-stage="已入职"]{color:#69d9b9}
