@@ -23,6 +23,7 @@ export default function RegisterPage() {
     const normalizedPhone = phone.trim();
     const email = normalizeIdentifier(String(data.get('email') || ''));
     const password = String(data.get('password') || '');
+    const role = data.get('role') === 'super_admin' ? 'super_admin' : 'hr';
     const agreed = data.get('agreement') === 'on';
 
     if (!contact) {
@@ -52,21 +53,21 @@ export default function RegisterPage() {
       response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contact, phone: normalizedPhone, email, password }),
+        body: JSON.stringify({ contact, phone: normalizedPhone, email, password, role }),
       });
     } catch {
       setDone(false);
       setError('暂时无法连接账号服务，请稍后重试。');
       return;
     }
-    const result = await response.json().catch(() => ({})) as { message?: string };
+    const result = await response.json().catch(() => ({})) as { message?: string; role?:'super_admin'|'hr' };
     if (!response.ok) {
       setDone(false);
       setError(result.message || '注册失败，请稍后重试。');
       return;
     }
-    setNotice('账号已安全保存，正在返回登录页…');
-    window.setTimeout(() => window.location.assign(`/?registered=${encodeURIComponent(email)}`), 900);
+    setNotice(`${role === 'super_admin' ? '超级管理员' : 'HR'}账号已创建，正在返回登录页…`);
+    window.setTimeout(() => window.location.assign(`/?registered=${encodeURIComponent(email)}&role=${role}`), 900);
   }
 
   return (
@@ -91,7 +92,10 @@ export default function RegisterPage() {
           <h2>创建账号</h2>
           <p className="register-sub">账号信息安全保存，业务数据将按账号独立管理</p>
           <form noValidate onSubmit={submit}>
-            <label>姓名<input name="contact" autoComplete="name" placeholder="请输入姓名" /></label>
+            <div className="form-grid">
+              <label>姓名<input name="contact" autoComplete="name" placeholder="请输入姓名" /></label>
+              <label>注册角色<select name="role" defaultValue="hr"><option value="hr">HR</option><option value="super_admin">超级管理员</option></select></label>
+            </div>
             <div className="form-grid">
               <label>手机号<input name="phone" value={phone} onChange={event=>setPhone(event.target.value.replace(/\D/g,'').slice(0,11))} type="tel" inputMode="numeric" autoComplete="tel" placeholder="请输入手机号" /></label>
               <label>邮箱<input name="email" type="email" inputMode="email" autoComplete="email" placeholder="name@example.com" /></label>

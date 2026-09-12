@@ -8,11 +8,13 @@ export async function POST(request: NextRequest) {
   const phone = String(body?.phone ?? '').trim();
   const email = normalizeIdentifier(String(body?.email ?? ''));
   const password = String(body?.password ?? '');
+  const role = body?.role === 'super_admin' ? 'super_admin' : body?.role === 'hr' ? 'hr' : '';
 
   if (!contact || contact.length > 40) return failure('请输入正确的姓名。');
   if (!isMainlandMobile(phone)) return failure('手机号格式不正确，请输入 1 开头的 11 位中国大陆手机号。');
   if (!isValidEmail(email)) return failure('邮箱格式不正确，请检查邮箱名称和域名。');
   if (!isStrongPassword(password)) return failure('密码需为 8–20 位，且同时包含字母和数字，不能包含空格。');
+  if (!role) return failure('请选择注册角色。');
 
   await ensureSchema();
   const existing = await getDb().prepare('SELECT id FROM accounts WHERE phone = ? OR email = ? LIMIT 1').bind(phone, email).first();
@@ -20,8 +22,8 @@ export async function POST(request: NextRequest) {
 
   const now = new Date().toISOString();
   await getDb().prepare(`INSERT INTO accounts (id, contact, phone, email, password_hash, role, created_at)
-    VALUES (?, ?, ?, ?, ?, 'none', ?)`).bind(crypto.randomUUID(), contact, phone, email, await createPasswordHash(password), now).run();
-  return NextResponse.json({ ok: true, email }, { status: 201 });
+    VALUES (?, ?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), contact, phone, email, await createPasswordHash(password), role, now).run();
+  return NextResponse.json({ ok: true, email, role }, { status: 201 });
 }
 
 function failure(message: string, status = 400) {

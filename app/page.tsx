@@ -16,8 +16,10 @@ export default function Home() {
     const params = new URLSearchParams(window.location.search);
     const registered = params.get('registered');
     if (registered) {
+      const registeredRole = params.get('role') === 'hr' ? 'hr' : 'super_admin';
+      setLoginRole(registeredRole);
       setIdentifier(registered);
-      setMessage('注册成功，请联系超级管理员分配角色后登录。');
+      setMessage(`注册成功，请从${registeredRole === 'super_admin' ? '超级管理员' : 'HR'}入口登录。`);
       window.history.replaceState(null, '', '/');
     }
   }, []);
