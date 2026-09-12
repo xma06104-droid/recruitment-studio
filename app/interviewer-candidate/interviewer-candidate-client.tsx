@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { announceWorkbenchChange, useWorkbenchSync } from '@/app/workbench-sync';
 import { AiInterviewResultPanel } from '@/app/components/ai-interview-result';
+import AiInterviewRecordings from '@/app/components/ai-interview-recordings';
 import HrAccountMenu from '@/app/components/hr-account-menu';
 import { CANDIDATE_STAGES } from '@/app/candidate-stages';
 
@@ -289,7 +290,7 @@ function CandidateResumeDrawer({candidate,job,profile,review,aiInterview,saving,
         {(profile?.highlights.length||profile?.risks.length)?<section className="hr-resume-section hr-resume-insights"><h3>AI 简历摘要</h3>{profile?.highlights.length?<div className="hr-insight-group highlight"><b>优势</b><div>{profile.highlights.map((item,index)=><span key={`highlight-${index}`}>{item}</span>)}</div></div>:null}{profile?.risks.length?<div className="hr-insight-group risk"><b>关注</b><div>{profile.risks.map((item,index)=><span key={`risk-${index}`}>{item}</span>)}</div></div>:null}</section>:null}
         {profile?.fileName?<div className="hr-resume-file-actions"><button type="button" onClick={()=>window.print()}>打印简历</button><a className="hr-resume-file" href={`/api/screening/file?candidateId=${encodeURIComponent(candidate.id)}`} target="_blank" rel="noreferrer">查看原始简历 · {profile.fileName}</a></div>:<p className="hr-resume-copy hr-resume-file-empty">未找到可预览的原始简历文件</p>}
       </div>:<div className="hr-resume-tab-panel hr-resume-ai-panel" role="tabpanel">
-        {aiInterview?<section className="hr-resume-section hr-ai-interview-result"><AiInterviewResultPanel summary={aiInterview.summary} fallbackScore={aiInterview.score} durationSeconds={aiInterview.durationSeconds} completedAt={aiInterview.completedAt} compact/></section>:<div className="hr-resume-ai-empty"><span>AI</span><b>暂无 AI 面试结果</b><p>候选人完成 AI 面试后，评分、能力维度和面试摘要会显示在这里。</p></div>}
+        {aiInterview?<section className="hr-resume-section hr-ai-interview-result"><AiInterviewResultPanel summary={aiInterview.summary} fallbackScore={aiInterview.score} durationSeconds={aiInterview.durationSeconds} completedAt={aiInterview.completedAt} compact/><AiInterviewRecordings candidateId={candidate.id}/></section>:<div className="hr-resume-ai-empty"><span>AI</span><b>暂无 AI 面试结果</b><p>候选人完成 AI 面试后，评分、能力维度和面试摘要会显示在这里。</p></div>}
       </div>}
     </aside>
   </div>;

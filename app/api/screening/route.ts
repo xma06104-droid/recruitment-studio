@@ -290,6 +290,8 @@ export async function POST(request: NextRequest) {
       WHERE c.id = ? AND c.owner_id = ? LIMIT 1`
     ).bind(candidateId, account.id).first<{ id: string; name: string; file_key: string | null }>();
     if (!resume) return invalid('简历不存在或已被删除。');
+    const recordingObjects = await db.prepare('SELECT object_key FROM ai_interview_recordings WHERE candidate_id = ? AND owner_id = ?')
+      .bind(candidateId, account.id).all<{object_key:string}>();
 
     await db.batch([
       db.prepare('DELETE FROM ai_interview_invitations WHERE candidate_id = ? AND owner_id = ?').bind(candidateId, account.id),
@@ -309,6 +311,10 @@ export async function POST(request: NextRequest) {
       } catch (error) {
         console.error('Failed to remove deleted resume object', { candidateId, error });
       }
+    }
+    if(recordingObjects.results.length){
+      try{await Promise.all(recordingObjects.results.map(item=>getResumeBucket().delete(item.object_key)))}
+      catch(error){console.error('Failed to remove deleted interview recordings',{candidateId,error})}
     }
     return NextResponse.json({ ok: true, candidateId, candidateName: resume.name });
   }

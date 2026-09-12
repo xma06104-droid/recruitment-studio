@@ -84,6 +84,7 @@ export async function DELETE(request:NextRequest){
     db.prepare('UPDATE ai_questions SET owner_id = ?, updated_at = ? WHERE owner_id = ?').bind(account.id,now,id),
     db.prepare('UPDATE ai_interviews SET owner_id = ?, updated_at = ? WHERE owner_id = ?').bind(account.id,now,id),
     db.prepare('UPDATE ai_interview_invitations SET owner_id = ?, updated_at = ? WHERE owner_id = ?').bind(account.id,now,id),
+    db.prepare('UPDATE ai_interview_recordings SET owner_id = ?, updated_at = ? WHERE owner_id = ?').bind(account.id,now,id),
     db.prepare('UPDATE resume_profiles SET owner_id = ?, updated_at = ? WHERE owner_id = ?').bind(account.id,now,id),
     db.prepare('UPDATE resume_applications SET owner_id = ? WHERE owner_id = ?').bind(account.id,id),
     db.prepare('UPDATE screening_rules SET owner_id = ?, updated_at = ? WHERE owner_id = ?').bind(account.id,now,id),

@@ -5,6 +5,7 @@ import ScreeningWorkspace, { preloadScreeningData } from './screening-workspace'
 import { buildSpeechHints, contextualizeSpeechTranscript, selectContextualSpeechTranscript } from '@/app/speech-context';
 import { announceWorkbenchChange, useWorkbenchSync } from '@/app/workbench-sync';
 import { AiInterviewResultPanel, aiInterviewQuestionTotal } from '@/app/components/ai-interview-result';
+import AiInterviewRecordings from '@/app/components/ai-interview-recordings';
 import RoleManagement from '@/app/components/role-management';
 import { CANDIDATE_STAGES, candidateStageIndex, normalizeCandidateStage } from '@/app/candidate-stages';
 
@@ -745,7 +746,7 @@ function CandidateDrawer({person,aiInterview,interviews,offers,assessment,viewer
     <div className="candidate-profile"><span>{person.name.slice(0,1)}</span><div><h2>{person.name}</h2><p>{person.company||'最近公司未填写'}{person.years?` · ${person.years}`:''}</p></div><em><b>{displayedScore??'—'}</b><small>{displayedLabel}</small></em></div>
     <CandidateStageStepper stage={person.stage} assignedName={person.assignedHrName} aiCompleted={aiInterview?.status==='已完成'} interviewCompleted={interviews.some(item=>item.status==='已完成'&&item.round!=='AI 初面')} offerAccepted={offers.some(item=>item.status==='已接受')} canApproveDepartment={person.assignedHrId===viewerAccountId} advance={advance} requestAssignment={requestAssignment}/>
     {assessment&&<section><h3>HR 人工评估</h3><div className="profile-info"><p><span>综合得分</span>{assessment.total} 分</p><p><span>专业能力</span>{assessment.professional} 分</p><p><span>沟通表达</span>{assessment.communication} 分</p><p><span>文化匹配</span>{assessment.culture} 分</p><p><span>评估人</span>{assessment.reviewer}</p><p><span>评估意见</span>{assessment.comment||'未填写'}</p></div></section>}
-    <section><h3>AI 面试记录</h3><CandidateInterviewAssessment report={aiInterview}/></section>
+    <section><h3>AI 面试记录</h3><CandidateInterviewAssessment report={aiInterview}/><AiInterviewRecordings candidateId={person.id}/></section>
     <section><h3>核心技能</h3><div className="channel-tags">{person.skills.length?person.skills.map(skill=><span key={skill}>{skill}</span>):<span>未填写</span>}</div></section>
     <section><h3>候选人信息</h3><div className="profile-info"><p><span>应聘职位</span>{person.role}</p><p><span>手机号</span>{person.phone||'未填写'}</p><p><span>邮箱</span>{person.email||'未填写'}</p><p><span>所在城市</span>{person.city||'未填写'}</p></div></section>
   </aside></div>;

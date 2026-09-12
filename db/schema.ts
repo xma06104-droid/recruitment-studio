@@ -149,6 +149,24 @@ export const SCHEMA_STATEMENTS = [
     FOREIGN KEY (owner_id) REFERENCES accounts(id) ON DELETE CASCADE,
     FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE
   )`,
+  `CREATE TABLE IF NOT EXISTS ai_interview_recordings (
+    id TEXT PRIMARY KEY,
+    invitation_id TEXT NOT NULL,
+    owner_id TEXT NOT NULL,
+    candidate_id TEXT NOT NULL,
+    question_id TEXT NOT NULL,
+    question_title TEXT NOT NULL,
+    object_key TEXT NOT NULL UNIQUE,
+    content_type TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL DEFAULT 0,
+    duration_seconds INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(invitation_id, question_id),
+    FOREIGN KEY (invitation_id) REFERENCES ai_interview_invitations(id) ON DELETE CASCADE,
+    FOREIGN KEY (owner_id) REFERENCES accounts(id) ON DELETE CASCADE,
+    FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE
+  )`,
   `CREATE TABLE IF NOT EXISTS resume_profiles (
     candidate_id TEXT PRIMARY KEY,
     owner_id TEXT NOT NULL,
@@ -338,6 +356,8 @@ export const SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_ai_interviews_owner_status ON ai_interviews(owner_id, status)`,
   `CREATE INDEX IF NOT EXISTS idx_ai_invites_owner_candidate ON ai_interview_invitations(owner_id, candidate_id, created_at)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_invites_token_hash ON ai_interview_invitations(token_hash)`,
+  `CREATE INDEX IF NOT EXISTS idx_ai_recordings_candidate_created ON ai_interview_recordings(candidate_id, created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_ai_recordings_owner_candidate ON ai_interview_recordings(owner_id, candidate_id)`,
   `CREATE INDEX IF NOT EXISTS idx_resume_profiles_owner_status ON resume_profiles(owner_id, parsing_status)`,
   `CREATE INDEX IF NOT EXISTS idx_resume_applications_owner_job ON resume_applications(owner_id, job_id, applied_at)`,
   `CREATE INDEX IF NOT EXISTS idx_screening_rules_owner_job ON screening_rules(owner_id, job_id)`,
