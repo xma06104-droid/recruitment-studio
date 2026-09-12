@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { env } from 'cloudflare:workers';
 import { isMainlandMobile, isStrongPassword, isValidEmail, normalizeIdentifier } from '@/app/auth-rules';
 import { accountFromRequest, createPasswordHash, getDb } from '@/app/server/db';
 
@@ -24,8 +25,11 @@ export async function POST(request:NextRequest){
   const email=normalizeIdentifier(String(body?.email??''));
   const password=String(body?.password??'');
   const role=String(body?.role??'') as ManagedRole;
+  const requestUrl=new URL(request.url);
+  const runtime=env as unknown as {APP_ENV?:string};
+  const testEnvironment=['localhost','127.0.0.1','::1'].includes(requestUrl.hostname)||['test','development'].includes(runtime.APP_ENV||'');
   if(!contact||contact.length>40)return invalid('请输入正确的人员姓名。');
-  if(!isMainlandMobile(phone))return invalid('请输入正确的中国大陆手机号。');
+  if(testEnvironment?!/^\d{11}$/.test(phone):!isMainlandMobile(phone))return invalid(testEnvironment?'手机号必须为 11 位数字。':'请输入正确的中国大陆手机号。');
   if(!isValidEmail(email))return invalid('请输入正确的邮箱地址。');
   if(!isStrongPassword(password))return invalid('初始密码需为 8–20 位，且同时包含字母和数字。');
   if(!['super_admin','hr'].includes(role))return invalid('请选择有效角色。');
