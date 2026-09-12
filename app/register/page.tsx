@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import {
   isMainlandMobile,
   isStrongPassword,
@@ -13,6 +13,11 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [phone, setPhone] = useState('');
+  const [testEnvironment, setTestEnvironment] = useState(false);
+
+  useEffect(() => {
+    setTestEnvironment(['localhost', '127.0.0.1', '::1'].includes(window.location.hostname));
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -25,26 +30,34 @@ export default function RegisterPage() {
     const password = String(data.get('password') || '');
     const role = data.get('role') === 'super_admin' ? 'super_admin' : 'hr';
     const agreed = data.get('agreement') === 'on';
+    const localTestEnvironment = testEnvironment;
 
-    if (!contact) {
-      setError('请输入姓名。');
-      return;
-    }
-    if (!isMainlandMobile(normalizedPhone)) {
-      setError('手机号格式不正确，请输入 1 开头的 11 位中国大陆手机号。');
-      return;
-    }
-    if (!isValidEmail(email)) {
-      setError('邮箱格式不正确，请检查邮箱名称和域名。');
-      return;
-    }
-    if (!isStrongPassword(password)) {
-      setError('密码需为 8–20 位，且同时包含字母和数字，不能包含空格。');
-      return;
-    }
-    if (!agreed) {
-      setError('请先阅读并同意《用户协议》和《隐私政策》。');
-      return;
+    if (localTestEnvironment) {
+      if (!/^\d{11}$/.test(normalizedPhone)) {
+        setError('手机号必须为 11 位数字。');
+        return;
+      }
+    } else {
+      if (!contact) {
+        setError('请输入姓名。');
+        return;
+      }
+      if (!isMainlandMobile(normalizedPhone)) {
+        setError('手机号格式不正确，请输入 1 开头的 11 位中国大陆手机号。');
+        return;
+      }
+      if (!isValidEmail(email)) {
+        setError('邮箱格式不正确，请检查邮箱名称和域名。');
+        return;
+      }
+      if (!isStrongPassword(password)) {
+        setError('密码需为 8–20 位，且同时包含字母和数字，不能包含空格。');
+        return;
+      }
+      if (!agreed) {
+        setError('请先阅读并同意《用户协议》和《隐私政策》。');
+        return;
+      }
     }
 
     setDone(true);
@@ -67,7 +80,7 @@ export default function RegisterPage() {
       return;
     }
     setNotice(`${role === 'super_admin' ? '超级管理员' : 'HR'}账号已创建，正在返回登录页…`);
-    window.setTimeout(() => window.location.assign(`/?registered=${encodeURIComponent(email)}&role=${role}`), 900);
+    window.setTimeout(() => window.location.assign(`/?registered=${encodeURIComponent(email||normalizedPhone)}&role=${role}`), 900);
   }
 
   return (
@@ -100,7 +113,7 @@ export default function RegisterPage() {
               <label>手机号<input name="phone" value={phone} onChange={event=>setPhone(event.target.value.replace(/\D/g,'').slice(0,11))} type="tel" inputMode="numeric" autoComplete="tel" placeholder="请输入手机号" /></label>
               <label>邮箱<input name="email" type="email" inputMode="email" autoComplete="email" placeholder="name@example.com" /></label>
             </div>
-            <label>设置密码<input name="password" type="password" autoComplete="new-password" placeholder="8–20 位，同时包含字母和数字" /><small className="field-hint">支持字母、数字和符号，不能包含空格</small></label>
+            <label>设置密码<input name="password" type="password" autoComplete="new-password" placeholder={testEnvironment?'测试环境不限制':'8–20 位，同时包含字母和数字'} /><small className="field-hint">{testEnvironment?'测试环境仅校验 11 位手机号，其他信息不做限定':'支持字母、数字和符号，不能包含空格'}</small></label>
             <label className="check register-check"><input name="agreement" type="checkbox" /> 我已阅读并同意《用户协议》和《隐私政策》</label>
             {error && <div className="auth-error register-error" role="alert" aria-live="assertive"><span>!</span><div><b>无法完成注册</b><p>{error}</p></div></div>}
             {notice && <p className="auth-notice" role="status">✓ {notice}</p>}

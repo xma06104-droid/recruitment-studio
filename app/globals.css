@@ -1771,3 +1771,7 @@ input[type="date"]::-webkit-calendar-picker-indicator,input[type="datetime-local
   .hr-resume-list p,.hr-project-timeline article,.hr-insight-group,.structured-ai-section,.structured-ai-hero{border-color:#dce2ea!important;background:#fff!important;box-shadow:none!important}
   .hr-project-timeline:before{background:#aab7c8!important}
 }
+
+/* Keep the registration agreement compact and centered. */
+.register-card .register-check{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;margin:2px 0 23px;text-align:center}
+.register-card .register-check input,.register-card .register-check input:focus{width:15px;height:15px;flex:0 0 15px;margin:0;padding:0;border:0;border-radius:3px;background:transparent;box-shadow:none}

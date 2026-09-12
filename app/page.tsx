@@ -35,11 +35,11 @@ export default function Home() {
       return;
     }
     const localTestEnvironment = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
-    if (!isValidIdentifier(accountInput) && !(localTestEnvironment && /^\d{11}$/.test(accountInput))) {
-      setError(localTestEnvironment ? '手机号必须为 11 位数字，或请输入正确的邮箱。' : '请输入正确的中国大陆手机号或邮箱。');
+    if (localTestEnvironment ? !/^\d{11}$/.test(accountInput) : !isValidIdentifier(accountInput)) {
+      setError(localTestEnvironment ? '手机号必须为 11 位数字。' : '请输入正确的中国大陆手机号或邮箱。');
       return;
     }
-    if (!password) {
+    if (!localTestEnvironment && !password) {
       setError('请输入登录密码。');
       return;
     }

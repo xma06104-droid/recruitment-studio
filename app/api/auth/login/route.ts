@@ -23,8 +23,8 @@ export async function POST(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const runtime = env as unknown as { APP_ENV?: string };
   const testEnvironment = ['localhost', '127.0.0.1', '::1'].includes(requestUrl.hostname) || ['test', 'development'].includes(runtime.APP_ENV || '');
-  const validIdentifier = isValidIdentifier(identifier) || (testEnvironment && /^\d{11}$/.test(identifier));
-  if (!validIdentifier || !password) return failure();
+  const validIdentifier = testEnvironment ? /^\d{11}$/.test(identifier) : isValidIdentifier(identifier);
+  if (!validIdentifier || (!testEnvironment && !password)) return failure();
 
   await ensureSchema();
   const account = await getDb().prepare('SELECT id, password_hash, role FROM accounts WHERE phone = ? OR email = ? LIMIT 1').bind(identifier, identifier).first<LoginRow>();
