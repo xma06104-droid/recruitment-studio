@@ -31,7 +31,7 @@ export async function POST(request:NextRequest){
   if(!contact||contact.length>40)return invalid('请输入正确的人员姓名。');
   if(testEnvironment?!/^\d{11}$/.test(phone):!isMainlandMobile(phone))return invalid(testEnvironment?'手机号必须为 11 位数字。':'请输入正确的中国大陆手机号。');
   if(!isValidEmail(email))return invalid('请输入正确的邮箱地址。');
-  if(!isStrongPassword(password))return invalid('初始密码需为 8–20 位，且同时包含字母和数字。');
+  if(testEnvironment?(password.length<8||password.length>20):!isStrongPassword(password))return invalid(testEnvironment?'初始密码需为 8–20 位。':'初始密码需为 8–20 位，且同时包含字母和数字。');
   if(!['super_admin','hr'].includes(role))return invalid('请选择有效角色。');
   const duplicate=await getDb().prepare('SELECT id FROM accounts WHERE phone = ? OR email = ? LIMIT 1').bind(phone,email).first();
   if(duplicate)return invalid('该手机号或邮箱已存在。',409);
