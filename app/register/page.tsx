@@ -80,7 +80,8 @@ export default function RegisterPage() {
       return;
     }
     setNotice(`${role === 'super_admin' ? '超级管理员' : 'HR'}账号已创建，正在返回登录页…`);
-    window.setTimeout(() => window.location.assign(`/?registered=${encodeURIComponent(email||normalizedPhone)}&role=${role}`), 900);
+    const loginIdentifier = localTestEnvironment ? normalizedPhone : email;
+    window.setTimeout(() => window.location.assign(`/?registered=${encodeURIComponent(loginIdentifier)}&role=${role}`), 900);
   }
 
   return (

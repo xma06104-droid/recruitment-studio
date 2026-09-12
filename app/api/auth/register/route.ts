@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
   if (!role) return failure('请选择注册角色。');
 
   await ensureSchema();
-  const storedEmail = testEnvironment && !email ? `test-${phone}@local.invalid` : email;
+  const storedEmail = testEnvironment ? `test-${phone}@local.invalid` : email;
   const existing = testEnvironment
     ? await getDb().prepare('SELECT id FROM accounts WHERE phone = ? LIMIT 1').bind(phone).first()
     : await getDb().prepare('SELECT id FROM accounts WHERE phone = ? OR email = ? LIMIT 1').bind(phone, email).first();
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
   const now = new Date().toISOString();
   await getDb().prepare(`INSERT INTO accounts (id, contact, phone, email, password_hash, role, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), contact, phone, storedEmail, await createPasswordHash(password), role, now).run();
-  return NextResponse.json({ ok: true, email, role }, { status: 201 });
+  return NextResponse.json({ ok: true, identifier: testEnvironment ? phone : email, role }, { status: 201 });
 }
 
 function failure(message: string, status = 400) {

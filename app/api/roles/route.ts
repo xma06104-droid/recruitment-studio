@@ -37,7 +37,7 @@ export async function POST(request:NextRequest){
     if(!isStrongPassword(password))return invalid('初始密码需为 8–20 位，且同时包含字母和数字。');
   }
   if(!['super_admin','hr'].includes(role))return invalid('请选择有效角色。');
-  const storedEmail=testEnvironment&&!email?`test-${phone}@local.invalid`:email;
+  const storedEmail=testEnvironment?`test-${phone}@local.invalid`:email;
   const duplicate=testEnvironment
     ?await getDb().prepare('SELECT id FROM accounts WHERE phone = ? LIMIT 1').bind(phone).first()
     :await getDb().prepare('SELECT id FROM accounts WHERE phone = ? OR email = ? LIMIT 1').bind(phone,email).first();
