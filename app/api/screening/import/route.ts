@@ -32,6 +32,7 @@ export async function POST(request: NextRequest) {
   const db = getDb();
   const jobs = await getResumeJobs(account.id);
   const requestedRole = field(form, 'role', 100) || parsed.role;
+  const jobResolution = field(form, 'jobResolution', 30);
   let jobId = field(form, 'jobId', 80) || null;
   let job = jobId ? jobs.find(item => item.id === jobId) || null : null;
   if (jobId && !job) return invalid('关联职位不存在。');
@@ -69,6 +70,7 @@ export async function POST(request: NextRequest) {
   const company = field(form, 'company', 100) || parsed.company;
   let createdJob = false;
   if (!job) {
+    if (jobResolution !== 'auto-create') return invalid('未找到匹配职位，请选择现有职位或确认自动新建职位。');
     const created = await ensureSystemJob(account.id, account.contact, role, city, now);
     job = created.job;
     jobId = job.id;

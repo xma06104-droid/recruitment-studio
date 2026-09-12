@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     : matchResumeJob(parsed.role, rawText, jobs);
   let willCreateJob = false;
   if (!suggestedJob && parsed.role) {
-    suggestedJob = { ...buildSystemResumeJob(parsed.role, '', parsed.city), confidence: 100, reason: '未找到现有岗位，提交后将自动新建并配置系统初筛规则' };
+    suggestedJob = { ...buildSystemResumeJob(parsed.role, '', parsed.city), confidence: 100, reason: '未找到匹配的现有职位，请确认自动新建或手动选择投递职位' };
     willCreateJob = true;
   }
   if (!parsed.role && suggestedJob) parsed = { ...parsed, role: suggestedJob.title };

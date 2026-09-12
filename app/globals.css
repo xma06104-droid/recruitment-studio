@@ -690,11 +690,18 @@ button,input,select,textarea{font-family:inherit}
 .rs-match-preview>div:last-child>b{display:block;color:#26344e;font-size:13px}.rs-match-preview p{margin:6px 0 10px!important;color:#728096!important;font-size:11px!important;line-height:1.6!important}
 .rs-match-dimensions{display:flex;flex-wrap:wrap;gap:7px}.rs-match-dimensions span{padding:6px 9px;border:1px solid rgba(69,91,147,.08);border-radius:9px;color:#738099;background:rgba(255,255,255,.72);font-size:9px}.rs-match-dimensions b{margin-left:5px;color:#5268a5}
 .rs-match-preview small{display:block;margin-top:10px;color:#77869d;font-size:9px;line-height:1.6}
+.rs-job-decision{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:18px;margin:0 0 22px;padding:18px 20px;border:1px solid rgba(62,205,230,.2);border-radius:18px;background:linear-gradient(135deg,rgba(30,196,221,.08),rgba(59,135,255,.07))}
+.rs-job-decision>div:first-child>span{display:block;margin-bottom:6px;color:#55d8ea;font-size:11px;font-weight:750;letter-spacing:.08em}
+.rs-job-decision h3{margin:0;color:#f3f8ff;font-size:16px;line-height:1.45}.rs-job-decision p{margin:7px 0 0!important;color:#91a0b5!important;font-size:12px!important;line-height:1.65!important}
+.rs-job-decision-actions{display:flex;gap:10px}.rs-job-decision-actions button{height:42px;padding:0 16px;border:1px solid rgba(83,211,232,.22);border-radius:12px;color:#92e8f5;background:#15283c;font-size:12px;font-weight:700;white-space:nowrap;cursor:pointer}
+.rs-job-decision-actions button.secondary{border-color:rgba(162,181,211,.14);color:#c3cede;background:#172338}.rs-job-decision-actions button.active{border-color:#42cfe6;color:#fff;background:linear-gradient(135deg,#1abbd5,#367ff0);box-shadow:0 8px 24px rgba(33,158,218,.2)}
+.rs-job-decision>small{grid-column:1/-1;color:#f2ba6d;font-size:11px}
 @media(max-width:760px){
   .rs-import-modal{width:min(100% - 22px,680px);padding:28px 22px 30px;border-radius:24px}
   .rs-import-modal h2{font-size:27px}.rs-import-modal>p{font-size:12px}
   .rs-import-modal label{font-size:12px}.rs-import-modal input,.rs-import-modal select,.rs-import-modal textarea{font-size:13px}
   .rs-match-preview{grid-template-columns:72px 1fr;padding:15px;gap:14px}.rs-match-score{width:66px;height:66px}.rs-match-score strong{font-size:21px}
+  .rs-job-decision{grid-template-columns:1fr;padding:16px}.rs-job-decision-actions{display:grid;grid-template-columns:1fr 1fr}.rs-job-decision-actions button{padding:0 10px}
 }
 
 /* Position table readability */
