@@ -39,12 +39,15 @@ export async function GET(request: NextRequest) {
   const relatedCandidateSql = `candidate_id IN (SELECT id FROM candidates WHERE owner_id = ?) OR candidate_id IN (${assignedCandidateSql})`;
   const [jobs, candidates, interviews, offers, aiQuestions, aiInterviews, aiInvitations, manualAssessments, recipientAccounts] = await Promise.all([
     db.prepare(`SELECT DISTINCT j.* FROM jobs j WHERE j.owner_id = ? OR j.id IN (${assignedJobSql}) ORDER BY j.created_at DESC`).bind(account.id, account.id).all<DataRow>(),
-    db.prepare(`SELECT c.*, ca.hr_account_id, ca.assigned_at, a.contact AS assigned_hr_name,
+    db.prepare(`SELECT c.*,
+          (SELECT ca.hr_account_id FROM candidate_assignments ca WHERE ca.candidate_id = c.id ORDER BY ca.assigned_at DESC LIMIT 1) AS hr_account_id,
+          (SELECT MAX(ca.assigned_at) FROM candidate_assignments ca WHERE ca.candidate_id = c.id) AS assigned_at,
+          (SELECT GROUP_CONCAT(a.contact, '、') FROM candidate_assignments ca JOIN accounts a ON a.id = ca.hr_account_id WHERE ca.candidate_id = c.id) AS assigned_hr_name,
           rp.gender AS resume_gender, rp.age AS resume_age, rp.education AS resume_education, rp.work_years AS resume_work_years,
           rp.file_name AS resume_file_name
-        FROM candidates c LEFT JOIN candidate_assignments ca ON ca.candidate_id = c.id LEFT JOIN accounts a ON a.id = ca.hr_account_id
-        LEFT JOIN resume_profiles rp ON rp.candidate_id = c.id
-        WHERE c.owner_id = ? OR c.id IN (${assignedCandidateSql}) ORDER BY COALESCE(ca.assigned_at, c.created_at) DESC`).bind(account.id, account.id).all<DataRow>(),
+        FROM candidates c LEFT JOIN resume_profiles rp ON rp.candidate_id = c.id
+        WHERE c.owner_id = ? OR c.id IN (${assignedCandidateSql})
+        ORDER BY COALESCE((SELECT MAX(ca.assigned_at) FROM candidate_assignments ca WHERE ca.candidate_id = c.id), c.created_at) DESC`).bind(account.id, account.id).all<DataRow>(),
     db.prepare(`SELECT * FROM interviews WHERE owner_id = ? OR ${relatedCandidateSql} ORDER BY scheduled_at ASC`).bind(account.id, account.id, account.id).all<DataRow>(),
     db.prepare(`SELECT * FROM offers WHERE owner_id = ? OR ${relatedCandidateSql} ORDER BY created_at DESC`).bind(account.id, account.id, account.id).all<DataRow>(),
     db.prepare(`SELECT * FROM ai_questions WHERE owner_id = ? OR job_id IN (${assignedJobSql}) ORDER BY created_at DESC`).bind(account.id, account.id).all<DataRow>(),

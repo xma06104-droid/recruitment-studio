@@ -78,10 +78,13 @@ export async function POST(request: NextRequest) {
   if (action === 'assignToHr' || action === 'assignCandidate') {
     if (account.role !== 'super_admin') return forbidden();
     const candidateIds = list(body?.candidateIds).slice(0, 100);
-    const hrAccountId = text(body?.hrAccountId, 80);
-    if (!candidateIds.length || !hrAccountId) return invalid('请选择候选人和接收账号。');
-    const hrAccount = await db.prepare("SELECT id, contact, email, role FROM accounts WHERE id = ? AND role IN ('super_admin', 'hr') LIMIT 1").bind(hrAccountId).first<{id:string;contact:string;email:string;role:string}>();
-    if (!hrAccount) return invalid('所选人员不是有效的超级管理员或 HR 用户。');
+    const hrAccountIds = [...new Set(list(body?.hrAccountIds).concat(text(body?.hrAccountId, 80) || []).slice(0, 50))];
+    if (!candidateIds.length || !hrAccountIds.length) return invalid('请选择候选人和接收账号。');
+    const hrPlaceholders = hrAccountIds.map(() => '?').join(',');
+    const accountRows = await db.prepare(`SELECT id, contact, email, role FROM accounts
+      WHERE id IN (${hrPlaceholders}) AND role IN ('super_admin', 'hr')`).bind(...hrAccountIds).all<{id:string;contact:string;email:string;role:string}>();
+    if (accountRows.results.length !== hrAccountIds.length) return invalid('部分所选人员不是有效的超级管理员或 HR 用户。');
+    const hrAccounts = hrAccountIds.map(id => accountRows.results.find(item => item.id === id)).filter(Boolean) as {id:string;contact:string;email:string;role:string}[];
     const placeholders = candidateIds.map(() => '?').join(',');
     const owned = await db.prepare(`SELECT id, job_id, name FROM candidates WHERE owner_id = ? AND id IN (${placeholders})`).bind(account.id, ...candidateIds).all<DataRow>();
     if (owned.results.length !== candidateIds.length) return invalid('部分候选人不存在或无权推荐。');
@@ -90,17 +93,20 @@ export async function POST(request: NextRequest) {
     if (completedAiInterviews.results.length !== candidateIds.length) return invalid('候选人完成 AI 面试后，才能进入用人部门筛选。');
     const statements: D1PreparedStatement[] = [];
     for (const row of owned.results) {
-      statements.push(db.prepare(`INSERT INTO candidate_assignments (candidate_id, owner_id, hr_account_id, assigned_by, assigned_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-        ON CONFLICT(candidate_id) DO UPDATE SET hr_account_id = excluded.hr_account_id, assigned_by = excluded.assigned_by,
-        assigned_at = excluded.assigned_at, updated_at = excluded.updated_at`).bind(row.id, account.id, hrAccount.id, account.contact, now, now));
+      statements.push(db.prepare('DELETE FROM candidate_assignments WHERE candidate_id = ? AND owner_id = ?').bind(row.id, account.id));
+      for (const hrAccount of hrAccounts) {
+        statements.push(db.prepare(`INSERT INTO candidate_assignments (candidate_id, owner_id, hr_account_id, assigned_by, assigned_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+          ON CONFLICT(candidate_id, hr_account_id) DO UPDATE SET assigned_by = excluded.assigned_by,
+          assigned_at = excluded.assigned_at, updated_at = excluded.updated_at`).bind(row.id, account.id, hrAccount.id, account.contact, now, now));
+      }
       statements.push(db.prepare("UPDATE candidates SET stage = '用人部门筛选', updated_at = ? WHERE id = ? AND owner_id = ?").bind(now, row.id, account.id));
       statements.push(db.prepare("UPDATE resume_applications SET status = '用人部门筛选' WHERE candidate_id = ? AND owner_id = ?").bind(row.id, account.id));
       statements.push(db.prepare(`INSERT INTO screening_logs (id, owner_id, candidate_id, job_id, operator_name, action, detail, created_at)
-        VALUES (?, ?, ?, ?, ?, '用人部门推荐', ?, ?)`).bind(crypto.randomUUID(), account.id, row.id, row.job_id, account.contact, `已将${row.name}推送给${hrAccount.role === 'super_admin' ? '超级管理员' : 'HR'}「${hrAccount.contact}」`, now));
+        VALUES (?, ?, ?, ?, ?, '用人部门推荐', ?, ?)`).bind(crypto.randomUUID(), account.id, row.id, row.job_id, account.contact, `已将${row.name}推送给${hrAccounts.map(item => item.contact).join('、')}`, now));
     }
     await executeBatches(db, statements);
-    return NextResponse.json({ ok: true, count: owned.results.length, recipientAccount: { id: hrAccount.id, contact: hrAccount.contact, email: hrAccount.email, role: hrAccount.role } });
+    return NextResponse.json({ ok: true, count: owned.results.length, recipientAccounts: hrAccounts });
   }
 
   if (action === 'saveRule') {
@@ -187,14 +193,16 @@ export async function POST(request: NextRequest) {
     for (const row of target) {
       const parsedIdentity = parseResumeText(String(row.raw_text || ''));
       if ((row.age === null || row.age === '') && parsedIdentity.age !== null) row.age = parsedIdentity.age;
+      if (!row.education && parsedIdentity.education) row.education = parsedIdentity.education;
       const outcome = scoreCandidate(row, rule);
       const stage = outcome.knockout ? '已淘汰' : 'AI面试';
       statements.push(db.prepare(`UPDATE resume_profiles SET age = COALESCE(age, ?),
         gender = CASE WHEN gender = '' THEN ? ELSE gender END,
+        education = CASE WHEN education = '' THEN ? ELSE education END,
         keyword_score = ?, experience_score = ?, education_score = ?,
         stability_score = ?, match_score = ?, match_level = ?, highlights_json = ?, risks_json = ?, screened_at = ?, updated_at = ?
         WHERE candidate_id = ? AND owner_id = ?`).bind(
-        parsedIdentity.age, parsedIdentity.gender,
+        parsedIdentity.age, parsedIdentity.gender, parsedIdentity.education,
         outcome.keywordScore, outcome.experienceScore, outcome.educationScore, outcome.stabilityScore,
         outcome.total, outcome.level, JSON.stringify(outcome.highlights), JSON.stringify(outcome.risks), now, now, row.id, account.id,
       ));
@@ -235,15 +243,17 @@ export async function POST(request: NextRequest) {
     row.job_id = resolved.job.id;
     const parsedIdentity = parseResumeText(String(row.raw_text || ''));
     if ((row.age === null || row.age === '') && parsedIdentity.age !== null) row.age = parsedIdentity.age;
+    if (!row.education && parsedIdentity.education) row.education = parsedIdentity.education;
     const outcome = scoreCandidate(row, rule);
     const stage = outcome.knockout ? '已淘汰' : 'AI面试';
     const statements: D1PreparedStatement[] = [
       db.prepare(`UPDATE resume_profiles SET age = COALESCE(age, ?),
         gender = CASE WHEN gender = '' THEN ? ELSE gender END,
+        education = CASE WHEN education = '' THEN ? ELSE education END,
         keyword_score = ?, experience_score = ?, education_score = ?,
         stability_score = ?, match_score = ?, match_level = ?, highlights_json = ?, risks_json = ?, screened_at = ?, updated_at = ?
         WHERE candidate_id = ? AND owner_id = ?`).bind(
-        parsedIdentity.age, parsedIdentity.gender,
+        parsedIdentity.age, parsedIdentity.gender, parsedIdentity.education,
         outcome.keywordScore, outcome.experienceScore, outcome.educationScore, outcome.stabilityScore,
         outcome.total, outcome.level, JSON.stringify(outcome.highlights), JSON.stringify(outcome.risks), now, now, candidateId, account.id,
       ),

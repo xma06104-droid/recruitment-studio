@@ -59,12 +59,13 @@ export const SCHEMA_STATEMENTS = [
     FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE SET NULL
   )`,
   `CREATE TABLE IF NOT EXISTS candidate_assignments (
-    candidate_id TEXT PRIMARY KEY,
+    candidate_id TEXT NOT NULL,
     owner_id TEXT NOT NULL,
     hr_account_id TEXT NOT NULL,
     assigned_by TEXT NOT NULL,
     assigned_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
+    PRIMARY KEY (candidate_id, hr_account_id),
     FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE,
     FOREIGN KEY (owner_id) REFERENCES accounts(id) ON DELETE CASCADE,
     FOREIGN KEY (hr_account_id) REFERENCES accounts(id) ON DELETE CASCADE

@@ -103,7 +103,7 @@ const knownSkills = [...new Set(roleFamilies.flatMap(item => item.keywords).conc
 ]))].sort((a, b) => b.length - a.length);
 
 const fieldLabels = [
-  ...roleLabels, '姓名', '性别', '年龄', '出生日期', '手机号', '手机', '电话', '邮箱', '电子邮箱', '学历', '专业', '毕业院校', '学校',
+  ...roleLabels, '姓名', '姓 名', '性别', '性 别', '年龄', '出生日期', '出生年月', '手机号', '手机', '电话', '电 话', '邮箱', '邮 箱', '电子邮箱', '学历', '专业', '毕业院校', '学校',
   '工作经验', '工作年限', '现居地', '所在城市', '工作地点', '期望城市', '最近公司', '当前公司', '行业', '行业背景', '所属行业',
   '期望薪资', '期望月薪', '技能', '专业技能', '核心技能', '证书', '资格证书',
 ];
@@ -135,8 +135,8 @@ export function parseResumeText(value: string): ParsedResume {
   const school = labeledValue(lines, ['毕业院校', '院校', '学校'], 80) || text.match(/([\u4e00-\u9fa5]{2,30}(?:大学|学院|学校))/)?.[1] || '';
   const major = labeledValue(lines, ['所学专业', '专业'], 50) || inferMajor(lines, text);
   const age = inferAge(lines, text);
-  const genderText = labeledValue(lines, ['性别'], 8);
-  const gender = genderText.match(/男|女|其他/)?.[0] || text.match(/(?:性别)\s*[：:|｜-]?\s*(男|女|其他)/)?.[1] || '';
+  const genderText = labeledValue(lines, ['性别', '性 别'], 8);
+  const gender = genderText.match(/男|女|其他/)?.[0] || text.match(/(?:性\s*别)\s*[：:|｜-]?\s*(男|女|其他)/)?.[1] || '';
   const yearsText = text.match(/(?:工作经验|工作年限|从业年限)\s*[：:|｜-]?\s*(\d+(?:\.\d+)?)\s*年/)?.[1]
     || text.match(/(\d+(?:\.\d+)?)\s*年(?:以上)?(?:工作|从业)经验/)?.[1];
   const stabilityText = text.match(/(?:平均任职|任职周期)\s*[：:|｜-]?\s*(\d+)\s*个?月/)?.[1];
@@ -387,7 +387,14 @@ function inferRole(lines: string[], text: string) {
 function inferEducation(text: string) {
   const values = ['博士', '硕士', '本科', '大专', '中专', '高中'];
   const labeled = text.match(/(?:最高学历|学历)\s*[：:|｜-]?\s*(博士|硕士|本科|大专|中专|高中)/)?.[1];
-  return labeled || values.find(item => text.includes(item)) || '';
+  const explicit = labeled || values.find(item => text.includes(item));
+  if (explicit) return explicit;
+
+  const universityPeriod = text.match(
+    /((?:19|20)\d{2})[./-]\d{1,2}\s*[-—–至到]+\s*((?:19|20)\d{2})[./-]\d{1,2}[^\n]{0,80}(?:大学|学院)/,
+  );
+  if (universityPeriod && Number(universityPeriod[2]) - Number(universityPeriod[1]) >= 4) return '本科';
+  return '';
 }
 
 function inferMajor(lines: string[], text: string) {

@@ -59,6 +59,32 @@ export async function ensureSchema() {
       if(offerColumns.results.length&&!offerColumns.results.some(column=>column.name==='content')){
         await db.prepare("ALTER TABLE offers ADD COLUMN content TEXT NOT NULL DEFAULT ''").run();
       }
+      const assignmentColumns=await db.prepare('PRAGMA table_info(candidate_assignments)').all<{name:string;pk:number}>();
+      const assignmentPrimaryKey=assignmentColumns.results
+        .filter(column=>Number(column.pk)>0)
+        .sort((a,b)=>Number(a.pk)-Number(b.pk))
+        .map(column=>column.name);
+      if(assignmentColumns.results.length&&assignmentPrimaryKey.join(',')!=='candidate_id,hr_account_id'){
+        await db.batch([
+          db.prepare(`CREATE TABLE candidate_assignments_multi (
+            candidate_id TEXT NOT NULL,
+            owner_id TEXT NOT NULL,
+            hr_account_id TEXT NOT NULL,
+            assigned_by TEXT NOT NULL,
+            assigned_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (candidate_id, hr_account_id),
+            FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE,
+            FOREIGN KEY (owner_id) REFERENCES accounts(id) ON DELETE CASCADE,
+            FOREIGN KEY (hr_account_id) REFERENCES accounts(id) ON DELETE CASCADE
+          )`),
+          db.prepare(`INSERT OR IGNORE INTO candidate_assignments_multi
+            (candidate_id, owner_id, hr_account_id, assigned_by, assigned_at, updated_at)
+            SELECT candidate_id, owner_id, hr_account_id, assigned_by, assigned_at, updated_at FROM candidate_assignments`),
+          db.prepare('DROP TABLE candidate_assignments'),
+          db.prepare('ALTER TABLE candidate_assignments_multi RENAME TO candidate_assignments'),
+        ]);
+      }
       await db.batch(SCHEMA_STATEMENTS.map(statement => db.prepare(statement)));
     })().catch(error => {
       schemaReady = null;
