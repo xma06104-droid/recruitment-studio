@@ -45,6 +45,7 @@ export default function CandidateInterview({ token }:{ token:string }) {
   const [seconds,setSeconds]=useState(120);
   const [listening,setListening]=useState(false);
   const [speechMode,setSpeechMode]=useState<'preparing'|'local'|'online'>('online');
+  const [speechNotice,setSpeechNotice]=useState('');
   const [recording,setRecording]=useState(false);
   const [recordingVideo,setRecordingVideo]=useState(false);
   const [serverTranscription,setServerTranscription]=useState(false);
@@ -66,7 +67,7 @@ export default function CandidateInterview({ token }:{ token:string }) {
     if(phase!=='interview'||!question)return;
     listenWantedRef.current=false;recognitionGenerationRef.current+=1;recognitionRef.current?.abort();
     setSeconds(question.duration||120);
-    const timer=window.setTimeout(()=>speakAndListen(question.title),400);
+    const timer=window.setTimeout(()=>{setSpeechNotice('');speakAndListen(question.title)},400);
     return()=>window.clearTimeout(timer);
   },[phase,index,question?.id]);
 
@@ -85,7 +86,7 @@ export default function CandidateInterview({ token }:{ token:string }) {
     const Recognition=scope.SpeechRecognition||scope.webkitSpeechRecognition;
     if(typeof MediaRecorder==='undefined'){setError('当前浏览器不支持视频录制，请使用最新版 Chrome 或 Edge 打开面试地址。');return}
     if(!Recognition&&!serverTranscription){setError('当前浏览器不支持语音识别，请使用最新版 Chrome 或 Edge 打开面试地址。');return}
-    setError('');
+    speechFailureCountRef.current=0;setError('');setSpeechNotice('');
     if(Recognition){setSpeechMode('preparing');preferLocalSpeechRef.current=await prepareOnDeviceSpeech(Recognition);setSpeechMode(preferLocalSpeechRef.current?'local':'online')}
     try{
       const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:1280},height:{ideal:720}},audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
@@ -112,11 +113,11 @@ export default function CandidateInterview({ token }:{ token:string }) {
   function startListening(){startQuestionRecording();startQuestionVideoRecording();beginListening(false)}
 
   async function retryListening(){
-    setError('');
+    speechFailureCountRef.current=0;setError('');setSpeechNotice('');
     if(question){pendingVideoRef.current=null;uploadedVideoIdsRef.current.delete(question.id)}
     const scope=window as unknown as {SpeechRecognition?:SpeechRecognitionConstructor;webkitSpeechRecognition?:SpeechRecognitionConstructor};
     const Recognition=scope.SpeechRecognition||scope.webkitSpeechRecognition;
-    if(!Recognition){startQuestionRecording();startQuestionVideoRecording();return}
+    if(!Recognition){startListening();return}
     if(!preferLocalSpeechRef.current){
       setSpeechMode('preparing');
       preferLocalSpeechRef.current=await prepareOnDeviceSpeech(Recognition);
@@ -127,7 +128,11 @@ export default function CandidateInterview({ token }:{ token:string }) {
 
   function beginListening(resume:boolean){
     const scope=window as unknown as {SpeechRecognition?:SpeechRecognitionConstructor;webkitSpeechRecognition?:SpeechRecognitionConstructor};
-    const Recognition=scope.SpeechRecognition||scope.webkitSpeechRecognition;if(!Recognition){if(serverTranscription){setListening(false);return}setError('当前浏览器不支持语音识别，无法继续本次面试。');return}
+    const Recognition=scope.SpeechRecognition||scope.webkitSpeechRecognition;
+    if(!Recognition){
+      if(serverTranscription){activateServerTranscriptionFallback('当前浏览器不支持实时语音识别，录音仍在进行，提交本题后将自动转写。');return}
+      setError('当前浏览器不支持语音识别，无法继续本次面试。');return
+    }
     if(!question)return;
     if(speechRestartTimerRef.current!==null){window.clearTimeout(speechRestartTimerRef.current);speechRestartTimerRef.current=null}
     if(speechWatchdogTimerRef.current!==null){window.clearTimeout(speechWatchdogTimerRef.current);speechWatchdogTimerRef.current=null}
@@ -154,7 +159,7 @@ export default function CandidateInterview({ token }:{ token:string }) {
       },18000);
     };
     recognition.onresult=event=>{
-      speechFailureCountRef.current=0;setError(current=>current.startsWith('语音识别')?'':current);
+      speechFailureCountRef.current=0;setSpeechNotice('');setError(current=>current.startsWith('语音识别')?'':current);
       armWatchdog();
       let sessionFinal='';let interim='';
       for(let resultIndex=0;resultIndex<event.results.length;resultIndex+=1){
@@ -169,11 +174,17 @@ export default function CandidateInterview({ token }:{ token:string }) {
     };
     recognition.onerror=event=>{
       const code=event.error||'';
-      if(['not-allowed','service-not-allowed','audio-capture'].includes(code)){fatalError=true;listenWantedRef.current=false;setError('无法使用麦克风进行语音识别，请检查浏览器权限后重试。')}
+      if(['not-allowed','audio-capture'].includes(code)){fatalError=true;listenWantedRef.current=false;setError('无法使用麦克风进行语音识别，请检查浏览器权限后重试。')}
+      else if(code==='service-not-allowed'&&serverTranscription){fatalError=true;activateServerTranscriptionFallback()}
+      else if(code==='service-not-allowed'){fatalError=true;listenWantedRef.current=false;setError('当前浏览器无法连接语音服务，请使用最新版 Chrome 或 Edge 打开后重试。')}
       else if(code==='language-not-supported'&&preferLocalSpeechRef.current){preferLocalSpeechRef.current=false;setSpeechMode('online')}
       else if(code!=='no-speech'&&code!=='aborted'){
         speechFailureCountRef.current+=1;
-        if(speechFailureCountRef.current>=3){fatalError=true;listenWantedRef.current=false;setListening(false);setError(preferLocalSpeechRef.current?'本机中文语音识别启动失败，请点击“重新识别”。':'当前浏览器无法连接语音服务。请复制 AI 面试地址，使用最新版 Chrome 或 Edge 打开后重试。')}
+        if(speechFailureCountRef.current>=3){
+          fatalError=true;
+          if(serverTranscription)activateServerTranscriptionFallback();
+          else{listenWantedRef.current=false;setListening(false);setError(preferLocalSpeechRef.current?'本机中文语音识别启动失败，请点击“重新识别”。':'当前浏览器无法连接语音服务。请复制 AI 面试地址，使用最新版 Chrome 或 Edge 打开后重试。')}
+        }
       }
     };
     recognition.onend=()=>{
@@ -182,7 +193,21 @@ export default function CandidateInterview({ token }:{ token:string }) {
       if(!fatalError&&listenWantedRef.current&&generation===recognitionGenerationRef.current)scheduleRestart();else setListening(false);
     };
     recognitionRef.current=recognition;
-    try{recognition.start();setListening(true);armWatchdog()}catch{speechFailureCountRef.current+=1;if(speechFailureCountRef.current>=3){listenWantedRef.current=false;setListening(false);setError('语音识别启动失败，请点击“重新识别”。')}else scheduleRestart(650)}
+    try{recognition.start();setListening(true);armWatchdog()}catch{
+      speechFailureCountRef.current+=1;
+      if(speechFailureCountRef.current>=3){
+        fatalError=true;
+        if(serverTranscription)activateServerTranscriptionFallback();
+        else{listenWantedRef.current=false;setListening(false);setError('语音识别启动失败，请点击“重新识别”。')}
+      }else scheduleRestart(650)
+    }
+  }
+
+  function activateServerTranscriptionFallback(message='实时语音识别暂不可用，录音仍在进行，提交本题后将自动转写。'){
+    listenWantedRef.current=false;
+    setListening(false);
+    setError('');
+    setSpeechNotice(message);
   }
 
   async function nextQuestion(auto=false){
@@ -275,7 +300,7 @@ export default function CandidateInterview({ token }:{ token:string }) {
       const response=await fetch(`/api/interview/${encodeURIComponent(token)}/transcribe`,{method:'POST',body:form});
       const result=await response.json().catch(()=>({})) as {transcript?:string;message?:string};
       if(!response.ok){setError(result.message||'录音转写失败，请点击“重新识别”后重试。');return ''}
-      setError('');return String(result.transcript||'');
+      setError('');setSpeechNotice('');return String(result.transcript||'');
     }catch{setError('录音上传失败，请检查网络后重试。');return ''}
   }
 
@@ -286,7 +311,7 @@ export default function CandidateInterview({ token }:{ token:string }) {
   if(phase==='complete')return <main className="candidate-interview-shell"><div className="candidate-interview-state complete"><i>✓</i><h1>AI 面试已完成</h1><p>感谢您的参与。回答与面试结果已安全提交给招聘团队，您可以关闭此页面。</p></div></main>;
   if(phase==='intro')return <main className="candidate-interview-shell"><section className="candidate-interview-welcome"><span>AI INTERVIEW INVITATION</span><div className="candidate-brand">星鉴人才</div><h1>{invitation?.candidateName}，您好</h1><p>您即将参加 <b>{invitation?.jobTitle}</b> 岗位的 AI 面试。本次共 {questions.length} 道题，建议在安静、网络稳定的环境中完成。</p><div className="candidate-device-list"><div><i>01</i><span><b>使用 Chrome 或 Edge</b><small>请在系统浏览器打开，避免使用应用内置浏览器</small></span></div><div><i>02</i><span><b>本次面试将录制音视频</b><small>录像会安全保存，仅供招聘团队评估与回放</small></span></div><div><i>03</i><span><b>一次提交，不可重复作答</b><small>请勿关闭页面或将专属链接转发他人</small></span></div></div>{error&&<div className="candidate-submit-error">{error}</div>}<button disabled={speechMode==='preparing'} onClick={()=>void start()}>{speechMode==='preparing'?'正在准备中文语音识别…':'同意录制并开始面试'} <b>→</b></button><small>点击开始即表示您知悉本次面试将录制音视频。链接有效期至 {invitation?new Intl.DateTimeFormat('zh-CN',{year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(invitation.expiresAt)):''}</small></section></main>;
   const answer=question?answers[question.id]||'':'';const progress=Math.round((index+1)/Math.max(1,questions.length)*100);
-  return <main className="candidate-interview-shell live"><header className="candidate-live-head"><div><span>星鉴人才 · AI 面试</span><h1>{invitation?.jobTitle}</h1></div><div><b>{index+1}</b><span>/ {questions.length}</span></div></header><div className="candidate-live-progress"><i style={{width:`${progress}%`}}/></div><div className="candidate-live-grid"><section className="candidate-video"><video ref={videoRef} autoPlay playsInline muted onPlaying={()=>{setCamera('ready');setError(current=>current.startsWith('摄像头')?'':current)}} onStalled={()=>setCamera('blocked')} onError={()=>setCamera('blocked')}/><div className={`candidate-camera-badge ${camera}`}>{camera==='ready'?'● 摄像头与麦克风已连接':camera==='blocked'?'摄像头已连接，画面等待播放':camera==='denied'?'未获得摄像头权限':'正在加载摄像头画面…'}</div>{camera==='blocked'&&<button type="button" className="candidate-video-retry" onClick={()=>void playVideo()}>重新显示摄像头画面</button>}<footer><b>{invitation?.candidateName}</b><span>{recordingVideo?'● 视频录制中':'正在准备录像'}</span></footer></section><section className="candidate-question"><div className="candidate-question-meta"><span>QUESTION {String(index+1).padStart(2,'0')}</span><time>{String(Math.floor(seconds/60)).padStart(2,'0')}:{String(seconds%60).padStart(2,'0')}</time></div><h2>{question?.title}</h2><p>请直接口述回答，系统会同步保存本题视频并自动完成语音转写。倒计时结束后自动进入下一题。</p><div className={`candidate-voice-answer ${listening||recording?'listening':''}`}><i>◉</i><span><b>{listening?(speechMode==='local'?'正在本机识别语音':'正在识别语音'):recording?'正在录音，提交时自动转写':'语音转写结果'}</b><p>{answer||(speechMode==='preparing'?'正在准备中文语音识别…':recording?'请继续口述，提交时将通过服务端完成高精度转写。':'请开始口述您的回答，识别结果将在这里实时显示。')}</p></span></div>{error&&<div className="candidate-submit-error">{error}</div>}<div className="candidate-question-actions"><span className={listening||recording?'active':''}>{saving?'正在保存本题录像…':recording?'● 录音保护中':listening?(speechMode==='local'?'● 本机语音识别中':'● 在线语音识别中'):'语音识别已暂停'}</span>{!listening&&<button className="voice-retry" disabled={saving||speechMode==='preparing'} onClick={()=>void retryListening()}>{speechMode==='preparing'?'正在准备…':'重新识别'}</button>}<button disabled={saving||(!answer.trim()&&!recording)} onClick={()=>void nextQuestion()}>{saving?'正在保存录像与回答…':index===questions.length-1?'提交全部回答':'提交并进入下一题'} <b>→</b></button></div></section></div></main>;
+  return <main className="candidate-interview-shell live"><header className="candidate-live-head"><div><span>星鉴人才 · AI 面试</span><h1>{invitation?.jobTitle}</h1></div><div><b>{index+1}</b><span>/ {questions.length}</span></div></header><div className="candidate-live-progress"><i style={{width:`${progress}%`}}/></div><div className="candidate-live-grid"><section className="candidate-video"><video ref={videoRef} autoPlay playsInline muted onPlaying={()=>{setCamera('ready');setError(current=>current.startsWith('摄像头')?'':current)}} onStalled={()=>setCamera('blocked')} onError={()=>setCamera('blocked')}/><div className={`candidate-camera-badge ${camera}`}>{camera==='ready'?'● 摄像头与麦克风已连接':camera==='blocked'?'摄像头已连接，画面等待播放':camera==='denied'?'未获得摄像头权限':'正在加载摄像头画面…'}</div>{camera==='blocked'&&<button type="button" className="candidate-video-retry" onClick={()=>void playVideo()}>重新显示摄像头画面</button>}<footer><b>{invitation?.candidateName}</b><span>{recordingVideo?'● 视频录制中':'正在准备录像'}</span></footer></section><section className="candidate-question"><div className="candidate-question-meta"><span>QUESTION {String(index+1).padStart(2,'0')}</span><time>{String(Math.floor(seconds/60)).padStart(2,'0')}:{String(seconds%60).padStart(2,'0')}</time></div><h2>{question?.title}</h2><p>请直接口述回答，系统会同步保存本题视频并自动完成语音转写。倒计时结束后自动进入下一题。</p><div className={`candidate-voice-answer ${listening||recording?'listening':''}`}><i>◉</i><span><b>{listening?(speechMode==='local'?'正在本机识别语音':'正在识别语音'):recording?'正在录音，提交时自动转写':'语音转写结果'}</b><p>{answer||(speechMode==='preparing'?'正在准备中文语音识别…':recording?'请继续口述，提交时将通过服务端完成高精度转写。':'请开始口述您的回答，识别结果将在这里实时显示。')}</p></span></div>{speechNotice&&<div className="candidate-submit-notice" role="status">{speechNotice}</div>}{error&&<div className="candidate-submit-error">{error}</div>}<div className="candidate-question-actions"><span className={listening||recording?'active':''}>{saving?'正在保存本题录像…':recording?'● 录音保护中':listening?(speechMode==='local'?'● 本机语音识别中':'● 在线语音识别中'):'语音识别已暂停'}</span>{!listening&&<button className="voice-retry" disabled={saving||speechMode==='preparing'} onClick={()=>void retryListening()}>{speechMode==='preparing'?'正在准备…':'重新识别'}</button>}<button disabled={saving||(!answer.trim()&&!recording)} onClick={()=>void nextQuestion()}>{saving?'正在保存录像与回答…':index===questions.length-1?'提交全部回答':'提交并进入下一题'} <b>→</b></button></div></section></div></main>;
 }
 
 function speechAlternatives(result:SpeechResultLike){return Array.from({length:result.length},(_,index)=>({transcript:String(result[index]?.transcript||''),confidence:result[index]?.confidence}))}

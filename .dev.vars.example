@@ -1,0 +1,3 @@
+# Server-only credential used by the AI interview audio transcription route.
+# Copy this file to .dev.vars, add the real value, and restart the local server.
+OPENAI_API_KEY=
