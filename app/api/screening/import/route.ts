@@ -58,6 +58,7 @@ export async function POST(request: NextRequest) {
   const major = field(form, 'major', 80) || parsed.major;
   const school = field(form, 'school', 120) || parsed.school;
   const age = numberField(form, 'age', 16, 80) ?? parsed.age;
+  const gender = field(form, 'gender', 20) || parsed.gender;
   const workYears = decimalField(form, 'workYears', 0, 60) ?? parsed.workYears;
   const industry = field(form, 'industry', 100) || parsed.industry;
   const expectedSalary = numberField(form, 'expectedSalary', 1, 1_000_000) ?? parsed.expectedSalary;
@@ -78,7 +79,7 @@ export async function POST(request: NextRequest) {
     matchedJob = { ...job, confidence: 100, reason: createdJob ? '未找到现有岗位，已自动创建岗位并配置系统初筛规则' : '已关联同名岗位' };
   }
   const scoredResume: ParsedResume = {
-    ...parsed, name, role, phone, email, education, major, school, age, workYears, stabilityMonths,
+    ...parsed, name, role, phone, email, education, major, school, age, gender, workYears, stabilityMonths,
     city, company, industry, expectedSalary, skills, certificates, workHistory, projectHistory,
   };
   const match = job ? scoreResumeForJob(scoredResume, rawText, job) : null;
@@ -145,7 +146,7 @@ export async function POST(request: NextRequest) {
       match_level = CASE WHEN excluded.match_level <> '' THEN excluded.match_level ELSE resume_profiles.match_level END,
       screened_at = COALESCE(excluded.screened_at, resume_profiles.screened_at),
       updated_at = excluded.updated_at`).bind(
-      candidateId, account.id, education, major, school, age, field(form, 'gender', 20), industry, expectedSalary, workYears, stabilityMonths,
+      candidateId, account.id, education, major, school, age, gender, industry, expectedSalary, workYears, stabilityMonths,
       JSON.stringify(workHistory), JSON.stringify(projectHistory), JSON.stringify(certificates), JSON.stringify(match?.highlights || []),
       JSON.stringify(match?.risks || []), rawText, parsingStatus, fileKey, file?.name || '', file?.type || '', file?.size || 0,
       match?.keywordScore ?? null, match?.experienceScore ?? null, match?.educationScore ?? null, match?.stabilityScore ?? null,

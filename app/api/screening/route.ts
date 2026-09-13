@@ -185,16 +185,24 @@ export async function POST(request: NextRequest) {
     if (target.length === 0) return invalid('当前条件下没有可执行初筛的简历。');
     const statements: D1PreparedStatement[] = [];
     for (const row of target) {
+      const parsedIdentity = parseResumeText(String(row.raw_text || ''));
+      if ((row.age === null || row.age === '') && parsedIdentity.age !== null) row.age = parsedIdentity.age;
       const outcome = scoreCandidate(row, rule);
       const stage = outcome.knockout ? '已淘汰' : 'AI面试';
-      statements.push(db.prepare(`UPDATE resume_profiles SET keyword_score = ?, experience_score = ?, education_score = ?,
+      statements.push(db.prepare(`UPDATE resume_profiles SET age = COALESCE(age, ?),
+        gender = CASE WHEN gender = '' THEN ? ELSE gender END,
+        keyword_score = ?, experience_score = ?, education_score = ?,
         stability_score = ?, match_score = ?, match_level = ?, highlights_json = ?, risks_json = ?, screened_at = ?, updated_at = ?
         WHERE candidate_id = ? AND owner_id = ?`).bind(
+        parsedIdentity.age, parsedIdentity.gender,
         outcome.keywordScore, outcome.experienceScore, outcome.educationScore, outcome.stabilityScore,
         outcome.total, outcome.level, JSON.stringify(outcome.highlights), JSON.stringify(outcome.risks), now, now, row.id, account.id,
       ));
-      statements.push(db.prepare('UPDATE candidates SET score = ?, stage = ?, updated_at = ? WHERE id = ? AND owner_id = ?').bind(
-        outcome.total, stage, now, row.id, account.id,
+      statements.push(db.prepare(`UPDATE candidates SET
+        phone = CASE WHEN phone = '' THEN ? ELSE phone END,
+        email = CASE WHEN email = '' THEN ? ELSE email END,
+        score = ?, stage = ?, updated_at = ? WHERE id = ? AND owner_id = ?`).bind(
+        parsedIdentity.phone, parsedIdentity.email, outcome.total, stage, now, row.id, account.id,
       ));
       statements.push(db.prepare('UPDATE resume_applications SET status = ? WHERE candidate_id = ? AND owner_id = ?').bind(
         stage, row.id, account.id,
@@ -225,17 +233,25 @@ export async function POST(request: NextRequest) {
     if (!rule) return invalid('系统未能生成该岗位的初筛规则，请稍后重试。');
 
     row.job_id = resolved.job.id;
+    const parsedIdentity = parseResumeText(String(row.raw_text || ''));
+    if ((row.age === null || row.age === '') && parsedIdentity.age !== null) row.age = parsedIdentity.age;
     const outcome = scoreCandidate(row, rule);
     const stage = outcome.knockout ? '已淘汰' : 'AI面试';
     const statements: D1PreparedStatement[] = [
-      db.prepare(`UPDATE resume_profiles SET keyword_score = ?, experience_score = ?, education_score = ?,
+      db.prepare(`UPDATE resume_profiles SET age = COALESCE(age, ?),
+        gender = CASE WHEN gender = '' THEN ? ELSE gender END,
+        keyword_score = ?, experience_score = ?, education_score = ?,
         stability_score = ?, match_score = ?, match_level = ?, highlights_json = ?, risks_json = ?, screened_at = ?, updated_at = ?
         WHERE candidate_id = ? AND owner_id = ?`).bind(
+        parsedIdentity.age, parsedIdentity.gender,
         outcome.keywordScore, outcome.experienceScore, outcome.educationScore, outcome.stabilityScore,
         outcome.total, outcome.level, JSON.stringify(outcome.highlights), JSON.stringify(outcome.risks), now, now, candidateId, account.id,
       ),
-      db.prepare('UPDATE candidates SET job_id = ?, score = ?, stage = ?, updated_at = ? WHERE id = ? AND owner_id = ?').bind(
-        resolved.job.id, outcome.total, stage, now, candidateId, account.id,
+      db.prepare(`UPDATE candidates SET job_id = ?,
+        phone = CASE WHEN phone = '' THEN ? ELSE phone END,
+        email = CASE WHEN email = '' THEN ? ELSE email END,
+        score = ?, stage = ?, updated_at = ? WHERE id = ? AND owner_id = ?`).bind(
+        resolved.job.id, parsedIdentity.phone, parsedIdentity.email, outcome.total, stage, now, candidateId, account.id,
       ),
       db.prepare('UPDATE resume_applications SET job_id = ?, status = ? WHERE candidate_id = ? AND owner_id = ?').bind(
         resolved.job.id, stage, candidateId, account.id,

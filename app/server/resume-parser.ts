@@ -7,6 +7,7 @@ export type ParsedResume = {
   school: string;
   major: string;
   age: number | null;
+  gender: string;
   workYears: number | null;
   stabilityMonths: number | null;
   city: string;
@@ -121,8 +122,11 @@ export function parseResumeFileName(value: string) {
 export function parseResumeText(value: string): ParsedResume {
   const text = normalizeResumeText(value);
   const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
-  const phone = text.match(/(?<!\d)1[3-9]\d{9}(?!\d)/)?.[0] || '';
-  const email = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0]?.toLowerCase() || '';
+  const phoneMatch = text.match(/(?<!\d)(?:\+?86[\s-]?)?1[3-9](?:[\s-]?\d){9}(?!\d)/)?.[0] || '';
+  const phoneDigits = phoneMatch.replace(/\D/g, '');
+  const phone = phoneDigits.length === 13 && phoneDigits.startsWith('86') ? phoneDigits.slice(2) : phoneDigits;
+  const emailMatch = text.replace(/[＠﹫]/g, '@').replace(/．/g, '.').match(/([A-Z0-9._%+-]+)\s*@\s*([A-Z0-9.-]+)\s*\.\s*([A-Z]{2,})/i);
+  const email = emailMatch ? `${emailMatch[1]}@${emailMatch[2]}.${emailMatch[3]}`.toLowerCase() : '';
   const labeledName = labeledValue(lines, ['姓名', '姓 名'], 20);
   const name = cleanName(labeledName) || inferName(lines);
   const labeledRole = labeledValue(lines, roleLabels, 60);
@@ -130,7 +134,9 @@ export function parseResumeText(value: string): ParsedResume {
   const education = inferEducation(text);
   const school = labeledValue(lines, ['毕业院校', '院校', '学校'], 80) || text.match(/([\u4e00-\u9fa5]{2,30}(?:大学|学院|学校))/)?.[1] || '';
   const major = labeledValue(lines, ['所学专业', '专业'], 50) || inferMajor(lines, text);
-  const ageText = labeledValue(lines, ['年龄'], 10).match(/\d{2}/)?.[0] || text.match(/(?<!\d)(\d{2})\s*岁/)?.[1];
+  const age = inferAge(lines, text);
+  const genderText = labeledValue(lines, ['性别'], 8);
+  const gender = genderText.match(/男|女|其他/)?.[0] || text.match(/(?:性别)\s*[：:|｜-]?\s*(男|女|其他)/)?.[1] || '';
   const yearsText = text.match(/(?:工作经验|工作年限|从业年限)\s*[：:|｜-]?\s*(\d+(?:\.\d+)?)\s*年/)?.[1]
     || text.match(/(\d+(?:\.\d+)?)\s*年(?:以上)?(?:工作|从业)经验/)?.[1];
   const stabilityText = text.match(/(?:平均任职|任职周期)\s*[：:|｜-]?\s*(\d+)\s*个?月/)?.[1];
@@ -155,7 +161,8 @@ export function parseResumeText(value: string): ParsedResume {
     education,
     school: cleanField(school),
     major: cleanField(major),
-    age: ageText ? Number(ageText) : null,
+    age,
+    gender,
     workYears: yearsText ? Number(yearsText) : durations.length ? Math.round(durations.reduce((sum, item) => sum + item, 0) / 6) / 2 : null,
     stabilityMonths: stabilityText ? Number(stabilityText) : durations.length ? Math.round(durations.reduce((sum, item) => sum + item, 0) / durations.length) : null,
     city: cleanField(city),
@@ -167,6 +174,19 @@ export function parseResumeText(value: string): ParsedResume {
     workHistory: uniqueHistory([...detectedWorkHistory, ...sectionWorkHistory]),
     projectHistory: uniqueHistory([...detectedProjectHistory, ...sectionProjectHistory, ...labeledProjectEntries(text)]),
   };
+}
+
+function inferAge(lines: string[], text: string) {
+  const explicit = labeledValue(lines, ['年龄'], 10).match(/\d{2}/)?.[0] || text.match(/(?<!\d)(\d{2})\s*岁/)?.[1];
+  if (explicit) {
+    const value = Number(explicit);
+    if (value >= 16 && value <= 80) return value;
+  }
+  const birthYearText = labeledValue(lines, ['出生日期'], 30).match(/(?:19|20)\d{2}/)?.[0]
+    || text.match(/(?:出生日期|出生年月|出生)\s*[：:|｜-]?\s*((?:19|20)\d{2})/)?.[1];
+  if (!birthYearText) return null;
+  const value = new Date().getFullYear() - Number(birthYearText);
+  return value >= 16 && value <= 80 ? value : null;
 }
 
 export function matchResumeJob(role: string, rawText: string, jobs: ResumeJob[]): ResumeJobMatch | null {

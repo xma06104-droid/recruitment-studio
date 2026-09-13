@@ -8,8 +8,12 @@ type RepairRow = {
   job_city: string | null;
   role: string;
   name: string;
+  phone: string;
+  email: string;
   skills_json: string;
   major: string;
+  age: number | null;
+  gender: string;
   work_history_json: string;
   project_history_json: string;
   raw_text: string;
@@ -21,14 +25,16 @@ const invalidCandidateNames = new Set(['联系方式', '联系信息', '个人�
 
 export async function repairResumeProfiles(ownerId: string) {
   const db = getDb();
-  const rows = await db.prepare(`SELECT c.id, c.job_id, c.role, c.name, c.skills_json, p.major, p.work_history_json,
+  const rows = await db.prepare(`SELECT c.id, c.job_id, c.role, c.name, c.phone, c.email, c.skills_json,
+      p.major, p.age, p.gender, p.work_history_json,
       p.project_history_json, p.raw_text, p.file_name,
       j.title AS job_title, j.city AS job_city,
       EXISTS(SELECT 1 FROM screening_logs l WHERE l.owner_id = c.owner_id AND l.job_id = c.job_id AND l.action = '系统规则配置') AS system_job
     FROM candidates c JOIN resume_profiles p ON p.candidate_id = c.id AND p.owner_id = c.owner_id
     LEFT JOIN jobs j ON j.id = c.job_id AND j.owner_id = c.owner_id
     WHERE c.owner_id = ? AND (
-      p.major = '' OR c.name IN ('联系方式','联系信息','个人信息','基本信息','个人资料','求职意向','教育经历','工作经历')
+      p.major = '' OR p.age IS NULL OR p.gender = '' OR c.phone = '' OR c.email = ''
+      OR c.name IN ('联系方式','联系信息','个人信息','基本信息','个人资料','求职意向','教育经历','工作经历')
       OR (c.skills_json LIKE '%"销售"%' AND c.role NOT LIKE '%销售%' AND c.role NOT LIKE '%商务%' AND c.role NOT LIKE '%客户%')
       OR p.work_history_json = '[]' OR p.project_history_json = '[]'
       OR p.work_history_json LIKE '%--%'
@@ -47,7 +53,11 @@ export async function repairResumeProfiles(ownerId: string) {
     const storedProjectHistory = jsonList(row.project_history_json);
     const skills = [...new Set([...storedSkills.filter(skill => skill !== '销售' || /销售|商务|客户/.test(row.role)), ...parsed.skills])];
     if (name !== row.name && name) updates.push(db.prepare('UPDATE candidates SET name = ?, updated_at = ? WHERE id = ? AND owner_id = ?').bind(name, now, row.id, ownerId));
+    if (!row.phone && parsed.phone) updates.push(db.prepare('UPDATE candidates SET phone = ?, updated_at = ? WHERE id = ? AND owner_id = ?').bind(parsed.phone, now, row.id, ownerId));
+    if (!row.email && parsed.email) updates.push(db.prepare('UPDATE candidates SET email = ?, updated_at = ? WHERE id = ? AND owner_id = ?').bind(parsed.email, now, row.id, ownerId));
     if (major !== row.major && major) updates.push(db.prepare('UPDATE resume_profiles SET major = ?, updated_at = ? WHERE candidate_id = ? AND owner_id = ?').bind(major, now, row.id, ownerId));
+    if (row.age === null && parsed.age !== null) updates.push(db.prepare('UPDATE resume_profiles SET age = ?, updated_at = ? WHERE candidate_id = ? AND owner_id = ?').bind(parsed.age, now, row.id, ownerId));
+    if (!row.gender && parsed.gender) updates.push(db.prepare('UPDATE resume_profiles SET gender = ?, updated_at = ? WHERE candidate_id = ? AND owner_id = ?').bind(parsed.gender, now, row.id, ownerId));
     if (JSON.stringify(skills) !== JSON.stringify(storedSkills)) updates.push(db.prepare('UPDATE candidates SET skills_json = ?, updated_at = ? WHERE id = ? AND owner_id = ?').bind(JSON.stringify(skills), now, row.id, ownerId));
     if (parsed.workHistory.length && JSON.stringify(parsed.workHistory) !== JSON.stringify(storedWorkHistory)) updates.push(db.prepare('UPDATE resume_profiles SET work_history_json = ?, updated_at = ? WHERE candidate_id = ? AND owner_id = ?').bind(JSON.stringify(parsed.workHistory), now, row.id, ownerId));
     if (parsed.projectHistory.length && JSON.stringify(parsed.projectHistory) !== JSON.stringify(storedProjectHistory)) updates.push(db.prepare('UPDATE resume_profiles SET project_history_json = ?, updated_at = ? WHERE candidate_id = ? AND owner_id = ?').bind(JSON.stringify(parsed.projectHistory), now, row.id, ownerId));
