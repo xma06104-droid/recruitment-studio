@@ -10,7 +10,7 @@ type Candidate={id:string;jobId:string|null;name:string;role:string;company:stri
 type Interview={id:string;candidateId:string;scheduledAt:string;round:string;mode:string;interviewer:string;status:string;createdAt:string;updatedAt:string};
 type Dataset={account:Account;jobs:Job[];candidates:Candidate[];interviews:Interview[]};
 const statuses=['待确认','已确认','已完成','已取消'];
-const menuItems=[{icon:'◉',label:'候选人筛选',href:'/interviewer-candidate'},{icon:'▤',label:'人工评估',href:'/assessment'},{icon:'▣',label:'面试管理',href:'/interview-management'},{icon:'▥',label:'招聘进展',href:'/recruitment-progress'},{icon:'⚙',label:'设置',href:'/workbench'}];
+const menuItems=[{icon:'◉',label:'候选人筛选',href:'/interviewer-candidate'},{icon:'▤',label:'人工评估',href:'/assessment'},{icon:'▣',label:'面试管理',href:'/interview-management'},{icon:'▥',label:'招聘进展',href:'/recruitment-progress'},{icon:'⚙',label:'设置',href:'/hr-settings'}];
 
 export default function InterviewManagementClient(){
   const [data,setData]=useState<Dataset|null>(null);const [error,setError]=useState('');const [keyword,setKeyword]=useState('');const [status,setStatus]=useState('全部');const [jobId,setJobId]=useState('');const [date,setDate]=useState('');const [modal,setModal]=useState(false);const [saving,setSaving]=useState(false);const [toast,setToast]=useState('');

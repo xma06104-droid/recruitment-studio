@@ -12,7 +12,7 @@ type Interview={id:string;candidateId:string;status:string};
 type Offer={id:string;candidateId:string;status:string};
 type Dataset={account:Account;jobs:Job[];candidates:Candidate[];interviews:Interview[];offers:Offer[]};
 const stages:string[]=[...CANDIDATE_STAGES];
-const menuItems=[{icon:'◉',label:'候选人筛选',href:'/interviewer-candidate'},{icon:'▤',label:'人工评估',href:'/assessment'},{icon:'▣',label:'面试管理',href:'/interview-management'},{icon:'▥',label:'招聘进展',href:'/recruitment-progress'},{icon:'⚙',label:'设置',href:'/workbench'}];
+const menuItems=[{icon:'◉',label:'候选人筛选',href:'/interviewer-candidate'},{icon:'▤',label:'人工评估',href:'/assessment'},{icon:'▣',label:'面试管理',href:'/interview-management'},{icon:'▥',label:'招聘进展',href:'/recruitment-progress'},{icon:'⚙',label:'设置',href:'/hr-settings'}];
 
 export default function RecruitmentProgressClient(){
   const [data,setData]=useState<Dataset|null>(null);const [error,setError]=useState('');const [keyword,setKeyword]=useState('');const [jobId,setJobId]=useState('');const [stage,setStage]=useState('全部');

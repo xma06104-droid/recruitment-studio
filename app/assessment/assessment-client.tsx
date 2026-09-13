@@ -16,7 +16,7 @@ const menuItems = [
   {icon:'▤',label:'人工评估',href:'/assessment'},
   {icon:'▣',label:'面试管理',href:'/interview-management'},
   {icon:'▥',label:'招聘进展',href:'/recruitment-progress'},
-  {icon:'⚙',label:'设置',href:'/workbench'},
+  {icon:'⚙',label:'设置',href:'/hr-settings'},
 ];
 
 export default function AssessmentClient() {

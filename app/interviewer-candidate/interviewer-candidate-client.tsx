@@ -23,7 +23,7 @@ const menuItems = [
   {icon:'▤',label:'人工评估',href:'/assessment'},
   {icon:'▣',label:'面试管理',href:'/interview-management'},
   {icon:'▥',label:'招聘进展',href:'/recruitment-progress'},
-  {icon:'⚙',label:'设置',href:'/workbench'},
+  {icon:'⚙',label:'设置',href:'/hr-settings'},
 ];
 const reviewStatuses:ReviewStatus[] = ['待筛选','已通过','已拒绝','待定','已失效'];
 
@@ -205,8 +205,6 @@ export default function InterviewerCandidateClient() {
         <div className="interviewer-heading"><h1>候选人筛选</h1><small>HR 候选人工作台</small></div>
         <div className="interviewer-tools">
           <div className="interviewer-global-search"><input placeholder="全局搜索，请输入关键字"/><button type="button">⌕</button></div>
-          <button type="button" className="interviewer-add" onClick={()=>window.location.assign('/workbench')}>＋ 添加职位/简历</button>
-          <button type="button" className="interviewer-help" onClick={()=>flash('帮助中心')}>◉ 帮助中心</button>
           <HrAccountMenu contact={data.account.contact} phone={data.account.phone} email={data.account.email} role={data.account.role}/>
         </div>
       </header>
