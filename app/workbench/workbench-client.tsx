@@ -20,6 +20,7 @@ type AiInterview = { id:string; candidateId:string; jobTitle:string; status:stri
 type AiInvitation = { id:string; candidateId:string; recipientEmail:string; jobTitle:string; status:string; sentAt:string; openedAt:string|null; completedAt:string|null; expiresAt:string; interviewUrl:string; createdAt:string; updatedAt:string };
 type ManualAssessment = { candidateId:string; total:number; professional:number; communication:number; culture:number; comment:string; reviewer:string; updatedAt:string };
 type RecipientAccount = { id:string; contact:string; phone:string; email:string; role:'super_admin'|'hr' };
+type CandidateFactType = 'gender'|'age'|'work'|'education'|'phone'|'email';
 type AnswerScore = { score:number; keywords:string[]; matched:string[] };
 type SpeechAlternativeLike = { transcript:string;confidence?:number };
 type SpeechResultLike = { [index:number]:SpeechAlternativeLike;length:number;isFinal?:boolean };
@@ -215,11 +216,11 @@ export default function WorkbenchClient() {
     announceWorkbenchChange();await loadData();flash(success);return true;
   }
 
-  async function updateCandidateEmail(id:string,email:string){
-    const response=await fetch('/api/workbench',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({resource:'candidateEmail',id,payload:{email}})});
+  async function updateCandidateFact(id:string,field:CandidateFactType,value:string){
+    const response=await fetch('/api/workbench',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({resource:'candidateFact',id,payload:{field,value}})});
     const result=await response.json().catch(()=>({})) as {message?:string};
-    if(!response.ok){flash(result.message||'邮箱保存失败');return false}
-    announceWorkbenchChange();await loadData();flash('邮箱已更新');return true;
+    if(!response.ok){flash(result.message||'候选人信息保存失败');return false}
+    announceWorkbenchChange();await loadData();flash('候选人信息已更新');return true;
   }
 
   async function assignCandidate(candidate:Candidate,recipientId:string){
@@ -325,7 +326,7 @@ export default function WorkbenchClient() {
       offerAccepted={data.offers.some(item=>item.candidateId===selectedCandidate.id&&item.status==='已接受')}
       canApproveDepartment={selectedCandidate.assignedHrId===data.account.id}
       close={()=>setDrawer(null)}
-      saveEmail={email=>updateCandidateEmail(selectedCandidate.id,email)}
+      saveFact={(field,value)=>updateCandidateFact(selectedCandidate.id,field,value)}
       advance={value=>update('candidateStage',selectedCandidate.id,value,'候选人阶段已更新')}
       requestAssignment={()=>setAssignmentTarget(selectedCandidate)}
     />}
@@ -756,7 +757,7 @@ function CandidateStageStepper({stage,assignedName,aiCompleted,interviewComplete
   </section>;
 }
 
-function CandidateFactIcon({type}:{type:'gender'|'age'|'work'|'education'|'phone'|'email'}){
+function CandidateFactIcon({type}:{type:CandidateFactType}){
   const paths={
     gender:<><circle cx="9" cy="8" r="3"/><path d="M4 19c.7-3.2 2.3-5 5-5s4.3 1.8 5 5M16 5h4v4M20 5l-5 5"/></>,
     age:<><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18M8 15h.01M12 15h.01M16 15h.01"/></>,
@@ -773,36 +774,49 @@ function AssessmentComment({text}:{text:string}){
   return <div className="candidate-assessment-comment"><span>评估意见</span>{items.length?<div>{items.map(item=><article key={item.label}><small>{item.label}</small><b>{item.result}</b><em>{item.rating}</em></article>)}</div>:<p>{text||'未填写'}</p>}</div>;
 }
 
-function CandidateDrawer({person,aiInterview,assessment,aiCompleted,interviewCompleted,offerAccepted,canApproveDepartment,close,saveEmail,advance,requestAssignment}:{person:Candidate;aiInterview?:AiInterview;assessment?:ManualAssessment;aiCompleted:boolean;interviewCompleted:boolean;offerAccepted:boolean;canApproveDepartment:boolean;close:()=>void;saveEmail:(email:string)=>Promise<boolean>;advance:(value:string)=>Promise<boolean>;requestAssignment:()=>void}){
-  const [editingEmail,setEditingEmail]=useState(false);
-  const [email,setEmail]=useState(person.email||'');
-  const [emailError,setEmailError]=useState('');
-  const [emailSaving,setEmailSaving]=useState(false);
+function CandidateDrawer({person,aiInterview,assessment,aiCompleted,interviewCompleted,offerAccepted,canApproveDepartment,close,saveFact,advance,requestAssignment}:{person:Candidate;aiInterview?:AiInterview;assessment?:ManualAssessment;aiCompleted:boolean;interviewCompleted:boolean;offerAccepted:boolean;canApproveDepartment:boolean;close:()=>void;saveFact:(field:CandidateFactType,value:string)=>Promise<boolean>;advance:(value:string)=>Promise<boolean>;requestAssignment:()=>void}){
+  const [editingFact,setEditingFact]=useState<CandidateFactType|null>(null);
+  const [factValue,setFactValue]=useState('');
+  const [factError,setFactError]=useState('');
+  const [factSaving,setFactSaving]=useState(false);
   const [resumeOpen,setResumeOpen]=useState(false);
-  async function submitEmail(event:FormEvent<HTMLFormElement>){
+  async function submitFact(event:FormEvent<HTMLFormElement>){
     event.preventDefault();
-    const next=email.trim().toLowerCase();
-    if(!validEmail(next)){setEmailError('请输入有效邮箱');return}
-    setEmailSaving(true);setEmailError('');
-    if(await saveEmail(next))setEditingEmail(false);
-    setEmailSaving(false);
+    if(!editingFact)return;
+    const next=factValue.trim();
+    if(editingFact==='email'&&!validEmail(next)){setFactError('请输入有效邮箱');return}
+    if(editingFact==='phone'&&next&&!/^[+\d][\d\s-]{5,29}$/.test(next)){setFactError('请输入有效手机号');return}
+    if(editingFact==='age'&&next&&(Number(next)<16||Number(next)>100)){setFactError('年龄应为 16–100 岁');return}
+    if(editingFact==='work'&&next&&(Number(next)<0||Number(next)>70)){setFactError('工作年限应为 0–70 年');return}
+    setFactSaving(true);setFactError('');
+    if(await saveFact(editingFact,editingFact==='email'?next.toLowerCase():next))setEditingFact(null);
+    setFactSaving(false);
   }
   const hasInterviewScore=aiInterview?.score!==null&&aiInterview?.score!==undefined;
   const interviewTotal=aiInterview?aiInterviewQuestionTotal(aiInterview.summary,aiInterview.score):null;
   const displayedScore=assessment?.total??interviewTotal?.score??(hasInterviewScore?aiInterview.score:person.score);
   const displayedLabel=assessment?'人工评估':hasInterviewScore?(interviewTotal?`面试得分 / ${interviewTotal.max}`:'面试得分'):'简历匹配度';
   const workYears=person.workYears!==null&&person.workYears!==undefined?`${person.workYears} 年`:person.years||'未填写';
-  const facts=[
-    {type:'gender' as const,label:'性别',value:person.gender||'未填写'},
-    {type:'age' as const,label:'年龄',value:person.age?`${person.age} 岁`:'未填写'},
-    {type:'work' as const,label:'工作年限',value:workYears},
-    {type:'education' as const,label:'学历',value:person.education||'未填写'},
-    {type:'phone' as const,label:'手机号',value:person.phone||'未填写'},
-    {type:'email' as const,label:'邮箱',value:person.email||'未填写'},
+  const facts:{type:CandidateFactType;label:string;value:string;rawValue:string}[]=[
+    {type:'gender',label:'性别',value:person.gender||'未填写',rawValue:person.gender||''},
+    {type:'age',label:'年龄',value:person.age?`${person.age} 岁`:'未填写',rawValue:person.age?String(person.age):''},
+    {type:'work',label:'工作年限',value:workYears,rawValue:person.workYears!==null&&person.workYears!==undefined?String(person.workYears):(person.years||'').replace(/\s*年\s*$/,'')},
+    {type:'education',label:'学历',value:person.education||'未填写',rawValue:person.education||''},
+    {type:'phone',label:'手机号',value:person.phone||'未填写',rawValue:person.phone||''},
+    {type:'email',label:'邮箱',value:person.email||'未填写',rawValue:person.email||''},
   ];
+  function beginFactEdit(fact:typeof facts[number]){setEditingFact(fact.type);setFactValue(fact.rawValue);setFactError('')}
+  function cancelFactEdit(){setEditingFact(null);setFactValue('');setFactError('')}
+  function factInput(type:CandidateFactType){
+    if(type==='gender')return <select autoFocus value={factValue} aria-label="修改候选人性别" onChange={event=>setFactValue(event.target.value)}><option value="">未填写</option><option value="男">男</option><option value="女">女</option><option value="其他">其他</option></select>;
+    if(type==='education')return <select autoFocus value={factValue} aria-label="修改候选人学历" onChange={event=>setFactValue(event.target.value)}><option value="">未填写</option>{['高中','中专','大专','本科','硕士','博士','其他'].map(item=><option key={item}>{item}</option>)}</select>;
+    const inputType=type==='age'||type==='work'?'number':type==='email'?'email':'tel';
+    const placeholders={age:'请输入年龄',work:'请输入工作年限',phone:'请输入手机号',email:'请输入有效邮箱'};
+    return <input autoFocus type={inputType} min={type==='age'?16:type==='work'?0:undefined} max={type==='age'?100:type==='work'?70:undefined} step={type==='work'?'0.5':undefined} value={factValue} onChange={event=>setFactValue(event.target.value)} placeholder={placeholders[type as keyof typeof placeholders]} aria-label={`修改候选人${facts.find(fact=>fact.type===type)?.label||''}`}/>;
+  }
   return <div className="drawer-backdrop candidate-drawer-backdrop" onMouseDown={close}><aside className="detail-drawer candidate-drawer" role="dialog" aria-modal="true" aria-label={`${person.name}候选人详情`} onMouseDown={event=>event.stopPropagation()}>
     <button className="drawer-close" onClick={close}>×</button>
-    <div className="candidate-profile"><span>{person.name.slice(0,1)}</span><div><div className="candidate-title-row"><h2>{person.name}</h2><span>{person.role||'应聘职位未填写'}</span></div><div className="candidate-profile-summary">{facts.map(fact=>fact.type==='email'?(editingEmail?<form key={fact.type} className="candidate-email-editor" onSubmit={event=>void submitEmail(event)}><CandidateFactIcon type="email"/><input autoFocus type="email" value={email} onChange={event=>setEmail(event.target.value)} placeholder="请输入有效邮箱" aria-label="修改候选人邮箱"/><button disabled={emailSaving}>{emailSaving?'保存中':'保存'}</button><button type="button" onClick={()=>{setEditingEmail(false);setEmail(person.email||'');setEmailError('')}}>取消</button>{emailError&&<small>{emailError}</small>}</form>:<button key={fact.type} type="button" className="candidate-email-edit" title="点击修改邮箱" aria-label={`邮箱 ${fact.value}，点击修改`} onClick={()=>setEditingEmail(true)}><CandidateFactIcon type="email"/><b>{fact.value}</b><small>修改</small></button>):<span key={fact.type} title={fact.label} aria-label={`${fact.label} ${fact.value}`}><CandidateFactIcon type={fact.type}/><b>{fact.value}</b></span>)}</div></div><em><b>{displayedScore??'—'}</b><small>{displayedLabel}</small></em></div>
+    <div className="candidate-profile"><span>{person.name.slice(0,1)}</span><div><div className="candidate-title-row"><h2>{person.name}</h2><span>{person.role||'应聘职位未填写'}</span></div><div className="candidate-profile-summary">{facts.map(fact=>editingFact===fact.type?<form key={fact.type} className="candidate-fact-editor" onSubmit={event=>void submitFact(event)}><CandidateFactIcon type={fact.type}/>{factInput(fact.type)}<button disabled={factSaving}>{factSaving?'保存中':'保存'}</button><button type="button" onClick={cancelFactEdit}>取消</button>{factError&&<small>{factError}</small>}</form>:<button key={fact.type} type="button" className="candidate-fact-edit" title={`点击修改${fact.label}`} aria-label={`${fact.label} ${fact.value}，点击修改`} onClick={()=>beginFactEdit(fact)}><CandidateFactIcon type={fact.type}/><b>{fact.value}</b><small>修改</small></button>)}</div></div><em><b>{displayedScore??'—'}</b><small>{displayedLabel}</small></em></div>
     <CandidateStageStepper stage={person.stage} assignedName={person.assignedHrName} aiCompleted={aiCompleted} interviewCompleted={interviewCompleted} offerAccepted={offerAccepted} canApproveDepartment={canApproveDepartment} advance={advance} requestAssignment={requestAssignment}/>
     {assessment&&<section><h3>HR 人工评估</h3><div className="profile-info"><p><span>综合得分</span>{assessment.total} 分</p><p><span>专业能力</span>{assessment.professional} 分</p><p><span>沟通表达</span>{assessment.communication} 分</p><p><span>文化匹配</span>{assessment.culture} 分</p><p><span>评估人</span>{assessment.reviewer}</p></div><AssessmentComment text={assessment.comment}/></section>}
     <section><div className="candidate-section-title"><h3>AI 面试记录</h3>{person.resumeFileName&&<button type="button" title={person.resumeFileName} onClick={()=>setResumeOpen(true)}>查看简历 ↗</button>}</div><CandidateInterviewAssessment report={aiInterview}/><AiInterviewRecordings candidateId={person.id}/></section>

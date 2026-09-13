@@ -287,12 +287,42 @@ export async function PATCH(request: NextRequest) {
   const now = new Date().toISOString();
   const db = getDb();
 
-  if (resource === 'candidateEmail') {
-    const email = text(payload.email, 120).toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return invalid('请补充有效邮箱');
+  if (resource === 'candidateFact') {
+    const field = text(payload.field, 30);
     const candidate = await db.prepare('SELECT id FROM candidates WHERE id = ? AND owner_id = ? LIMIT 1').bind(id, account.id).first<{id:string}>();
     if (!candidate) return invalid('候选人不存在或无权修改。');
-    await db.prepare('UPDATE candidates SET email = ?, updated_at = ? WHERE id = ? AND owner_id = ?').bind(email, now, id, account.id).run();
+    if (field === 'email') {
+      const email = text(payload.value, 120).toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return invalid('请补充有效邮箱');
+      await db.prepare('UPDATE candidates SET email = ?, updated_at = ? WHERE id = ? AND owner_id = ?').bind(email, now, id, account.id).run();
+      return NextResponse.json({ ok: true });
+    }
+    if (field === 'phone') {
+      const phone = text(payload.value, 30);
+      if (phone && !/^[+\d][\d\s-]{5,29}$/.test(phone)) return invalid('请输入有效手机号');
+      await db.prepare('UPDATE candidates SET phone = ?, updated_at = ? WHERE id = ? AND owner_id = ?').bind(phone, now, id, account.id).run();
+      return NextResponse.json({ ok: true });
+    }
+    const resumeFields:Record<string,'gender'|'age'|'work_years'|'education'>={gender:'gender',age:'age',work:'work_years',education:'education'};
+    const resumeField=resumeFields[field];
+    if (!resumeField) return invalid('不支持修改该候选人信息。');
+    const rawValue=text(payload.value, 80);
+    let normalized:string|number|null=rawValue;
+    if (field === 'gender' && rawValue && !['男','女','其他'].includes(rawValue)) return invalid('请选择有效性别。');
+    if (field === 'education' && rawValue && !['高中','中专','大专','本科','硕士','博士','其他'].includes(rawValue)) return invalid('请选择有效学历。');
+    if (field === 'age') {
+      normalized=rawValue?Number(rawValue):null;
+      if (normalized!==null&&(!Number.isInteger(normalized)||normalized<16||normalized>100)) return invalid('年龄应为 16–100 岁');
+    }
+    if (field === 'work') {
+      normalized=rawValue?Number(rawValue):null;
+      if (normalized!==null&&(!Number.isFinite(normalized)||normalized<0||normalized>70)) return invalid('工作年限应为 0–70 年');
+    }
+    await db.batch([
+      db.prepare(`INSERT OR IGNORE INTO resume_profiles (candidate_id, owner_id, parsing_status, created_at, updated_at) VALUES (?, ?, '结构化完成', ?, ?)`).bind(id, account.id, now, now),
+      db.prepare(`UPDATE resume_profiles SET ${resumeField} = ?, updated_at = ? WHERE candidate_id = ? AND owner_id = ?`).bind(normalized, now, id, account.id),
+      ...(field==='work'?[db.prepare('UPDATE candidates SET years = ?, updated_at = ? WHERE id = ? AND owner_id = ?').bind(normalized===null?'':`${normalized} 年`, now, id, account.id)]:[]),
+    ]);
     return NextResponse.json({ ok: true });
   }
 
