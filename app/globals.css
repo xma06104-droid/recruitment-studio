@@ -1802,3 +1802,13 @@ input[type="date"]::-webkit-calendar-picker-indicator,input[type="datetime-local
 /* Keep the registration agreement compact and centered. */
 .register-card .register-check{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;margin:2px 0 23px;text-align:center}
 .register-card .register-check input,.register-card .register-check input:focus{width:15px;height:15px;flex:0 0 15px;margin:0;padding:0;border:0;border-radius:3px;background:transparent;box-shadow:none}
+
+/* Keep editable candidate facts compact without reserving space for the hover hint. */
+.candidate-profile-summary{gap:5px 8px}
+.candidate-fact-edit{position:relative;gap:4px;padding:3px 4px}
+.candidate-fact-edit small{position:absolute;z-index:2;top:calc(100% + 3px);left:50%;width:max-content;padding:3px 6px;border-radius:6px;background:#15283d;box-shadow:0 5px 14px rgba(0,5,16,.28);pointer-events:none;transform:translateX(-50%)}
+
+/* Keep editable candidate facts compact without reserving space for the hover hint. */
+.candidate-profile-summary{gap:5px 8px}
+.candidate-fact-edit{position:relative;gap:4px;padding:3px 4px}
+.candidate-fact-edit small{position:absolute;z-index:2;top:calc(100% + 3px);left:50%;width:max-content;padding:3px 6px;border-radius:6px;background:#15283d;box-shadow:0 5px 14px rgba(0,5,16,.28);pointer-events:none;transform:translateX(-50%)}
