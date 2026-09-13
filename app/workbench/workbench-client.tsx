@@ -312,6 +312,10 @@ export default function WorkbenchClient() {
       person={selectedCandidate}
       aiInterview={data.aiInterviews.find(item=>item.candidateId===selectedCandidate.id)}
       assessment={data.manualAssessments.find(item=>item.candidateId===selectedCandidate.id)}
+      aiCompleted={data.aiInterviews.some(item=>item.candidateId===selectedCandidate.id&&item.status==='已完成')}
+      interviewCompleted={data.interviews.some(item=>item.candidateId===selectedCandidate.id&&item.status==='已完成'&&item.round!=='AI 初面')}
+      offerAccepted={data.offers.some(item=>item.candidateId===selectedCandidate.id&&item.status==='已接受')}
+      canApproveDepartment={selectedCandidate.assignedHrId===data.account.id}
       close={()=>setDrawer(null)}
       advance={value=>update('candidateStage',selectedCandidate.id,value,'候选人阶段已更新')}
       requestAssignment={()=>setAssignmentTarget(selectedCandidate)}
@@ -714,13 +718,14 @@ function CandidateInterviewAssessment({report}:{report?:AiInterview}){
   return <AiInterviewResultPanel summary={report.summary} fallbackScore={report.score} durationSeconds={report.durationSeconds} completedAt={report.completedAt} compact/>;
 }
 
-function CandidateStageStepper({stage,assignedName,advance,requestAssignment}:{stage:string;assignedName?:string;advance:(value:string)=>Promise<boolean>;requestAssignment:()=>void}){
+function CandidateStageStepper({stage,assignedName,aiCompleted,interviewCompleted,offerAccepted,canApproveDepartment,advance,requestAssignment}:{stage:string;assignedName?:string;aiCompleted:boolean;interviewCompleted:boolean;offerAccepted:boolean;canApproveDepartment:boolean;advance:(value:string)=>Promise<boolean>;requestAssignment:()=>void}){
   const [saving,setSaving]=useState('');
   const flowStage=stage==='待定'?'用人部门筛选':stage;
   const currentIndex=stages.indexOf(flowStage);
   const terminal=stage==='已淘汰'||currentIndex===stages.length-1;
+  const stageCompleted=flowStage==='简历筛选'||(flowStage==='AI面试'&&aiCompleted)||(flowStage==='用人部门筛选'&&canApproveDepartment)||(flowStage==='安排面试'&&interviewCompleted)||(flowStage==='录用'&&offerAccepted)||flowStage==='待入职';
   const nextStage=!terminal&&currentIndex>=0?stages[currentIndex+1]:undefined;
-  const canAdvance=Boolean(nextStage);
+  const canAdvance=Boolean(nextStage&&stageCompleted);
   async function moveNext(nextStage:string,index:number){
     if(saving||terminal||index!==currentIndex+1)return;
     if(nextStage==='用人部门筛选'){requestAssignment();return}
@@ -729,7 +734,8 @@ function CandidateStageStepper({stage,assignedName,advance,requestAssignment}:{s
   }
   return <section className={`candidate-stage-stepper ${terminal?'terminal-only':''}`} aria-label="候选人招聘阶段">
     <header><div><span>候选人流程</span><small>仅显示当前所处阶段</small></div><b className={terminal?'terminal':''}>当前：{stage}</b></header>
-    {!terminal&&nextStage&&<button type="button" className="candidate-next-stage-button" disabled={!canAdvance||Boolean(saving)} onClick={()=>void moveNext(nextStage,currentIndex+1)}><span>下一阶段</span><b>{nextStage}</b><em>{saving?`正在进入${nextStage}…`:'点击进入'}</em></button>}
+    {canAdvance&&nextStage&&<button type="button" className="candidate-next-stage-button" disabled={Boolean(saving)} onClick={()=>void moveNext(nextStage,currentIndex+1)}><span>下一阶段</span><b>{nextStage}</b><em>{saving?`正在进入${nextStage}…`:'点击进入'}</em></button>}
+    {!terminal&&flowStage==='AI面试'&&!aiCompleted&&<p className="candidate-stage-waiting" role="status">候选人未答题</p>}
     {!terminal&&flowStage==='用人部门筛选'&&assignedName&&<small className="candidate-current-assignee">已推送：{assignedName}</small>}
   </section>;
 }
@@ -746,7 +752,12 @@ function CandidateFactIcon({type}:{type:'gender'|'age'|'work'|'education'|'phone
   return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[type]}</svg>;
 }
 
-function CandidateDrawer({person,aiInterview,assessment,close,advance,requestAssignment}:{person:Candidate;aiInterview?:AiInterview;assessment?:ManualAssessment;close:()=>void;advance:(value:string)=>Promise<boolean>;requestAssignment:()=>void}){
+function AssessmentComment({text}:{text:string}){
+  const items=[...text.matchAll(/([^：\s]+)：([^｜\s]+)｜(\d+星)/g)].map(match=>({label:match[1],result:match[2],rating:match[3]}));
+  return <div className="candidate-assessment-comment"><span>评估意见</span>{items.length?<div>{items.map(item=><article key={item.label}><small>{item.label}</small><b>{item.result}</b><em>{item.rating}</em></article>)}</div>:<p>{text||'未填写'}</p>}</div>;
+}
+
+function CandidateDrawer({person,aiInterview,assessment,aiCompleted,interviewCompleted,offerAccepted,canApproveDepartment,close,advance,requestAssignment}:{person:Candidate;aiInterview?:AiInterview;assessment?:ManualAssessment;aiCompleted:boolean;interviewCompleted:boolean;offerAccepted:boolean;canApproveDepartment:boolean;close:()=>void;advance:(value:string)=>Promise<boolean>;requestAssignment:()=>void}){
   const hasInterviewScore=aiInterview?.score!==null&&aiInterview?.score!==undefined;
   const interviewTotal=aiInterview?aiInterviewQuestionTotal(aiInterview.summary,aiInterview.score):null;
   const displayedScore=assessment?.total??interviewTotal?.score??(hasInterviewScore?aiInterview.score:person.score);
@@ -763,8 +774,8 @@ function CandidateDrawer({person,aiInterview,assessment,close,advance,requestAss
   return <div className="drawer-backdrop candidate-drawer-backdrop" onMouseDown={close}><aside className="detail-drawer candidate-drawer" role="dialog" aria-modal="true" aria-label={`${person.name}候选人详情`} onMouseDown={event=>event.stopPropagation()}>
     <button className="drawer-close" onClick={close}>×</button>
     <div className="candidate-profile"><span>{person.name.slice(0,1)}</span><div><div className="candidate-title-row"><h2>{person.name}</h2><span>{person.role||'应聘职位未填写'}</span></div><div className="candidate-profile-summary">{facts.map(fact=><span key={fact.type} title={fact.label} aria-label={`${fact.label} ${fact.value}`}><CandidateFactIcon type={fact.type}/><b>{fact.value}</b></span>)}</div></div><em><b>{displayedScore??'—'}</b><small>{displayedLabel}</small></em></div>
-    <CandidateStageStepper stage={person.stage} assignedName={person.assignedHrName} advance={advance} requestAssignment={requestAssignment}/>
-    {assessment&&<section><h3>HR 人工评估</h3><div className="profile-info"><p><span>综合得分</span>{assessment.total} 分</p><p><span>专业能力</span>{assessment.professional} 分</p><p><span>沟通表达</span>{assessment.communication} 分</p><p><span>文化匹配</span>{assessment.culture} 分</p><p><span>评估人</span>{assessment.reviewer}</p><p><span>评估意见</span>{assessment.comment||'未填写'}</p></div></section>}
+    <CandidateStageStepper stage={person.stage} assignedName={person.assignedHrName} aiCompleted={aiCompleted} interviewCompleted={interviewCompleted} offerAccepted={offerAccepted} canApproveDepartment={canApproveDepartment} advance={advance} requestAssignment={requestAssignment}/>
+    {assessment&&<section><h3>HR 人工评估</h3><div className="profile-info"><p><span>综合得分</span>{assessment.total} 分</p><p><span>专业能力</span>{assessment.professional} 分</p><p><span>沟通表达</span>{assessment.communication} 分</p><p><span>文化匹配</span>{assessment.culture} 分</p><p><span>评估人</span>{assessment.reviewer}</p></div><AssessmentComment text={assessment.comment}/></section>}
     <section><h3>AI 面试记录</h3><CandidateInterviewAssessment report={aiInterview}/><AiInterviewRecordings candidateId={person.id}/></section>
     <section><h3>核心技能</h3><div className="channel-tags">{person.skills.length?person.skills.map(skill=><span key={skill}>{skill}</span>):<span>未填写</span>}</div></section>
   </aside></div>;
