@@ -1131,7 +1131,7 @@ button:disabled{cursor:wait}
 .channel-row i{background:#1c293d}.channel-row em{background:linear-gradient(90deg,#22c5dd,#398bff)}.channel-row small{color:#8d9bb0;font-size:10px}
 
 /* Talent cards: larger type, dark badges and no white score blocks */
-.candidate-grid{grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:20px}
+.candidate-grid{grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:20px}
 .candidate-card{min-height:320px;padding:26px;border-radius:22px}
 .candidate-top{gap:14px}.candidate-top>span{width:48px;height:48px;border-color:rgba(162,181,211,.12);color:#70d8e8;background:#17273d;font-size:14px}
 .candidate-top b{color:#f4f8ff;font-size:16px}.candidate-top small{margin-top:6px;color:#97a5b8;font-size:12px;line-height:1.45}
