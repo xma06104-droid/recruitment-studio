@@ -43,6 +43,10 @@ const jobStatusPriority:Record<string,number> = { '急聘':0,'招聘中':1,'草�
 const interviewStatuses = ['待确认','已确认','已完成','已取消'];
 const offerStatuses = ['待审批','已发放','已接受','已拒绝','已撤回'];
 const rejectedCandidateStages = new Set(['初筛淘汰','淘汰人才库','已淘汰']);
+const cityPickerGroups:[string,string[]][] = [
+  ['直辖市',CHINA_CITY_GROUPS.slice(0,4).map(([,cities])=>cities).join('|').split('|')],
+  ...CHINA_CITY_GROUPS.slice(4).map(([province,cities])=>[province,cities.split('|')] as [string,string[]]),
+];
 
 export default function WorkbenchClient() {
   const [data,setData]=useState<Dataset|null>(null);
@@ -638,12 +642,50 @@ function Analytics({data}:{data:Dataset}){
 
 function FormModal({close,submit,kicker,title,description,children,submitLabel='保存真实记录',error='',submitting=false,scrollable=false}:{close:()=>void;submit:(data:FormData)=>void;kicker:string;title:string;description:string;children:ReactNode;submitLabel?:string;error?:string;submitting?:boolean;scrollable?:boolean}){return <div className="modal-backdrop" onMouseDown={close}><form className={`job-modal${scrollable?' scrollable-modal':''}`} onSubmit={(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();submit(new FormData(event.currentTarget))}} onMouseDown={event=>event.stopPropagation()}><button type="button" className="modal-close" onClick={close}>×</button><span className="eyebrow purple">{kicker}</span><h2>{title}</h2><p>{description}</p>{children}{error&&<div className="account-form-error">{error}</div>}<button className="primary-button" type="submit" disabled={submitting}>{submitting?'正在保存…':submitLabel} <span>→</span></button></form></div>}
 function CandidateEntryModal({close,manual,upload}:{close:()=>void;manual:()=>void;upload:()=>void}){return <div className="modal-backdrop" onMouseDown={close}><section className="candidate-entry-modal" role="dialog" aria-modal="true" aria-labelledby="candidate-entry-title" onMouseDown={event=>event.stopPropagation()}><button type="button" className="modal-close" onClick={close}>×</button><span className="eyebrow purple">ADD CANDIDATE</span><h2 id="candidate-entry-title">添加候选人</h2><p>选择录入方式，候选人会统一进入候选人管理并同步到后续招聘流程。</p><div className="candidate-entry-options"><button type="button" onClick={manual}><i>＋</i><span><b>手动添加</b><small>直接填写候选人、职位与联系方式</small></span><em>→</em></button><button type="button" onClick={upload}><i>⇧</i><span><b>上传简历添加</b><small>上传文件并自动解析为候选人档案</small></span><em>→</em></button></div></section></div>}
+function CityPicker({defaultValue}:{defaultValue:string}){
+  const customCity=defaultValue&&!CHINA_CITIES.includes(defaultValue)?defaultValue:'';
+  const groups=customCity?[['其他',[customCity]] as [string,string[]],...cityPickerGroups]:cityPickerGroups;
+  const initialGroup=groups.find(([,cities])=>cities.includes(defaultValue))?.[0]||groups[0][0];
+  const [selectedCity,setSelectedCity]=useState(defaultValue);
+  const [activeGroup,setActiveGroup]=useState(initialGroup);
+  const [query,setQuery]=useState('');
+  const [open,setOpen]=useState(false);
+  const root=useRef<HTMLDivElement>(null);
+  const activeGroupButton=useRef<HTMLButtonElement>(null);
+  const filteredGroups=groups.map(([group,cities])=>[group,cities.filter(city=>city.includes(query.trim()))] as [string,string[]]).filter(([group,cities])=>!query.trim()||group.includes(query.trim())||cities.length);
+  const visibleGroup=filteredGroups.find(([group])=>group===activeGroup)||filteredGroups[0];
+  const visibleCities=query.trim()&&visibleGroup?.[0].includes(query.trim())?groups.find(([group])=>group===visibleGroup[0])?.[1]||[]:visibleGroup?.[1]||[];
+  useEffect(()=>{
+    if(!open)return;
+    const closePicker=(event:PointerEvent)=>{if(!root.current?.contains(event.target as Node)){setOpen(false);setQuery('')}};
+    document.addEventListener('pointerdown',closePicker);
+    return()=>document.removeEventListener('pointerdown',closePicker);
+  },[open]);
+  useEffect(()=>{
+    if(!open)return;
+    const frame=window.requestAnimationFrame(()=>activeGroupButton.current?.scrollIntoView({block:'nearest'}));
+    return()=>window.cancelAnimationFrame(frame);
+  },[open,activeGroup]);
+  function choose(city:string){setSelectedCity(city);setQuery('');setOpen(false);setActiveGroup(groups.find(([,cities])=>cities.includes(city))?.[0]||groups[0][0])}
+  return <div className={`city-picker${open?' open':''}`} ref={root}>
+    <input type="hidden" name="city" value={selectedCity}/>
+    {open&&<div id="job-city-options" className="city-picker-panel" role="dialog" aria-label="选择工作城市">
+      <div className="city-picker-groups" role="listbox" aria-label="省份或地区">{filteredGroups.length?filteredGroups.map(([group])=><button type="button" key={group} ref={visibleGroup?.[0]===group?activeGroupButton:undefined} className={visibleGroup?.[0]===group?'active':''} onMouseDown={event=>event.preventDefault()} onClick={()=>setActiveGroup(group)}><span>{group}</span><b>›</b></button>):<p>未找到匹配地区</p>}</div>
+      <div className="city-picker-cities" role="listbox" aria-label={`${visibleGroup?.[0]||''}城市`}>{visibleCities.length?visibleCities.map(city=><button type="button" role="option" aria-selected={selectedCity===city} key={city} className={selectedCity===city?'selected':''} onMouseDown={event=>event.preventDefault()} onClick={()=>choose(city)}>{city}<span>✓</span></button>):<p>未找到匹配城市</p>}</div>
+    </div>}
+    <div className="city-picker-control">
+      <input value={open?query:selectedCity} placeholder={open?'输入市名进行搜索':'请选择城市（可选）'} role="combobox" aria-expanded={open} aria-controls="job-city-options" autoComplete="off" onFocus={()=>setOpen(true)} onChange={event=>{setQuery(event.target.value);setOpen(true)}} onKeyDown={event=>{if(event.key==='Escape'){setOpen(false);setQuery('')}else if(event.key==='Enter'&&open&&visibleCities.length===1){event.preventDefault();choose(visibleCities[0])}}}/>
+      {selectedCity&&!open&&<button type="button" className="city-picker-clear" aria-label="清除工作城市" onClick={()=>setSelectedCity('')}>×</button>}
+      <button type="button" className="city-picker-toggle" aria-label={open?'收起城市选择':'展开城市选择'} onMouseDown={event=>event.preventDefault()} onClick={()=>{setOpen(value=>!value);setQuery('')}}>{open?'⌃':'⌄'}</button>
+    </div>
+  </div>;
+}
 function JobModal({job,close,submit,submitting}:{job:Job|null;close:()=>void;submit:(data:FormData)=>void;submitting:boolean}){
   const selectedCity=visibleCity(job?.city||'');
   return <FormModal close={close} submit={submit} submitting={submitting} kicker={job?'POSITION DETAILS':'NEW POSITION'} title={job?'编辑职位信息':'发布新职位'} description={job?'修改后将保留该职位与候选人、AI 面试题的现有关联。':'保存后，该职位将参与工作台与招聘数据的实时统计。'} submitLabel={job?'保存职位修改':'保存真实记录'}>
     <label>职位名称<input required name="title" defaultValue={job?.title||''} placeholder="请输入真实职位名称"/></label>
     <label>所属部门<input required name="department" defaultValue={job?.department||''} placeholder="请输入实际部门"/></label>
-    <div className="form-grid"><label>工作城市<select name="city" defaultValue={selectedCity}><option value="">请选择城市（可选）</option>{selectedCity&&!CHINA_CITIES.includes(selectedCity)&&<option value={selectedCity}>{selectedCity}</option>}{CHINA_CITY_GROUPS.map(([province,cities])=><optgroup key={province} label={province}>{cities.split('|').map(city=><option key={city} value={city}>{city}</option>)}</optgroup>)}</select></label><label>招聘人数<input name="headcount" type="number" min="1" max="999" defaultValue={job?.headcount||1}/></label></div>
+    <div className="form-grid"><div className="job-form-label"><span>工作城市</span><CityPicker defaultValue={selectedCity}/></div><label>招聘人数<input name="headcount" type="number" min="1" max="999" defaultValue={job?.headcount||1}/></label></div>
   </FormModal>
 }
 function CandidateModal({jobs,close,upload,submit,submitting}:{jobs:Job[];close:()=>void;upload:()=>void;submit:(data:FormData)=>void;submitting:boolean}){return <FormModal close={close} submit={submit} submitting={submitting} kicker="REAL CANDIDATE" title="添加候选人" description="请录入真实候选人信息；未填写的字段会明确显示为未填写。"><button type="button" className="candidate-modal-upload" onClick={upload}><span>⇧</span><div><b>上传简历自动填写</b><small>识别姓名、履历、项目与联系方式</small></div><em>→</em></button><div className="form-grid"><label>姓名<input required name="name" placeholder="候选人姓名"/></label><label>应聘职位<input required name="role" placeholder="实际应聘职位"/></label></div><label>关联职位<select name="jobId" defaultValue=""><option value="">暂不关联</option>{jobs.map(job=><option key={job.id} value={job.id}>{job.title}</option>)}</select></label><div className="form-grid"><label>最近公司<input name="company" placeholder="可选"/></label><label>工作经验<input name="years" placeholder="例如：5 年"/></label></div><div className="form-grid"><label>来源<input name="source" placeholder="例如：内部推荐"/></label><label>所在城市<input name="city" placeholder="可选"/></label></div><label>技能标签<input name="skills" placeholder="多个技能请用逗号分隔"/></label><div className="form-grid"><label>手机号<input name="phone" type="tel" placeholder="可选"/></label><label>邮箱<input name="email" type="email" placeholder="可选"/></label></div></FormModal>}
