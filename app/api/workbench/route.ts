@@ -40,7 +40,8 @@ export async function GET(request: NextRequest) {
   const [jobs, candidates, interviews, offers, aiQuestions, aiInterviews, aiInvitations, manualAssessments, recipientAccounts] = await Promise.all([
     db.prepare(`SELECT DISTINCT j.* FROM jobs j WHERE j.owner_id = ? OR j.id IN (${assignedJobSql}) ORDER BY j.created_at DESC`).bind(account.id, account.id).all<DataRow>(),
     db.prepare(`SELECT c.*, ca.hr_account_id, ca.assigned_at, a.contact AS assigned_hr_name,
-          rp.gender AS resume_gender, rp.age AS resume_age, rp.education AS resume_education, rp.work_years AS resume_work_years
+          rp.gender AS resume_gender, rp.age AS resume_age, rp.education AS resume_education, rp.work_years AS resume_work_years,
+          rp.file_name AS resume_file_name
         FROM candidates c LEFT JOIN candidate_assignments ca ON ca.candidate_id = c.id LEFT JOIN accounts a ON a.id = ca.hr_account_id
         LEFT JOIN resume_profiles rp ON rp.candidate_id = c.id
         WHERE c.owner_id = ? OR c.id IN (${assignedCandidateSql}) ORDER BY COALESCE(ca.assigned_at, c.created_at) DESC`).bind(account.id, account.id).all<DataRow>(),
@@ -286,6 +287,15 @@ export async function PATCH(request: NextRequest) {
   const now = new Date().toISOString();
   const db = getDb();
 
+  if (resource === 'candidateEmail') {
+    const email = text(payload.email, 120).toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return invalid('请补充有效邮箱');
+    const candidate = await db.prepare('SELECT id FROM candidates WHERE id = ? AND owner_id = ? LIMIT 1').bind(id, account.id).first<{id:string}>();
+    if (!candidate) return invalid('候选人不存在或无权修改。');
+    await db.prepare('UPDATE candidates SET email = ?, updated_at = ? WHERE id = ? AND owner_id = ?').bind(email, now, id, account.id).run();
+    return NextResponse.json({ ok: true });
+  }
+
   if (resource === 'aiQuestion') {
     const owned = await db.prepare('SELECT id FROM ai_questions WHERE id = ? AND owner_id = ?').bind(id, account.id).first<{id:string}>();
     if (!owned) return invalid('面试题不存在。');
@@ -481,7 +491,7 @@ function mapJob(row: DataRow) {
 function mapCandidate(row: DataRow) {
   let skills: string[] = [];
   try { skills = JSON.parse(String(row.skills_json || '[]')); } catch {}
-  return { id: row.id, jobId: row.job_id, name: row.name, role: row.role, company: row.company, years: row.years, stage: normalizeCandidateStage(String(row.stage || '')), source: row.source, skills, score: row.score, phone: row.phone, email: row.email, city: row.city, gender: row.resume_gender, age: row.resume_age, education: row.resume_education, workYears: row.resume_work_years, assignedHrId: row.hr_account_id, assignedHrName: row.assigned_hr_name, assignedAt: row.assigned_at, createdAt: row.created_at, updatedAt: row.updated_at };
+  return { id: row.id, jobId: row.job_id, name: row.name, role: row.role, company: row.company, years: row.years, stage: normalizeCandidateStage(String(row.stage || '')), source: row.source, skills, score: row.score, phone: row.phone, email: row.email, city: row.city, gender: row.resume_gender, age: row.resume_age, education: row.resume_education, workYears: row.resume_work_years, resumeFileName: row.resume_file_name, assignedHrId: row.hr_account_id, assignedHrName: row.assigned_hr_name, assignedAt: row.assigned_at, createdAt: row.created_at, updatedAt: row.updated_at };
 }
 
 function mapInterview(row: DataRow) {

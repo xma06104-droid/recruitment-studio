@@ -8,10 +8,11 @@ import { AiInterviewResultPanel, aiInterviewQuestionTotal } from '@/app/componen
 import AiInterviewRecordings from '@/app/components/ai-interview-recordings';
 import RoleManagement from '@/app/components/role-management';
 import { CANDIDATE_STAGES, candidateStageIndex, normalizeCandidateStage } from '@/app/candidate-stages';
+import { CHINA_CITIES, CHINA_CITY_GROUPS } from '@/app/china-cities';
 
 type Account = { id:string; contact:string; phone:string; email:string; role:'super_admin'|'hr'; createdAt:string };
 type Job = { id:string; title:string; department:string; city:string; status:string; headcount:number; ownerName:string; createdAt:string; updatedAt:string };
-type Candidate = { id:string; jobId:string|null; name:string; role:string; company:string; years:string; stage:string; source:string; skills:string[]; score:number|null; phone:string; email:string; city:string; gender?:string; age?:number|null; education?:string; workYears?:number|null; assignedHrId?:string; assignedHrName?:string; assignedAt?:string; createdAt:string; updatedAt:string };
+type Candidate = { id:string; jobId:string|null; name:string; role:string; company:string; years:string; stage:string; source:string; skills:string[]; score:number|null; phone:string; email:string; city:string; gender?:string; age?:number|null; education?:string; workYears?:number|null; resumeFileName?:string; assignedHrId?:string; assignedHrName?:string; assignedAt?:string; createdAt:string; updatedAt:string };
 type Interview = { id:string; candidateId:string; scheduledAt:string; round:string; mode:string; interviewer:string; status:string; createdAt:string; updatedAt:string };
 type Offer = { id:string; candidateId:string; jobTitle:string; salary:string; recipientEmail:string; content:string; ownerName:string; status:string; deadline:string; createdAt:string; updatedAt:string };
 type AiQuestion = { id:string; jobId:string|null; title:string; category:string; questionType:string; duration:number; competency:string; keywords:string; referenceAnswer:string; followUp:boolean; createdAt:string; updatedAt:string };
@@ -214,6 +215,13 @@ export default function WorkbenchClient() {
     announceWorkbenchChange();await loadData();flash(success);return true;
   }
 
+  async function updateCandidateEmail(id:string,email:string){
+    const response=await fetch('/api/workbench',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({resource:'candidateEmail',id,payload:{email}})});
+    const result=await response.json().catch(()=>({})) as {message?:string};
+    if(!response.ok){flash(result.message||'邮箱保存失败');return false}
+    announceWorkbenchChange();await loadData();flash('邮箱已更新');return true;
+  }
+
   async function assignCandidate(candidate:Candidate,recipientId:string){
     if(saveInFlight.current)return;
     saveInFlight.current=true;setAssignmentSaving(true);
@@ -226,7 +234,7 @@ export default function WorkbenchClient() {
     }catch{flash('推送失败，请检查网络后重试。')}finally{saveInFlight.current=false;setAssignmentSaving(false)}
   }
 
-  function flash(text:string){const tone=text.includes('失败')||text.includes('错误')?'error':text.includes('成功')?'success':'info';setToast({text,tone});window.setTimeout(()=>setToast(null),2300)}
+  function flash(text:string){const tone=text.includes('失败')||text.includes('错误')?'error':text.includes('成功')||text.includes('已更新')?'success':'info';setToast({text,tone});window.setTimeout(()=>setToast(null),text==='请补充有效邮箱'?3000:2300)}
   async function logout(){await fetch('/api/auth/logout',{method:'POST'});window.location.assign('/')}
   function switchHiringDepartment(){setAccountOpen(false);window.location.assign('/interviewer-candidate')}
   function openAccountModal(name:'profile'|'password'){setAccountError('');setAccountOpen(false);setModal(name)}
@@ -299,7 +307,7 @@ export default function WorkbenchClient() {
     </section>
     {modal==='candidateEntry'&&<CandidateEntryModal close={()=>setModal(null)} manual={()=>setModal('candidate')} upload={()=>{setModal(null);setResumeImportRequested(true);setActive('简历筛选')}}/>}
     {modal==='job'&&<JobModal job={editingJob} close={()=>{if(!modalSaving){setModal(null);setEditingJob(null)}}} submitting={modalSaving} submit={form=>editingJob?void updateJob(editingJob.id,formObject(form)):void create('job',formObject(form))}/>}
-    {modal==='candidate'&&<CandidateModal jobs={data.jobs} close={()=>setModal(null)} submitting={modalSaving} submit={form=>void create('candidate',formObject(form))}/>}
+    {modal==='candidate'&&<CandidateModal jobs={data.jobs} close={()=>setModal(null)} upload={()=>{setModal(null);setResumeImportRequested(true);setActive('简历筛选')}} submitting={modalSaving} submit={form=>void create('candidate',formObject(form))}/>}
     {modal==='interview'&&<InterviewModal interview={editingInterview} people={activeCandidates} close={()=>{if(!modalSaving){setModal(null);setEditingInterview(null)}}} submitting={modalSaving} submit={form=>editingInterview?void updateInterview(editingInterview.id,formObject(form)):void create('interview',formObject(form))}/>}
     {modal==='offer'&&<OfferModal offer={editingOffer} people={data.candidates} close={()=>{if(!modalSaving){setModal(null);setEditingOffer(null)}}} submitting={modalSaving} submit={form=>editingOffer?void updateOffer(editingOffer.id,formObject(form)):void create('offer',formObject(form))}/>}
     {modal==='question'&&<QuestionModal question={editingQuestion} jobs={data.jobs} close={()=>{if(!modalSaving){setModal(null);setEditingQuestion(null)}}} submitting={modalSaving} submit={form=>editingQuestion?void updateQuestion(editingQuestion.id,formObject(form)):void create('aiQuestion',formObject(form))}/>}
@@ -317,11 +325,12 @@ export default function WorkbenchClient() {
       offerAccepted={data.offers.some(item=>item.candidateId===selectedCandidate.id&&item.status==='已接受')}
       canApproveDepartment={selectedCandidate.assignedHrId===data.account.id}
       close={()=>setDrawer(null)}
+      saveEmail={email=>updateCandidateEmail(selectedCandidate.id,email)}
       advance={value=>update('candidateStage',selectedCandidate.id,value,'候选人阶段已更新')}
       requestAssignment={()=>setAssignmentTarget(selectedCandidate)}
     />}
     {assignmentTarget&&<CandidateAssignmentDialog candidate={assignmentTarget} accounts={data.recipientAccounts||[]} busy={assignmentSaving} close={()=>{if(!assignmentSaving)setAssignmentTarget(null)}} submit={recipientId=>void assignCandidate(assignmentTarget,recipientId)}/>}
-    {toast&&<div className={`dashboard-toast ${toast.tone}`} role="status" aria-live="polite">{toast.tone==='success'?'✓ ':toast.tone==='error'?'! ':''}{toast.text}</div>}
+    {toast&&<div className={`dashboard-toast ${toast.tone}${toast.text==='请补充有效邮箱'?' prominent':''}`} role="status" aria-live="polite">{toast.tone==='success'?'✓ ':toast.tone==='error'?'! ':''}{toast.text}</div>}
   </main>
 }
 
@@ -362,7 +371,7 @@ function AiStudio({data,openQuestion,openGenerator,deleteQuestion,openResult,sen
     const general=questions.filter(question=>!question.jobId);
     const interviewQuestions=specific.length?specific:general;
     if(!interviewQuestions.length){setJobFilter(job?.id||'general');setTab('library');flash(job?`请先为“${job.title}”配置面试题`:'请先创建通用 AI 面试题');return}
-    if(!person.email){flash('请先在候选人档案中补充有效邮箱');return}
+    if(!validEmail(person.email)){flash('请补充有效邮箱');return}
     setValidityHours(24);setInterviewUrl('');setInviteTarget(person);
   }
   async function confirmInvitation(){
@@ -628,8 +637,15 @@ function Analytics({data}:{data:Dataset}){
 
 function FormModal({close,submit,kicker,title,description,children,submitLabel='保存真实记录',error='',submitting=false,scrollable=false}:{close:()=>void;submit:(data:FormData)=>void;kicker:string;title:string;description:string;children:ReactNode;submitLabel?:string;error?:string;submitting?:boolean;scrollable?:boolean}){return <div className="modal-backdrop" onMouseDown={close}><form className={`job-modal${scrollable?' scrollable-modal':''}`} onSubmit={(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();submit(new FormData(event.currentTarget))}} onMouseDown={event=>event.stopPropagation()}><button type="button" className="modal-close" onClick={close}>×</button><span className="eyebrow purple">{kicker}</span><h2>{title}</h2><p>{description}</p>{children}{error&&<div className="account-form-error">{error}</div>}<button className="primary-button" type="submit" disabled={submitting}>{submitting?'正在保存…':submitLabel} <span>→</span></button></form></div>}
 function CandidateEntryModal({close,manual,upload}:{close:()=>void;manual:()=>void;upload:()=>void}){return <div className="modal-backdrop" onMouseDown={close}><section className="candidate-entry-modal" role="dialog" aria-modal="true" aria-labelledby="candidate-entry-title" onMouseDown={event=>event.stopPropagation()}><button type="button" className="modal-close" onClick={close}>×</button><span className="eyebrow purple">ADD CANDIDATE</span><h2 id="candidate-entry-title">添加候选人</h2><p>选择录入方式，候选人会统一进入候选人管理并同步到后续招聘流程。</p><div className="candidate-entry-options"><button type="button" onClick={manual}><i>＋</i><span><b>手动添加</b><small>直接填写候选人、职位与联系方式</small></span><em>→</em></button><button type="button" onClick={upload}><i>⇧</i><span><b>上传简历添加</b><small>上传文件并自动解析为候选人档案</small></span><em>→</em></button></div></section></div>}
-function JobModal({job,close,submit,submitting}:{job:Job|null;close:()=>void;submit:(data:FormData)=>void;submitting:boolean}){return <FormModal close={close} submit={submit} submitting={submitting} kicker={job?'POSITION DETAILS':'NEW POSITION'} title={job?'编辑职位信息':'发布新职位'} description={job?'修改后将保留该职位与候选人、AI 面试题的现有关联。':'保存后，该职位将参与工作台与招聘数据的实时统计。'} submitLabel={job?'保存职位修改':'保存真实记录'}><label>职位名称<input required name="title" defaultValue={job?.title||''} placeholder="请输入真实职位名称"/></label><label>所属部门<input required name="department" defaultValue={job?.department||''} placeholder="请输入实际部门"/></label><div className="form-grid"><label>工作城市<input name="city" defaultValue={visibleCity(job?.city||'')} placeholder="请输入城市（可选）"/></label><label>招聘人数<input name="headcount" type="number" min="1" max="999" defaultValue={job?.headcount||1}/></label></div></FormModal>}
-function CandidateModal({jobs,close,submit,submitting}:{jobs:Job[];close:()=>void;submit:(data:FormData)=>void;submitting:boolean}){return <FormModal close={close} submit={submit} submitting={submitting} kicker="REAL CANDIDATE" title="添加候选人" description="请录入真实候选人信息；未填写的字段会明确显示为未填写。"><div className="form-grid"><label>姓名<input required name="name" placeholder="候选人姓名"/></label><label>应聘职位<input required name="role" placeholder="实际应聘职位"/></label></div><label>关联职位<select name="jobId" defaultValue=""><option value="">暂不关联</option>{jobs.map(job=><option key={job.id} value={job.id}>{job.title}</option>)}</select></label><div className="form-grid"><label>最近公司<input name="company" placeholder="可选"/></label><label>工作经验<input name="years" placeholder="例如：5 年"/></label></div><div className="form-grid"><label>来源<input name="source" placeholder="例如：内部推荐"/></label><label>所在城市<input name="city" placeholder="可选"/></label></div><label>技能标签<input name="skills" placeholder="多个技能请用逗号分隔"/></label><div className="form-grid"><label>手机号<input name="phone" type="tel" placeholder="可选"/></label><label>邮箱<input name="email" type="email" placeholder="可选"/></label></div></FormModal>}
+function JobModal({job,close,submit,submitting}:{job:Job|null;close:()=>void;submit:(data:FormData)=>void;submitting:boolean}){
+  const selectedCity=visibleCity(job?.city||'');
+  return <FormModal close={close} submit={submit} submitting={submitting} kicker={job?'POSITION DETAILS':'NEW POSITION'} title={job?'编辑职位信息':'发布新职位'} description={job?'修改后将保留该职位与候选人、AI 面试题的现有关联。':'保存后，该职位将参与工作台与招聘数据的实时统计。'} submitLabel={job?'保存职位修改':'保存真实记录'}>
+    <label>职位名称<input required name="title" defaultValue={job?.title||''} placeholder="请输入真实职位名称"/></label>
+    <label>所属部门<input required name="department" defaultValue={job?.department||''} placeholder="请输入实际部门"/></label>
+    <div className="form-grid"><label>工作城市<select name="city" defaultValue={selectedCity}><option value="">请选择城市（可选）</option>{selectedCity&&!CHINA_CITIES.includes(selectedCity)&&<option value={selectedCity}>{selectedCity}</option>}{CHINA_CITY_GROUPS.map(([province,cities])=><optgroup key={province} label={province}>{cities.split('|').map(city=><option key={city} value={city}>{city}</option>)}</optgroup>)}</select></label><label>招聘人数<input name="headcount" type="number" min="1" max="999" defaultValue={job?.headcount||1}/></label></div>
+  </FormModal>
+}
+function CandidateModal({jobs,close,upload,submit,submitting}:{jobs:Job[];close:()=>void;upload:()=>void;submit:(data:FormData)=>void;submitting:boolean}){return <FormModal close={close} submit={submit} submitting={submitting} kicker="REAL CANDIDATE" title="添加候选人" description="请录入真实候选人信息；未填写的字段会明确显示为未填写。"><button type="button" className="candidate-modal-upload" onClick={upload}><span>⇧</span><div><b>上传简历自动填写</b><small>识别姓名、履历、项目与联系方式</small></div><em>→</em></button><div className="form-grid"><label>姓名<input required name="name" placeholder="候选人姓名"/></label><label>应聘职位<input required name="role" placeholder="实际应聘职位"/></label></div><label>关联职位<select name="jobId" defaultValue=""><option value="">暂不关联</option>{jobs.map(job=><option key={job.id} value={job.id}>{job.title}</option>)}</select></label><div className="form-grid"><label>最近公司<input name="company" placeholder="可选"/></label><label>工作经验<input name="years" placeholder="例如：5 年"/></label></div><div className="form-grid"><label>来源<input name="source" placeholder="例如：内部推荐"/></label><label>所在城市<input name="city" placeholder="可选"/></label></div><label>技能标签<input name="skills" placeholder="多个技能请用逗号分隔"/></label><div className="form-grid"><label>手机号<input name="phone" type="tel" placeholder="可选"/></label><label>邮箱<input name="email" type="email" placeholder="可选"/></label></div></FormModal>}
 function InterviewModal({interview,people,close,submit,submitting}:{interview:Interview|null;people:Candidate[];close:()=>void;submit:(data:FormData)=>void;submitting:boolean}){return <FormModal close={close} submit={submit} submitting={submitting} kicker="SCHEDULE" title={interview?'查看与修改面试':'安排面试'} description="面试日程会按实际日期和候选人保存。" submitLabel={interview?'保存面试修改':'保存真实记录'}><label>候选人<select required name="candidateId" defaultValue={interview?.candidateId||''}><option value="" disabled>请选择真实候选人</option>{people.map(person=><option key={person.id} value={person.id}>{person.name} · {person.role}</option>)}</select></label><div className="form-grid"><label>面试日期<input required name="scheduledDate" type="date" defaultValue={interview?dateLocalValue(interview.scheduledAt):''}/></label><label>面试时间<input required name="scheduledTime" type="time" step="300" defaultValue={interview?timeLocalValue(interview.scheduledAt):''}/></label></div><div className="form-grid"><label>面试轮次<input name="round" defaultValue={interview?.round||''} placeholder="例如：业务一面"/></label><label>面试方式<input name="mode" defaultValue={interview?.mode||''} placeholder="例如：线下面试"/></label></div></FormModal>}
 function OfferModal({offer,people,close,submit,submitting}:{offer:Offer|null;people:Candidate[];close:()=>void;submit:(data:FormData)=>void;submitting:boolean}){
   const [candidateId,setCandidateId]=useState(offer?.candidateId||'');
@@ -757,7 +773,19 @@ function AssessmentComment({text}:{text:string}){
   return <div className="candidate-assessment-comment"><span>评估意见</span>{items.length?<div>{items.map(item=><article key={item.label}><small>{item.label}</small><b>{item.result}</b><em>{item.rating}</em></article>)}</div>:<p>{text||'未填写'}</p>}</div>;
 }
 
-function CandidateDrawer({person,aiInterview,assessment,aiCompleted,interviewCompleted,offerAccepted,canApproveDepartment,close,advance,requestAssignment}:{person:Candidate;aiInterview?:AiInterview;assessment?:ManualAssessment;aiCompleted:boolean;interviewCompleted:boolean;offerAccepted:boolean;canApproveDepartment:boolean;close:()=>void;advance:(value:string)=>Promise<boolean>;requestAssignment:()=>void}){
+function CandidateDrawer({person,aiInterview,assessment,aiCompleted,interviewCompleted,offerAccepted,canApproveDepartment,close,saveEmail,advance,requestAssignment}:{person:Candidate;aiInterview?:AiInterview;assessment?:ManualAssessment;aiCompleted:boolean;interviewCompleted:boolean;offerAccepted:boolean;canApproveDepartment:boolean;close:()=>void;saveEmail:(email:string)=>Promise<boolean>;advance:(value:string)=>Promise<boolean>;requestAssignment:()=>void}){
+  const [editingEmail,setEditingEmail]=useState(false);
+  const [email,setEmail]=useState(person.email||'');
+  const [emailError,setEmailError]=useState('');
+  const [emailSaving,setEmailSaving]=useState(false);
+  async function submitEmail(event:FormEvent<HTMLFormElement>){
+    event.preventDefault();
+    const next=email.trim().toLowerCase();
+    if(!validEmail(next)){setEmailError('请输入有效邮箱');return}
+    setEmailSaving(true);setEmailError('');
+    if(await saveEmail(next))setEditingEmail(false);
+    setEmailSaving(false);
+  }
   const hasInterviewScore=aiInterview?.score!==null&&aiInterview?.score!==undefined;
   const interviewTotal=aiInterview?aiInterviewQuestionTotal(aiInterview.summary,aiInterview.score):null;
   const displayedScore=assessment?.total??interviewTotal?.score??(hasInterviewScore?aiInterview.score:person.score);
@@ -773,11 +801,12 @@ function CandidateDrawer({person,aiInterview,assessment,aiCompleted,interviewCom
   ];
   return <div className="drawer-backdrop candidate-drawer-backdrop" onMouseDown={close}><aside className="detail-drawer candidate-drawer" role="dialog" aria-modal="true" aria-label={`${person.name}候选人详情`} onMouseDown={event=>event.stopPropagation()}>
     <button className="drawer-close" onClick={close}>×</button>
-    <div className="candidate-profile"><span>{person.name.slice(0,1)}</span><div><div className="candidate-title-row"><h2>{person.name}</h2><span>{person.role||'应聘职位未填写'}</span></div><div className="candidate-profile-summary">{facts.map(fact=><span key={fact.type} title={fact.label} aria-label={`${fact.label} ${fact.value}`}><CandidateFactIcon type={fact.type}/><b>{fact.value}</b></span>)}</div></div><em><b>{displayedScore??'—'}</b><small>{displayedLabel}</small></em></div>
+    <div className="candidate-profile"><span>{person.name.slice(0,1)}</span><div><div className="candidate-title-row"><h2>{person.name}</h2><span>{person.role||'应聘职位未填写'}</span></div><div className="candidate-profile-summary">{facts.map(fact=>fact.type==='email'?(editingEmail?<form key={fact.type} className="candidate-email-editor" onSubmit={event=>void submitEmail(event)}><CandidateFactIcon type="email"/><input autoFocus type="email" value={email} onChange={event=>setEmail(event.target.value)} placeholder="请输入有效邮箱" aria-label="修改候选人邮箱"/><button disabled={emailSaving}>{emailSaving?'保存中':'保存'}</button><button type="button" onClick={()=>{setEditingEmail(false);setEmail(person.email||'');setEmailError('')}}>取消</button>{emailError&&<small>{emailError}</small>}</form>:<button key={fact.type} type="button" className="candidate-email-edit" title="点击修改邮箱" aria-label={`邮箱 ${fact.value}，点击修改`} onClick={()=>setEditingEmail(true)}><CandidateFactIcon type="email"/><b>{fact.value}</b><small>修改</small></button>):<span key={fact.type} title={fact.label} aria-label={`${fact.label} ${fact.value}`}><CandidateFactIcon type={fact.type}/><b>{fact.value}</b></span>)}</div></div><em><b>{displayedScore??'—'}</b><small>{displayedLabel}</small></em></div>
     <CandidateStageStepper stage={person.stage} assignedName={person.assignedHrName} aiCompleted={aiCompleted} interviewCompleted={interviewCompleted} offerAccepted={offerAccepted} canApproveDepartment={canApproveDepartment} advance={advance} requestAssignment={requestAssignment}/>
     {assessment&&<section><h3>HR 人工评估</h3><div className="profile-info"><p><span>综合得分</span>{assessment.total} 分</p><p><span>专业能力</span>{assessment.professional} 分</p><p><span>沟通表达</span>{assessment.communication} 分</p><p><span>文化匹配</span>{assessment.culture} 分</p><p><span>评估人</span>{assessment.reviewer}</p></div><AssessmentComment text={assessment.comment}/></section>}
     <section><h3>AI 面试记录</h3><CandidateInterviewAssessment report={aiInterview}/><AiInterviewRecordings candidateId={person.id}/></section>
     <section><h3>核心技能</h3><div className="channel-tags">{person.skills.length?person.skills.map(skill=><span key={skill}>{skill}</span>):<span>未填写</span>}</div></section>
+    {person.resumeFileName&&<footer className="candidate-resume-action"><a href={`/api/screening/file?candidateId=${person.id}`} target="_blank" rel="noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v5h5M10 12h5M10 16h5"/></svg><span><b>查看简历</b><small>{person.resumeFileName}</small></span><em>↗</em></a></footer>}
   </aside></div>;
 }
 
@@ -795,6 +824,7 @@ function CandidateAssignmentDialog({candidate,accounts,busy,close,submit}:{candi
 
 function Empty({icon,title,text,action,click,compact=false}:{icon?:string;title:string;text:string;action?:string;click?:()=>void;compact?:boolean}){return <div className={'real-empty '+(compact?'compact':'')}>{icon&&<span>{icon}</span>}<h3>{title}</h3><p>{text}</p>{action&&click&&<button onClick={click}>{action}</button>}</div>}
 function formObject(data:FormData){const result:Record<string,unknown>={};data.forEach((value,key)=>{result[key]=value});result.followUp=data.get('followUp')==='on';const scheduledDate=String(data.get('scheduledDate')||'');const scheduledTime=String(data.get('scheduledTime')||'');if(scheduledDate&&scheduledTime){result.scheduledAt=`${scheduledDate}T${scheduledTime}`;delete result.scheduledDate;delete result.scheduledTime}return result}
+function validEmail(value:string){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())}
 function questionKey(question:AiQuestion){return [question.jobId,question.title,question.category,question.questionType,question.duration,question.competency,question.keywords,question.referenceAnswer,question.followUp].map(value=>String(value??'').trim().toLowerCase()).join('\u0000')}
 function compareJobs(first:Job,second:Job){return (jobStatusPriority[first.status]??99)-(jobStatusPriority[second.status]??99)||Date.parse(second.updatedAt)-Date.parse(first.updatedAt)||first.title.localeCompare(second.title,'zh-CN')}
 function candidateName(id:string,people:Candidate[]){return people.find(item=>item.id===id)?.name||'候选人已删除'}

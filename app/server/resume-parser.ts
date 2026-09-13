@@ -144,6 +144,8 @@ export function parseResumeText(value: string): ParsedResume {
   const durations = employmentDurations(text);
   const detectedWorkHistory = datedHistoryEntries(text, 'work');
   const detectedProjectHistory = datedHistoryEntries(text, 'project');
+  const sectionWorkHistory = sectionLines(text, ['工作经历', '工作经验', '职业经历'], ['项目经验', '项目经历', '教育经历', '教育背景', '专业技能', '技能', '证书']);
+  const sectionProjectHistory = mergeWrappedProjectLines(sectionLines(text, ['项目经验', '项目经历'], ['教育经历', '教育背景', '专业技能', '技能', '证书', '自我评价']));
 
   return {
     phone,
@@ -162,8 +164,8 @@ export function parseResumeText(value: string): ParsedResume {
     expectedSalary: parseSalary(salaryText),
     skills: listedSkills.length ? listedSkills : inferSkills(text, role),
     certificates: splitResumeList(certificateText),
-    workHistory: detectedWorkHistory.length ? detectedWorkHistory : sectionLines(text, ['工作经历', '工作经验', '职业经历'], ['项目经验', '教育经历', '教育背景', '专业技能', '技能', '证书']),
-    projectHistory: detectedProjectHistory.length ? detectedProjectHistory : mergeWrappedProjectLines(sectionLines(text, ['项目经验', '项目经历'], ['教育经历', '教育背景', '专业技能', '技能', '证书', '自我评价'])),
+    workHistory: uniqueHistory([...detectedWorkHistory, ...sectionWorkHistory]),
+    projectHistory: uniqueHistory([...detectedProjectHistory, ...sectionProjectHistory, ...labeledProjectEntries(text)]),
   };
 }
 
@@ -480,23 +482,69 @@ function datedHistoryEntries(text: string, kind: 'work' | 'project') {
   const entries: string[] = [];
   const projectSignal = /小程序|APP|应用|平台|系统|项目|模块|商城|直播|网站|客户端|后台|产品|好司机/i;
   const roleSignal = /工程师|经理|主管|总监|专员|顾问|设计师|分析师|架构师|会计|出纳|运营|开发|测试|人事|行政|销售|客服|采购/;
-  const dateRange = /^((?:19|20)\d{2}(?:[.\/年-]\d{1,2})?\s*(?:至|到|[-—–~～])\s*(?:(?:19|20)\d{2}(?:[.\/年-]\d{1,2})?|至今|现在|今))\s*(.+)$/i;
-  for (const rawLine of normalizeResumeText(text).split('\n')) {
-    const line = cleanField(rawLine);
-    const match = line.match(dateRange);
+  const educationSignal = /大学|学院|学校|本科|硕士|博士|大专|专业/;
+  const dateRange = /(((?:19|20)\d{2}(?:[.\/年-]\d{1,2})?)\s*(?:至|到|[-—–~～]{1,2})\s*((?:19|20)\d{2}(?:[.\/年-]\d{1,2})?|至今|现在|今))/i;
+  const lines = normalizeResumeText(text).split('\n').map(line => cleanField(normalizeRepeatedDates(line))).filter(Boolean);
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = lines[index].match(dateRange);
     if (!match) continue;
-    const detail = match[2].trim();
-    const roleIndex = detail.search(roleSignal);
-    if (roleIndex <= 0) continue;
-    const subject = detail.slice(0, roleIndex).replace(/[|｜·•\s]+$/g, '').trim();
-    const role = detail.slice(roleIndex).replace(/^[|｜·•\s]+/g, '').trim();
-    if (!subject || !role) continue;
+    const nearby = [lines[index].replace(match[0], '').trim()];
+    for (let offset = 1; offset <= 4 && index + offset < lines.length; offset += 1) {
+      const next = lines[index + offset];
+      if (dateRange.test(next) || /^(?:教育经历|教育背景|工作经历|工作经验|职业经历|项目经验|项目经历|技能|专业技能|证书|自我评价)$/.test(next)) break;
+      nearby.push(next);
+    }
+    const detail = nearby.filter(Boolean).join(' · ');
+    if (!detail || educationSignal.test(detail) && !roleSignal.test(detail)) continue;
+    const repeatedRole = detail.match(/([\u4e00-\u9fa5A-Za-z0-9+#./-]{2,24}(?:工程师|经理|主管|总监|专员|顾问|设计师|分析师|架构师|会计|出纳|运营|开发|测试|人事|行政|销售|客服|采购))\1/);
+    const roleIndex = repeatedRole?.index ?? detail.search(roleSignal);
+    if (roleIndex < 0 && kind === 'work') continue;
+    const subject = collapseExactDuplicate((roleIndex > 0 ? detail.slice(0, roleIndex) : detail).replace(/[|｜·•\s]+$/g, '').trim());
+    const role = repeatedRole
+      ? collapseExactDuplicate(repeatedRole[0])
+      : roleIndex >= 0 ? cleanField(detail.slice(roleIndex).split(/\s*[|｜·•]\s*/)[0]) : '';
+    if (!subject || kind === 'work' && !role) continue;
     const isProject = projectSignal.test(subject);
     if ((kind === 'project') !== isProject) continue;
-    const value = `${match[1].replace(/\s+/g, '')} · ${subject} · ${role}`;
+    const value = [`${match[2]} — ${match[3]}`, subject, role].filter(Boolean).join(' · ');
     if (!entries.includes(value)) entries.push(value);
   }
   return entries.slice(0, 12);
+}
+
+function labeledProjectEntries(text: string) {
+  const lines = normalizeResumeText(text).split('\n').map(cleanField).filter(Boolean);
+  const entries: string[] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const inlineMatch = lines[index].match(/^项目(?:名称|名)?\s*(?:[：:]\s*(.+)|[（(]([^）)]+)[）)])$/);
+    const inline = inlineMatch?.[1] || inlineMatch?.[2] || '';
+    const standalone = /^(?:项目|项目名称|项目名|项目[一二三四五六七八九十\d]+)$/.test(lines[index]) ? lines[index + 1] : '';
+    const title = cleanField(inline || standalone || '');
+    if (!title || title.length < 3 || /^(?:经验|经历|描述|职责|内容)$/.test(title)) continue;
+    const details = lines.slice(index + (inline ? 1 : 2), index + (inline ? 4 : 5))
+      .filter(line => !/^(?:项目|项目名称|工作经历|教育经历|专业技能|技能|证书|自我评价)$/.test(line))
+      .slice(0, 2);
+    entries.push([title, ...details].join(' · '));
+  }
+  return entries.slice(0, 12);
+}
+
+function normalizeRepeatedDates(value: string) {
+  return value.replace(/((?:19|20)\d{2}(?:[.\/年-]\d{1,2}))\1/g, '$1');
+}
+
+function collapseExactDuplicate(value: string) {
+  let result = value.trim();
+  while (result.length % 2 === 0) {
+    const middle = result.length / 2;
+    if (result.slice(0, middle) !== result.slice(middle)) break;
+    result = result.slice(0, middle).trim();
+  }
+  return result;
+}
+
+function uniqueHistory(items: string[]) {
+  return [...new Set(items.map(cleanField).filter(isReadableHistoryLine))].slice(0, 20);
 }
 
 function isReadableHistoryLine(item: string) {
