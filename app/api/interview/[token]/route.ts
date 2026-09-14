@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { env } from 'cloudflare:workers';
 import { ensureSchema, getDb, hashToken, invitationIdFromShareToken } from '@/app/server/db';
 import { contextualizeSpeechTranscript } from '@/app/speech-context';
-import { weightedQuestionScore } from '@/app/interview-score-weights';
+import { questionMaxScores, weightedQuestionScore } from '@/app/interview-score-weights';
 
 type Question = {
   id:string; title:string; duration:number; questionType:string; competency:string;
@@ -103,12 +103,17 @@ async function invitationForToken(token:string) {
 function parseQuestions(value:string):Question[] {
   try {
     const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.filter(item => item && typeof item === 'object').map(item => ({
+    const questions = Array.isArray(parsed) ? parsed.filter(item => item && typeof item === 'object').map(item => ({
       id:String(item.id || ''), title:String(item.title || ''), duration:clampNumber(item.duration, 30, 900, 120),
       questionType:String(item.questionType || '语音提问'), competency:String(item.competency || ''),
       keywords:String(item.keywords || ''), referenceAnswer:String(item.referenceAnswer || ''),
-      maxScore:clampNumber(item.maxScore, 1, 100, 1),
+      maxScore:Number.isFinite(Number(item.maxScore)) ? clampNumber(item.maxScore, 1, 100, 1) : 0,
     })).filter(item => item.id && item.title) : [];
+    if (questions.reduce((sum, item) => sum + item.maxScore, 0) !== 100) {
+      const legacyScores = questionMaxScores(questions.length);
+      return questions.map((item, index) => ({ ...item, maxScore:legacyScores[index] || 1 }));
+    }
+    return questions;
   } catch { return []; }
 }
 
