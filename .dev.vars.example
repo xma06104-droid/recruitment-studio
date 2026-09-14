@@ -1,3 +1,7 @@
-# Server-only credential used by the AI interview audio transcription route.
-# Copy this file to .dev.vars, add the real value, and restart the local server.
+# Server-only credentials used by the AI interview audio transcription route.
+# Copy this file to .dev.vars, add real values, and restart the local server.
+TENCENT_SECRET_ID=
+TENCENT_SECRET_KEY=
+
+# Optional fallback provider.
 OPENAI_API_KEY=
