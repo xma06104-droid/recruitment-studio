@@ -69,7 +69,7 @@ export async function POST(request:NextRequest, context:{ params:Promise<{ token
   const score = weightedScores.reduce((sum, value) => sum + value, 0);
   const details = questions.map((question, index) => {
     const answer = (contextualAnswers.get(question.id) || '未作答').replace(/\s+/g, ' ');
-    return `${index + 1}. ${question.title}（得分 ${weightedScores[index]}/${maxScores[index]}）\n命中关键词：${results[index].matched.join('、') || '无'}\n回答：${answer}`;
+    return `${index + 1}. ${question.title}（得分 ${weightedScores[index]}/${maxScores[index]}）\n自动评分：${results[index].score}\n命中关键词：${results[index].matched.join('、') || '无'}\n回答：${answer}`;
   });
   const summary = [`AI 题目权重评分：综合 ${score}/100。评分依据各题满分、题目关键词、参考回答、题意与候选人技能综合生成。`, ...details].join('\n\n');
   const now = new Date().toISOString();

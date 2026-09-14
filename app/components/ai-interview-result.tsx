@@ -11,7 +11,7 @@ export type StructuredAiInterviewResult = {
   ratingMax: number;
   duration: string;
   summary: string;
-  dimensions: { name: string; stars: number; score?: number; max?: number; suggestion: string }[];
+  dimensions: { name: string; stars: number; score?: number; max?: number; rawScore?: number; suggestion: string }[];
   presentation: { name: string; score: number; max: number; comment: string }[];
   cognitive?: { score: number; max: number; comment: string };
   personality?: { name: string; score: number }[];
@@ -89,9 +89,10 @@ export function AiInterviewResultPanel({ summary, fallbackScore, durationSeconds
       <div className="structured-ai-dimensions">{result.dimensions.map(item=>{
         const itemScore=usesSystemScore?(item.score??item.stars*20):item.stars;
         const itemMax=usesSystemScore?(item.max??100):5;
+        const shownScore=usesSystemScore?(item.rawScore??Math.round(itemScore/itemMax*100)):itemScore;
         return <article key={item.name}>
-          <div><b>{item.name}</b><em>{usesSystemScore?itemScore:`${itemScore} / ${itemMax}`}</em></div>
-          <i><span style={{width:`${clamp(itemScore/itemMax*100,0,100)}%`}}/></i>
+          <div><b>{item.name}</b><em>{usesSystemScore?shownScore:`${itemScore} / ${itemMax}`}</em></div>
+          <i><span style={{width:`${clamp(usesSystemScore?shownScore:itemScore/itemMax*100,0,100)}%`}}/></i>
           {item.suggestion&&<p>{item.suggestion}</p>}
         </article>;
       })}</div>
@@ -129,6 +130,7 @@ export function normalizeAiInterviewResult(summary:string, fallbackScore:number|
     stars:Math.round(questionScoreRate(item)/20),
     score:resolvedScores[index].score,
     max:resolvedScores[index].max,
+    rawScore:Math.round(questionScoreRate(item)),
     suggestion:[item.keywords&&item.keywords!=='无'?`命中关键词：${item.keywords}`:'未命中配置关键词',item.answer&&item.answer!=='未作答'?`完整转写：${item.answer}`:'本题未有效作答'].join('；'),
   }));
   const presentation=[
@@ -162,13 +164,14 @@ function parseLegacyInterviewSummary(summary:string){
     const heading=(lines.shift()||'').match(/^(\d+)\.\s*(.*?)（(?:得分\s*)?(?:(\d+)\s*\/\s*(\d+)|(\d+)分)）\s*$/);
     if(!heading)return null;
     const keywordLine=lines.find(line=>line.startsWith('命中关键词：'))||'';
+    const rawScoreLine=lines.find(line=>line.startsWith('自动评分：'))||'';
     const answerIndex=lines.findIndex(line=>line.startsWith('回答：'));
-    return {number:Number(heading[1]),question:heading[2].trim(),score:Number(heading[3]||heading[5]),max:heading[4]?Number(heading[4]):null,keywords:keywordLine.replace(/^命中关键词：/,'').trim()||'无',answer:answerIndex>=0?lines.slice(answerIndex).join('\n').replace(/^回答：/,'').trim():'未作答'};
+    return {number:Number(heading[1]),question:heading[2].trim(),score:Number(heading[3]||heading[5]),max:heading[4]?Number(heading[4]):null,rawScore:rawScoreLine?Number(rawScoreLine.replace(/^自动评分：/,'').trim()):null,keywords:keywordLine.replace(/^命中关键词：/,'').trim()||'无',answer:answerIndex>=0?lines.slice(answerIndex).join('\n').replace(/^回答：/,'').trim():'未作答'};
   }).filter(Boolean) as LegacyQuestionScore[];
   return {intro,items};
 }
 
-type LegacyQuestionScore={number:number;question:string;score:number;max:number|null;keywords:string;answer:string};
+type LegacyQuestionScore={number:number;question:string;score:number;max:number|null;rawScore:number|null;keywords:string;answer:string};
 
 function resolveQuestionScores(items:LegacyQuestionScore[]){
   const defaults=questionMaxScores(items.length);
@@ -180,6 +183,7 @@ function resolveQuestionScores(items:LegacyQuestionScore[]){
 }
 
 function questionScoreRate(item:LegacyQuestionScore){
+  if(item.rawScore!==null)return clamp(item.rawScore,0,100);
   return item.max===null?clamp(item.score,0,100):clamp(item.score/Math.max(1,item.max)*100,0,100);
 }
 

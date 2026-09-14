@@ -580,7 +580,7 @@ function AiInterviewSession({candidate,questions,flash,close,complete}:{candidat
     const details=questions.map((item,itemIndex)=>{
       const itemScore=finalScores[itemIndex];
       const itemAnswer=contextualizeSpeechTranscript(transcriptRef.current[item.id]||answers[item.id]||'未作答',candidate.role,item).replace(/\s+/g,' ');
-      return `${itemIndex+1}. ${item.title}（得分 ${weightedScores[itemIndex]}/${maxScores[itemIndex]}）\n命中关键词：${itemScore.matched.join('、')||'无'}\n回答：${itemAnswer}`;
+      return `${itemIndex+1}. ${item.title}（得分 ${weightedScores[itemIndex]}/${maxScores[itemIndex]}）\n自动评分：${itemScore.score}\n命中关键词：${itemScore.matched.join('、')||'无'}\n回答：${itemAnswer}`;
     });
     const summary=[`AI 题目权重评分：综合 ${overall}/100。评分依据各题满分、题目关键词、参考回答、题意与候选人技能综合生成。`,...details].join('\n\n');
     setSaving(true);
