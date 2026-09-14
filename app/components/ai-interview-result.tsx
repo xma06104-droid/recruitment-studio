@@ -52,6 +52,11 @@ export function aiResultScoreLabel(summary: string, fallback: number | null) {
 export function aiInterviewQuestionTotal(summary:string,fallbackScore:number|null){
   const result=normalizeAiInterviewResult(summary,fallbackScore);
   if(result.source!=='system-interview')return null;
+  const items=parseLegacyInterviewSummary(summary).items;
+  if(items.length)return {
+    score:items.reduce((sum,item)=>sum+Math.round(clamp(item.score,0,100)),0),
+    max:100,
+  };
   return {
     score:fallbackScore===null?0:Math.round(clamp(fallbackScore,0,100)),
     max:100,
@@ -63,13 +68,14 @@ export function AiInterviewResultPanel({ summary, fallbackScore, durationSeconds
   const usesQuestionTotal=result.source==='system-interview'&&result.dimensions.length>0;
   const questionTotal=result.dimensions.reduce((total,item)=>total+item.stars,0);
   const usesSystemScore=result.source==='system-interview';
-  const displayScore=usesSystemScore?(fallbackScore===null?0:Math.round(clamp(fallbackScore,0,100))):result.rating;
-  const displayMax=usesSystemScore?100:result.ratingMax;
+  const systemTotal=aiInterviewQuestionTotal(summary,fallbackScore);
+  const displayScore=systemTotal?.score??result.rating;
+  const displayMax=systemTotal?.max??result.ratingMax;
   const averageRating=usesQuestionTotal?questionTotal/result.dimensions.length:result.rating;
   const stars = Array.from({ length:result.ratingMax }, (_, index) => index < Math.round(averageRating) ? '★' : '☆').join('');
   return <div className={`structured-ai-result${compact?' compact':''}`}>
     <section className="structured-ai-hero">
-      <div><strong>{displayScore}</strong><span>/ {displayMax}</span><small>{usesSystemScore?'综合得分':'综合评价'}</small></div>
+      <div><strong>{displayScore}</strong><span>/ {displayMax}</span><small>{usesSystemScore?'综合总分':'综合评价'}</small></div>
       <div><b aria-label={`平均 ${averageRating.toFixed(1)} 星`}>{stars}</b><p>{result.summary}</p>{(result.duration||result.completedAt)&&<time>{result.duration&&`面试用时：${result.duration}`}{result.duration&&result.completedAt?'　·　':''}{result.completedAt&&`完成于 ${result.completedAt}`}</time>}</div>
     </section>
 
