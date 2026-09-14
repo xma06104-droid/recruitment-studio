@@ -111,7 +111,7 @@ export function normalizeAiInterviewResult(summary:string, fallbackScore:number|
   const dimensions=parsed.items.map(item=>({
     name:`第 ${item.number} 题 · ${item.question}`,
     stars:Math.round(clamp(item.score,0,100)/20),
-    suggestion:[`自动评分 ${item.score}/100`,item.keywords&&item.keywords!=='无'?`命中关键词：${item.keywords}`:'未命中配置关键词',item.answer&&item.answer!=='未作答'?`回答摘要：${item.answer.slice(0,120)}`:'本题未有效作答'].join('；'),
+    suggestion:[`自动评分 ${item.score}/100`,item.keywords&&item.keywords!=='无'?`命中关键词：${item.keywords}`:'未命中配置关键词',item.answer&&item.answer!=='未作答'?`完整转写：${item.answer}`:'本题未有效作答'].join('；'),
   }));
   const presentation=[
     {name:'综合匹配度',score,max:100,comment:'基于面试题、岗位关键词和候选人实际回答生成的系统原始评分。'},

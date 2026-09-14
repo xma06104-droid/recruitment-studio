@@ -575,10 +575,10 @@ function AiInterviewSession({candidate,questions,flash,close,complete}:{candidat
     const overall=Math.round(finalScores.reduce((sum,item)=>sum+item.score,0)/Math.max(1,finalScores.length));
     const details=questions.map((item,itemIndex)=>{
       const itemScore=finalScores[itemIndex];
-      const itemAnswer=contextualizeSpeechTranscript(transcriptRef.current[item.id]||answers[item.id]||'未作答',candidate.role,item).replace(/\s+/g,' ').slice(0,360);
+      const itemAnswer=contextualizeSpeechTranscript(transcriptRef.current[item.id]||answers[item.id]||'未作答',candidate.role,item).replace(/\s+/g,' ');
       return `${itemIndex+1}. ${item.title}（${itemScore.score}分）\n命中关键词：${itemScore.matched.join('、')||'无'}\n回答：${itemAnswer}`;
     });
-    const summary=[`AI 关键词自动评分：综合 ${overall} 分。评分依据题目关键词、参考回答、题意与候选人技能综合生成。`,...details].join('\n\n').slice(0,4000);
+    const summary=[`AI 关键词自动评分：综合 ${overall} 分。评分依据题目关键词、参考回答、题意与候选人技能综合生成。`,...details].join('\n\n');
     setSaving(true);
     const saved=await complete({candidateId:candidate.id,jobTitle:candidate.role,score:overall,durationMinutes:Math.max(1,Math.ceil((Date.now()-startedAt.current)/60000)),summary});
     if(!saved){setSaving(false);submittingQuestionRef.current=''}

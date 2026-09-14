@@ -54,7 +54,7 @@ export async function POST(request:NextRequest, context:{ params:Promise<{ token
   const submitted = Array.isArray(body?.answers) ? body.answers : [];
   const answerMap = new Map(submitted.slice(0, questions.length).map(item => {
     const entry = item && typeof item === 'object' ? item as Record<string,unknown> : {};
-    return [String(entry.questionId || ''), String(entry.answer || '').trim().slice(0, 3000)];
+    return [String(entry.questionId || ''), String(entry.answer || '').trim()];
   }));
   if (!questions.length) return failure('本次面试未配置有效题目。', 400);
   const contextualAnswers = new Map(questions.map(question => [
@@ -65,10 +65,10 @@ export async function POST(request:NextRequest, context:{ params:Promise<{ token
   const results = questions.map(question => scoreAnswer(contextualAnswers.get(question.id) || '', question, skills));
   const score = Math.round(results.reduce((sum, result) => sum + result.score, 0) / questions.length);
   const details = questions.map((question, index) => {
-    const answer = (contextualAnswers.get(question.id) || '未作答').replace(/\s+/g, ' ').slice(0, 1000);
+    const answer = (contextualAnswers.get(question.id) || '未作答').replace(/\s+/g, ' ');
     return `${index + 1}. ${question.title}（${results[index].score}分）\n命中关键词：${results[index].matched.join('、') || '无'}\n回答：${answer}`;
   });
-  const summary = [`AI 关键词自动评分：综合 ${score} 分。评分依据题目关键词、参考回答、题意与候选人技能综合生成。`, ...details].join('\n\n').slice(0, 12000);
+  const summary = [`AI 关键词自动评分：综合 ${score} 分。评分依据题目关键词、参考回答、题意与候选人技能综合生成。`, ...details].join('\n\n');
   const now = new Date().toISOString();
   const durationSeconds = clampNumber(body?.durationSeconds, 1, 21600, 60);
   const db = getDb();
