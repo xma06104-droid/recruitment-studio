@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { env } from 'cloudflare:workers';
 import { ensureSchema, getDb, hashToken, invitationIdFromShareToken } from '@/app/server/db';
 import { contextualizeSpeechTranscript } from '@/app/speech-context';
+import { questionMaxScores, weightedQuestionScore } from '@/app/interview-score-weights';
 
 type Question = {
   id:string; title:string; duration:number; questionType:string; competency:string;
@@ -63,12 +64,14 @@ export async function POST(request:NextRequest, context:{ params:Promise<{ token
   ]));
   const skills = jsonList(invitation.skills_json);
   const results = questions.map(question => scoreAnswer(contextualAnswers.get(question.id) || '', question, skills));
-  const score = Math.round(results.reduce((sum, result) => sum + result.score, 0) / questions.length);
+  const maxScores = questionMaxScores(questions.length);
+  const weightedScores = results.map((result, index) => weightedQuestionScore(result.score, maxScores[index] || 1));
+  const score = weightedScores.reduce((sum, value) => sum + value, 0);
   const details = questions.map((question, index) => {
     const answer = (contextualAnswers.get(question.id) || '未作答').replace(/\s+/g, ' ');
-    return `${index + 1}. ${question.title}（${results[index].score}分）\n命中关键词：${results[index].matched.join('、') || '无'}\n回答：${answer}`;
+    return `${index + 1}. ${question.title}（得分 ${weightedScores[index]}/${maxScores[index]}）\n命中关键词：${results[index].matched.join('、') || '无'}\n回答：${answer}`;
   });
-  const summary = [`AI 关键词自动评分：综合 ${score} 分。评分依据题目关键词、参考回答、题意与候选人技能综合生成。`, ...details].join('\n\n');
+  const summary = [`AI 题目权重评分：综合 ${score}/100。评分依据各题满分、题目关键词、参考回答、题意与候选人技能综合生成。`, ...details].join('\n\n');
   const now = new Date().toISOString();
   const durationSeconds = clampNumber(body?.durationSeconds, 1, 21600, 60);
   const db = getDb();

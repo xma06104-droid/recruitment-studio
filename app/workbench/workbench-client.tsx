@@ -9,6 +9,7 @@ import AiInterviewRecordings from '@/app/components/ai-interview-recordings';
 import RoleManagement from '@/app/components/role-management';
 import { CANDIDATE_STAGES, candidateStageIndex, normalizeCandidateStage } from '@/app/candidate-stages';
 import { CHINA_CITIES, CHINA_CITY_GROUPS } from '@/app/china-cities';
+import { questionMaxScores, weightedQuestionScore } from '@/app/interview-score-weights';
 
 type Account = { id:string; contact:string; phone:string; email:string; role:'super_admin'|'hr'; createdAt:string };
 type Job = { id:string; title:string; department:string; city:string; status:string; headcount:number; ownerName:string; createdAt:string; updatedAt:string };
@@ -573,13 +574,15 @@ function AiInterviewSession({candidate,questions,flash,close,complete}:{candidat
 
   async function finishInterview(currentScore:AnswerScore){
     const finalScores=questions.map(item=>item.id===question.id?currentScore:scores[item.id]||scoreInterviewAnswer(contextualizeSpeechTranscript(transcriptRef.current[item.id]||answers[item.id]||'',candidate.role,item),item,candidate));
-    const overall=Math.round(finalScores.reduce((sum,item)=>sum+item.score,0)/Math.max(1,finalScores.length));
+    const maxScores=questionMaxScores(questions.length);
+    const weightedScores=finalScores.map((item,itemIndex)=>weightedQuestionScore(item.score,maxScores[itemIndex]||1));
+    const overall=weightedScores.reduce((sum,item)=>sum+item,0);
     const details=questions.map((item,itemIndex)=>{
       const itemScore=finalScores[itemIndex];
       const itemAnswer=contextualizeSpeechTranscript(transcriptRef.current[item.id]||answers[item.id]||'未作答',candidate.role,item).replace(/\s+/g,' ');
-      return `${itemIndex+1}. ${item.title}（${itemScore.score}分）\n命中关键词：${itemScore.matched.join('、')||'无'}\n回答：${itemAnswer}`;
+      return `${itemIndex+1}. ${item.title}（得分 ${weightedScores[itemIndex]}/${maxScores[itemIndex]}）\n命中关键词：${itemScore.matched.join('、')||'无'}\n回答：${itemAnswer}`;
     });
-    const summary=[`AI 关键词自动评分：综合 ${overall} 分。评分依据题目关键词、参考回答、题意与候选人技能综合生成。`,...details].join('\n\n');
+    const summary=[`AI 题目权重评分：综合 ${overall}/100。评分依据各题满分、题目关键词、参考回答、题意与候选人技能综合生成。`,...details].join('\n\n');
     setSaving(true);
     const saved=await complete({candidateId:candidate.id,jobTitle:candidate.role,score:overall,durationMinutes:Math.max(1,Math.ceil((Date.now()-startedAt.current)/60000)),summary});
     if(!saved){setSaving(false);submittingQuestionRef.current=''}

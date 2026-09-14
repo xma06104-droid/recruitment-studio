@@ -1,5 +1,7 @@
 'use client';
 
+import { questionMaxScores, weightedQuestionScore } from '@/app/interview-score-weights';
+
 export const AI_REPORT_PREFIX = '__AI_REPORT_V1__';
 
 export type StructuredAiInterviewResult = {
@@ -53,10 +55,13 @@ export function aiInterviewQuestionTotal(summary:string,fallbackScore:number|nul
   const result=normalizeAiInterviewResult(summary,fallbackScore);
   if(result.source!=='system-interview')return null;
   const items=parseLegacyInterviewSummary(summary).items;
-  if(items.length)return {
-    score:items.reduce((sum,item)=>sum+Math.round(clamp(item.score,0,100)),0),
-    max:100,
-  };
+  if(items.length){
+    const scores=resolveQuestionScores(items);
+    return {
+      score:scores.reduce((sum,item)=>sum+item.score,0),
+      max:scores.reduce((sum,item)=>sum+item.max,0),
+    };
+  }
   return {
     score:fallbackScore===null?0:Math.round(clamp(fallbackScore,0,100)),
     max:100,
@@ -80,7 +85,7 @@ export function AiInterviewResultPanel({ summary, fallbackScore, durationSeconds
     </section>
 
     {result.dimensions.length>0&&<section className="structured-ai-section">
-      <header><h3>能力维度与答题表现</h3><span>{usesSystemScore?'统一量纲：100 分':'统一量纲：5 星'}</span></header>
+      <header><h3>能力维度与答题表现</h3><span>{usesSystemScore?'各题满分合计：100 分':'统一量纲：5 星'}</span></header>
       <div className="structured-ai-dimensions">{result.dimensions.map(item=>{
         const itemScore=usesSystemScore?(item.score??item.stars*20):item.stars;
         const itemMax=usesSystemScore?(item.max??100):5;
@@ -117,13 +122,14 @@ export function normalizeAiInterviewResult(summary:string, fallbackScore:number|
   const score=clamp(fallbackScore,0,100);
   const answered=parsed.items.filter(item=>item.answer&&item.answer!=='未作答').length;
   const answerRate=parsed.items.length?Math.round(answered/parsed.items.length*100):score;
-  const weakItems=parsed.items.filter(item=>item.score<60).sort((a,b)=>a.score-b.score).slice(0,3);
-  const dimensions=parsed.items.map(item=>({
+  const resolvedScores=resolveQuestionScores(parsed.items);
+  const weakItems=parsed.items.filter(item=>questionScoreRate(item)<60).sort((a,b)=>questionScoreRate(a)-questionScoreRate(b)).slice(0,3);
+  const dimensions=parsed.items.map((item,index)=>({
     name:`第 ${item.number} 题 · ${item.question}`,
-    stars:Math.round(clamp(item.score,0,100)/20),
-    score:Math.round(clamp(item.score,0,100)),
-    max:100,
-    suggestion:[`自动评分 ${item.score}/100`,item.keywords&&item.keywords!=='无'?`命中关键词：${item.keywords}`:'未命中配置关键词',item.answer&&item.answer!=='未作答'?`完整转写：${item.answer}`:'本题未有效作答'].join('；'),
+    stars:Math.round(questionScoreRate(item)/20),
+    score:resolvedScores[index].score,
+    max:resolvedScores[index].max,
+    suggestion:[item.keywords&&item.keywords!=='无'?`命中关键词：${item.keywords}`:'未命中配置关键词',item.answer&&item.answer!=='未作答'?`完整转写：${item.answer}`:'本题未有效作答'].join('；'),
   }));
   const presentation=[
     {name:'综合匹配度',score,max:100,comment:'基于面试题、岗位关键词和候选人实际回答生成的系统原始评分。'},
@@ -153,13 +159,28 @@ function parseLegacyInterviewSummary(summary:string){
   const intro=(blocks.shift()||'').trim();
   const items=blocks.map(block=>{
     const lines=block.split('\n');
-    const heading=(lines.shift()||'').match(/^(\d+)\.\s*(.*?)（(\d+)分）\s*$/);
+    const heading=(lines.shift()||'').match(/^(\d+)\.\s*(.*?)（(?:得分\s*)?(?:(\d+)\s*\/\s*(\d+)|(\d+)分)）\s*$/);
     if(!heading)return null;
     const keywordLine=lines.find(line=>line.startsWith('命中关键词：'))||'';
     const answerIndex=lines.findIndex(line=>line.startsWith('回答：'));
-    return {number:Number(heading[1]),question:heading[2].trim(),score:Number(heading[3]),keywords:keywordLine.replace(/^命中关键词：/,'').trim()||'无',answer:answerIndex>=0?lines.slice(answerIndex).join('\n').replace(/^回答：/,'').trim():'未作答'};
-  }).filter(Boolean) as {number:number;question:string;score:number;keywords:string;answer:string}[];
+    return {number:Number(heading[1]),question:heading[2].trim(),score:Number(heading[3]||heading[5]),max:heading[4]?Number(heading[4]):null,keywords:keywordLine.replace(/^命中关键词：/,'').trim()||'无',answer:answerIndex>=0?lines.slice(answerIndex).join('\n').replace(/^回答：/,'').trim():'未作答'};
+  }).filter(Boolean) as LegacyQuestionScore[];
   return {intro,items};
+}
+
+type LegacyQuestionScore={number:number;question:string;score:number;max:number|null;keywords:string;answer:string};
+
+function resolveQuestionScores(items:LegacyQuestionScore[]){
+  const defaults=questionMaxScores(items.length);
+  return items.map((item,index)=>{
+    if(item.max!==null)return {score:Math.round(clamp(item.score,0,item.max)),max:Math.round(clamp(item.max,1,100))};
+    const max=defaults[index]||1;
+    return {score:weightedQuestionScore(item.score,max),max};
+  });
+}
+
+function questionScoreRate(item:LegacyQuestionScore){
+  return item.max===null?clamp(item.score,0,100):clamp(item.score/Math.max(1,item.max)*100,0,100);
 }
 
 function buildCandidateFocus(items:{question:string;score:number;answer:string}[],answerRate:number){
