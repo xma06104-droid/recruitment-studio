@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useWorkbenchSync } from '@/app/workbench-sync';
 import HrAccountMenu from '@/app/components/hr-account-menu';
 import { CANDIDATE_STAGES } from '@/app/candidate-stages';
+import { HR_WORKBENCH_CACHE, readHrSessionCache, writeHrSessionCache } from '@/app/hr-session-cache';
 
 type Account={contact:string;phone:string;email:string;role:'super_admin'|'hr'};
 type Job={id:string;title:string;department:string;city:string;status:string};
@@ -16,15 +18,15 @@ const menuItems=[{icon:'◉',label:'候选人筛选',href:'/interviewer-candidat
 
 export default function RecruitmentProgressClient(){
   const [data,setData]=useState<Dataset|null>(null);const [error,setError]=useState('');const [keyword,setKeyword]=useState('');const [jobId,setJobId]=useState('');const [stage,setStage]=useState('全部');
-  async function load(){const response=await fetch('/api/workbench',{cache:'no-store'});if(response.status===401){window.location.assign('/');return}if(!response.ok)throw new Error('load');setData(await response.json() as Dataset)}
-  useEffect(()=>{void load().catch(()=>setError('招聘进展数据加载失败，请稍后刷新。'))},[]);
+  async function load(){const response=await fetch('/api/workbench',{cache:'no-store'});if(response.status===401){window.location.assign('/');return}if(!response.ok)throw new Error('load');const result=await response.json() as Dataset;setData(result);writeHrSessionCache(HR_WORKBENCH_CACHE,result)}
+  useEffect(()=>{const cached=readHrSessionCache<Dataset>(HR_WORKBENCH_CACHE);if(cached)setData(cached);void load().catch(()=>{if(!cached)setError('招聘进展数据加载失败，请稍后刷新。')})},[]);
   useWorkbenchSync(()=>load().catch(()=>undefined));
   const visible=useMemo(()=>data?.candidates.filter(person=>{const job=data.jobs.find(item=>item.id===person.jobId);const text=`${person.name}${person.phone}${person.role}${person.company}${job?.title||''}`.toLowerCase();return(!keyword||text.includes(keyword.toLowerCase()))&&(!jobId||person.jobId===jobId)&&(stage==='全部'||person.stage===stage)}).sort((a,b)=>new Date(b.updatedAt).getTime()-new Date(a.updatedAt).getTime())||[],[data,keyword,jobId,stage]);
   if(!data)return <main className="interviewer-loading"><span>星</span><b>{error||'正在读取招聘进展…'}</b>{error&&<button onClick={()=>window.location.reload()}>重新加载</button>}</main>;
   const groups=stages.map(label=>({label,count:data.candidates.filter(item=>item.stage===label).length}));
   const max=Math.max(1,...groups.map(item=>item.count));
-  return <main className="interviewer-page"><aside className="interviewer-rail"><a className="interviewer-logo" href="/workbench"><span>星</span><b>星鉴人才<small>HIRING DEPARTMENT</small></b></a><p className="interviewer-role-label">HR 工作台</p><nav>{menuItems.map(item=><a key={item.label} className={item.label==='招聘进展'?'active':''} href={item.href}><i>{item.icon}</i><span>{item.label}</span></a>)}</nav><button type="button">«</button></aside>
-    <section className="interviewer-main"><header className="interviewer-header"><div className="interviewer-heading"><h1>招聘进展</h1><small>HR 候选人工作台</small></div><div className="interviewer-tools"><div className="interviewer-global-search"><input value={keyword} onChange={event=>setKeyword(event.target.value)} placeholder="搜索候选人或职位"/><button type="button">⌕</button></div><HrAccountMenu contact={data.account.contact} phone={data.account.phone} email={data.account.email} role={data.account.role}/></div></header><div className="interviewer-open-tabs"><a href="/interviewer-candidate">候选人筛选</a><i>›</i><button type="button" className="active">招聘进展</button></div>
+  return <main className="interviewer-page"><aside className="interviewer-rail"><Link className="interviewer-logo" href="/workbench"><span>星</span><b>星鉴人才<small>HIRING DEPARTMENT</small></b></Link><p className="interviewer-role-label">HR 工作台</p><nav>{menuItems.map(item=><Link key={item.label} className={item.label==='招聘进展'?'active':''} href={item.href}><i>{item.icon}</i><span>{item.label}</span></Link>)}</nav><button type="button">«</button></aside>
+    <section className="interviewer-main"><header className="interviewer-header"><div className="interviewer-heading"><h1>招聘进展</h1><small>HR 候选人工作台</small></div><div className="interviewer-tools"><div className="interviewer-global-search"><input value={keyword} onChange={event=>setKeyword(event.target.value)} placeholder="搜索候选人或职位"/><button type="button">⌕</button></div><HrAccountMenu contact={data.account.contact} phone={data.account.phone} email={data.account.email} role={data.account.role}/></div></header><div className="interviewer-open-tabs"><Link href="/interviewer-candidate">候选人筛选</Link><i>›</i><button type="button" className="active">招聘进展</button></div>
       <div className="hr-module-content"><section className="hr-module-hero"><div><p>RECRUITMENT PIPELINE</p><h2>招聘流程总览</h2><span>根据当前账号的候选人、面试和 Offer 记录实时汇总</span></div><div className="progress-summary"><span>{data.jobs.filter(job=>['招聘中','急聘'].includes(job.status)).length} 个招聘中职位</span><b>{data.candidates.length} 位候选人</b></div></section>
         <section className="progress-funnel">{groups.map((item,index)=><article key={item.label}><div><span>{String(index+1).padStart(2,'0')}</span><b>{item.label}</b><strong>{item.count}</strong></div><i><em style={{width:`${Math.max(item.count?8:0,item.count/max*100)}%`}}/></i><small>{`${Math.round(item.count/Math.max(1,data.candidates.length)*100)}% 总体占比`}</small></article>)}</section>
         <section className="hr-filter-bar"><select value={jobId} onChange={event=>setJobId(event.target.value)}><option value="">全部职位</option>{data.jobs.map(job=><option key={job.id} value={job.id}>{job.title}</option>)}</select><select value={stage} onChange={event=>setStage(event.target.value)}><option>全部</option>{stages.map(item=><option key={item}>{item}</option>)}</select><button type="button" onClick={()=>{setJobId('');setStage('全部');setKeyword('')}}>重置筛选</button><span>共 {visible.length} 位</span></section>

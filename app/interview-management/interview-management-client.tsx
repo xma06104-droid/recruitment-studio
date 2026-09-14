@@ -1,8 +1,10 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { announceWorkbenchChange, useWorkbenchSync } from '@/app/workbench-sync';
 import HrAccountMenu from '@/app/components/hr-account-menu';
+import { HR_WORKBENCH_CACHE, readHrSessionCache, writeHrSessionCache } from '@/app/hr-session-cache';
 
 type Account={contact:string;phone:string;email:string;role:'super_admin'|'hr'};
 type Job={id:string;title:string;department:string;city:string;status:string};
@@ -14,8 +16,8 @@ const menuItems=[{icon:'◉',label:'候选人筛选',href:'/interviewer-candidat
 
 export default function InterviewManagementClient(){
   const [data,setData]=useState<Dataset|null>(null);const [error,setError]=useState('');const [keyword,setKeyword]=useState('');const [status,setStatus]=useState('全部');const [jobId,setJobId]=useState('');const [date,setDate]=useState('');const [modal,setModal]=useState(false);const [saving,setSaving]=useState(false);const [toast,setToast]=useState('');
-  async function load(){const response=await fetch('/api/workbench',{cache:'no-store'});if(response.status===401){window.location.assign('/');return}if(!response.ok)throw new Error('load');setData(await response.json() as Dataset)}
-  useEffect(()=>{void load().catch(()=>setError('面试数据加载失败，请稍后刷新。'))},[]);
+  async function load(){const response=await fetch('/api/workbench',{cache:'no-store'});if(response.status===401){window.location.assign('/');return}if(!response.ok)throw new Error('load');const result=await response.json() as Dataset;setData(result);writeHrSessionCache(HR_WORKBENCH_CACHE,result)}
+  useEffect(()=>{const cached=readHrSessionCache<Dataset>(HR_WORKBENCH_CACHE);if(cached)setData(cached);void load().catch(()=>{if(!cached)setError('面试数据加载失败，请稍后刷新。')})},[]);
   useWorkbenchSync(()=>load().catch(()=>undefined));
   const visible=useMemo(()=>data?.interviews.filter(item=>{const person=data.candidates.find(candidate=>candidate.id===item.candidateId);const text=`${person?.name||''}${person?.role||''}${item.interviewer}${item.round}${item.mode}`.toLowerCase();return(!keyword||text.includes(keyword.toLowerCase()))&&(status==='全部'||item.status===status)&&(!jobId||person?.jobId===jobId)&&(!date||localDate(item.scheduledAt)===date)}).sort((a,b)=>new Date(a.scheduledAt).getTime()-new Date(b.scheduledAt).getTime())||[],[data,keyword,status,jobId,date]);
   function flash(message:string){setToast(message);window.setTimeout(()=>setToast(''),2200)}
@@ -31,9 +33,9 @@ export default function InterviewManagementClient(){
     </div></section>{modal&&<div className="assessment-modal-backdrop" onMouseDown={event=>{if(event.target===event.currentTarget)setModal(false)}}><form className="assessment-modal interview-create-modal" onSubmit={createInterview}><button type="button" className="assessment-modal-close" onClick={()=>setModal(false)}>×</button><p>NEW INTERVIEW</p><h2>安排面试</h2><small>新日程将保存到当前账号并同步至招聘工作台</small><label>候选人<select required name="candidateId" defaultValue=""><option value="" disabled>请选择候选人</option>{data.candidates.map(person=><option key={person.id} value={person.id}>{person.name} · {person.role}</option>)}</select></label><div className="hr-form-grid"><label>日期<input required name="date" type="date" min={today}/></label><label>时间<input required name="time" type="time" step="300"/></label></div><div className="hr-form-grid"><label>面试轮次<input name="round" placeholder="例如：业务一面"/></label><label>面试方式<select name="mode" defaultValue="视频面试"><option>视频面试</option><option>电话面试</option><option>线下面试</option></select></label></div><footer><button type="button" onClick={()=>setModal(false)}>取消</button><button type="submit" disabled={saving}>{saving?'保存中…':'保存面试'}</button></footer></form></div>}{toast&&<div className="interviewer-toast">{toast}</div>}</main>;
 }
 
-function Sidebar({active}:{active:string}){return <aside className="interviewer-rail"><a className="interviewer-logo" href="/workbench"><span>星</span><b>星鉴人才<small>HIRING DEPARTMENT</small></b></a><p className="interviewer-role-label">HR 工作台</p><nav>{menuItems.map(item=><a key={item.label} className={item.label===active?'active':''} href={item.href}><i>{item.icon}</i><span>{item.label}</span></a>)}</nav><button type="button">«</button></aside>}
+function Sidebar({active}:{active:string}){return <aside className="interviewer-rail"><Link className="interviewer-logo" href="/workbench"><span>星</span><b>星鉴人才<small>HIRING DEPARTMENT</small></b></Link><p className="interviewer-role-label">HR 工作台</p><nav>{menuItems.map(item=><Link key={item.label} className={item.label===active?'active':''} href={item.href}><i>{item.icon}</i><span>{item.label}</span></Link>)}</nav><button type="button">«</button></aside>}
 function Header({title,account,keyword,setKeyword}:{title:string;account:Account;keyword:string;setKeyword:(value:string)=>void}){return <header className="interviewer-header"><div className="interviewer-heading"><h1>{title}</h1><small>HR 候选人工作台</small></div><div className="interviewer-tools"><div className="interviewer-global-search"><input value={keyword} onChange={event=>setKeyword(event.target.value)} placeholder="搜索候选人、职位或面试官"/><button type="button">⌕</button></div><HrAccountMenu contact={account.contact} phone={account.phone} email={account.email} role={account.role}/></div></header>}
-function Crumbs({title}:{title:string}){return <div className="interviewer-open-tabs"><a href="/interviewer-candidate">候选人筛选</a><i>›</i><button type="button" className="active">{title}</button></div>}
+function Crumbs({title}:{title:string}){return <div className="interviewer-open-tabs"><Link href="/interviewer-candidate">候选人筛选</Link><i>›</i><button type="button" className="active">{title}</button></div>}
 function Loading({error}:{error:string}){return <main className="interviewer-loading"><span>星</span><b>{error||'正在读取数据…'}</b>{error&&<button onClick={()=>window.location.reload()}>重新加载</button>}</main>}
 function Empty({title,text}:{title:string;text:string}){return <div className="interviewer-empty"><span>◷</span><b>{title}</b><p>{text}</p></div>}
 function localDate(value:string){const date=new Date(value);return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`}

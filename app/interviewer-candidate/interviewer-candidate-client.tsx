@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { announceWorkbenchChange, useWorkbenchSync } from '@/app/workbench-sync';
 import { AiInterviewResultPanel } from '@/app/components/ai-interview-result';
 import AiInterviewRecordings from '@/app/components/ai-interview-recordings';
 import HrAccountMenu from '@/app/components/hr-account-menu';
-import { CANDIDATE_STAGES } from '@/app/candidate-stages';
+import { HR_SCREENING_CACHE, HR_WORKBENCH_CACHE, readHrSessionCache, writeHrSessionCache } from '@/app/hr-session-cache';
 
 type Account = { contact:string; phone:string; email:string; role:'super_admin'|'hr' };
 type Job = { id:string; title:string; department:string; city:string; status:string; ownerName:string; createdAt:string };
@@ -40,10 +41,6 @@ export default function InterviewerCandidateClient() {
   const [reviews,setReviews]=useState<Review[]>([]);
   const [detailId,setDetailId]=useState('');
   const [savingId,setSavingId]=useState('');
-  const [batchStageOpen,setBatchStageOpen]=useState(false);
-  const [batchStage,setBatchStage]=useState<string>('待定');
-  const [batchReason,setBatchReason]=useState('');
-  const [batchSaving,setBatchSaving]=useState(false);
 
   async function load(){
     const [workbenchResponse,screeningResponse]=await Promise.all([
@@ -54,14 +51,22 @@ export default function InterviewerCandidateClient() {
     if(!workbenchResponse.ok)throw new Error('load');
     const result=await workbenchResponse.json() as Dataset;
     setData(result);
+    writeHrSessionCache(HR_WORKBENCH_CACHE,result);
     if(screeningResponse.ok){
       const screening=await screeningResponse.json() as ScreeningData;
       setProfiles(screening.profiles||[]);
       setReviews(screening.reviews||[]);
+      writeHrSessionCache(HR_SCREENING_CACHE,screening);
     }
     setError('');
   }
-  useEffect(()=>{void load().catch(()=>setError('候选人数据加载失败，请稍后刷新。'))},[]);
+  useEffect(()=>{
+    const cached=readHrSessionCache<Dataset>(HR_WORKBENCH_CACHE);
+    const cachedScreening=readHrSessionCache<ScreeningData>(HR_SCREENING_CACHE);
+    if(cached)setData(cached);
+    if(cachedScreening){setProfiles(cachedScreening.profiles||[]);setReviews(cachedScreening.reviews||[])}
+    void load().catch(()=>{if(!cached)setError('候选人数据加载失败，请稍后刷新。')});
+  },[]);
   useWorkbenchSync(()=>load().catch(()=>undefined));
 
   const jobs=useMemo(()=>data?.jobs.filter(job=>!jobKeyword||`${job.title}${job.department}${job.city}`.toLowerCase().includes(jobKeyword.toLowerCase()))||[],[data,jobKeyword]);
@@ -82,53 +87,6 @@ export default function InterviewerCandidateClient() {
   function flash(message:string){setToast(message);window.setTimeout(()=>setToast(''),2200)}
   function toggleAll(){setSelected(allSelected?selected.filter(id=>!candidates.some(candidate=>candidate.id===id)):[...new Set([...selected,...candidates.map(candidate=>candidate.id)])])}
   function selectedCandidates(){return data?.candidates.filter(candidate=>selected.includes(candidate.id))||[]}
-  function sendBatchNotification(){
-    const people=selectedCandidates();
-    if(!people.length){flash('请先选择候选人');return}
-    const recipients=[...new Set(people.map(person=>person.email.trim()).filter(email=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)))];
-    if(!recipients.length){flash('所选候选人没有可用邮箱');return}
-    const subject=encodeURIComponent('招聘流程通知');
-    const body=encodeURIComponent(`您好，\n\n您的招聘流程有新的进展，请留意后续安排。\n\n${data?.account.contact||'招聘团队'}`);
-    window.location.href=`mailto:?bcc=${encodeURIComponent(recipients.join(','))}&subject=${subject}&body=${body}`;
-    flash(`已打开邮件通知，共 ${recipients.length} 位候选人`);
-  }
-  function openBatchStage(){
-    const people=selectedCandidates();
-    if(!people.length){flash('请先选择候选人');return}
-    setBatchStage(people.every(person=>person.stage===people[0].stage)?people[0].stage:'待定');
-    setBatchReason('');
-    setBatchStageOpen(true);
-  }
-  async function changeBatchStage(){
-    const people=selectedCandidates();
-    if(!people.length||batchSaving)return;
-    if(batchStage==='已淘汰'&&!batchReason.trim()){flash('淘汰候选人时请填写原因');return}
-    setBatchSaving(true);
-    let updated=0;
-    let firstError='';
-    try{
-      for(const person of people){
-        const response=await fetch('/api/workbench',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({resource:'candidateStage',id:person.id,value:batchStage})});
-        if(response.ok){
-          updated+=1;
-          if(batchStage==='已淘汰'){
-            const previous=reviews.find(review=>review.candidateId===person.id);
-            await fetch('/api/screening',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'saveReview',candidateId:person.id,tags:previous?.tags||[],comment:previous?.comment||'',riskNote:previous?.riskNote||'',rejectReason:batchReason.trim()})});
-          }
-        }else if(!firstError){
-          const result=await response.json().catch(()=>({})) as {message?:string};
-          firstError=result.message||'阶段更新失败';
-        }
-      }
-      if(updated){announceWorkbenchChange();await load();setSelected([])}
-      if(updated===people.length){setBatchStageOpen(false);flash(`已更新 ${updated} 位候选人的流程阶段`)}
-      else flash(`${updated} 位更新成功；${firstError||`${people.length-updated} 位更新失败`}`);
-    }catch{
-      flash(updated?`${updated} 位更新成功，其余更新失败`:'阶段更新失败，请稍后重试');
-    }finally{
-      setBatchSaving(false);
-    }
-  }
   function downloadBatchResumes(){
     const people=selectedCandidates();
     if(!people.length){flash('请先选择候选人');return}
@@ -141,14 +99,6 @@ export default function InterviewerCandidateClient() {
       document.body.appendChild(link);link.click();link.remove();
     },index*180));
     flash(`正在下载 ${downloadable.length} 份简历`);
-  }
-  function exportBatchData(){
-    const people=selectedCandidates();
-    if(!people.length){flash('请先选择候选人');return}
-    const rows=[['姓名','应聘职位','手机号','邮箱','城市','工作经验','最近公司','流程阶段','接收HR','推荐时间','技能'],...people.map(person=>[person.name,person.role,person.phone,person.email,person.city,person.years,person.company,person.stage,person.assignedHrName||'',formatDate(person.assignedAt||person.updatedAt),person.skills.join('、')])];
-    const csv=`\uFEFF${rows.map(row=>row.map(csvCell).join(',')).join('\r\n')}`;
-    downloadText(csv,`候选人数据-${new Date().toISOString().slice(0,10)}.csv`,'text/csv;charset=utf-8');
-    flash(`已导出 ${people.length} 位候选人数据`);
   }
   async function updateReview(candidate:Candidate,action:ReviewAction){
     if(savingId)return;
@@ -194,9 +144,9 @@ export default function InterviewerCandidateClient() {
 
   return <main className="interviewer-page">
     <aside className="interviewer-rail">
-      <a className="interviewer-logo" href="/workbench" aria-label="返回星鉴人才招聘工作台"><span>星</span><b>星鉴人才<small>HIRING DEPARTMENT</small></b></a>
+      <Link className="interviewer-logo" href="/workbench" aria-label="返回星鉴人才招聘工作台"><span>星</span><b>星鉴人才<small>HIRING DEPARTMENT</small></b></Link>
       <p className="interviewer-role-label">HR 工作台</p>
-      <nav>{menuItems.map((item,index)=><a key={item.label} className={index===0?'active':''} href={item.href} title={item.label}><i>{item.icon}</i><span>{item.label}</span></a>)}</nav>
+      <nav>{menuItems.map((item,index)=><Link key={item.label} className={index===0?'active':''} href={item.href} title={item.label}><i>{item.icon}</i><span>{item.label}</span></Link>)}</nav>
       <button type="button" title="收起菜单">«</button>
     </aside>
 
@@ -208,7 +158,7 @@ export default function InterviewerCandidateClient() {
           <HrAccountMenu contact={data.account.contact} phone={data.account.phone} email={data.account.email} role={data.account.role}/>
         </div>
       </header>
-      <div className="interviewer-open-tabs"><a href="/workbench">招聘管理</a><i>›</i><button type="button" className="active">候选人筛选</button></div>
+      <div className="interviewer-open-tabs"><Link href="/workbench">招聘管理</Link><i>›</i><button type="button" className="active">候选人筛选</button></div>
 
       <div className="interviewer-content">
         <aside className="interviewer-filter-panel">
@@ -228,7 +178,7 @@ export default function InterviewerCandidateClient() {
         <section className="interviewer-list-panel">
           <h2>{status}{currentJob?<small>{currentJob.title}</small>:null}</h2>
           <div className="interviewer-filter-row"><select defaultValue=""><option value="">沟通状态</option><option>未沟通</option><option>已沟通</option></select><select defaultValue=""><option value="">推荐筛选状态</option><option>未推荐</option><option>已推荐</option></select><select defaultValue="time"><option value="time">状态变更时间　⇅</option></select></div>
-          <div className="interviewer-batch-row"><label><input type="checkbox" checked={allSelected} onChange={toggleAll}/> 全选</label><button type="button" onClick={downloadBatchResumes}><span>下载简历</span></button><button type="button" onClick={exportBatchData}><span>导出数据</span></button><button type="button" onClick={()=>flash(selected.length?'更多批量操作正在完善':'请先选择候选人')}><span>更多</span><i aria-hidden="true">⌄</i></button></div>
+          <div className="interviewer-batch-row"><label><input type="checkbox" checked={allSelected} onChange={toggleAll}/> 全选</label><button type="button" onClick={downloadBatchResumes}><span>下载简历</span></button></div>
           <div className="interviewer-candidate-list">
             {candidates.length?candidates.map(candidate=>{const job=data.jobs.find(item=>item.id===candidate.jobId);return <article className="interviewer-candidate-row" key={candidate.id} role="button" tabIndex={0} onClick={()=>setDetailId(candidate.id)} onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();setDetailId(candidate.id)}}}>
               <label onClick={event=>event.stopPropagation()}><input type="checkbox" checked={selected.includes(candidate.id)} onChange={()=>setSelected(selected.includes(candidate.id)?selected.filter(id=>id!==candidate.id):[...selected,candidate.id])}/></label>
@@ -242,7 +192,6 @@ export default function InterviewerCandidateClient() {
         </section>
       </div>
     </section>
-    {batchStageOpen&&<div className="interviewer-batch-modal-backdrop" onMouseDown={event=>{if(event.target===event.currentTarget&&!batchSaving)setBatchStageOpen(false)}}><form className="interviewer-batch-modal" onSubmit={event=>{event.preventDefault();void changeBatchStage()}}><button type="button" className="assessment-modal-close" aria-label="关闭" disabled={batchSaving} onClick={()=>setBatchStageOpen(false)}>×</button><p>批量操作</p><h2>变更流程阶段</h2><small>已选择 {selected.length} 位候选人，将按候选人流程规则逐一更新。</small><label>目标阶段<select value={batchStage} onChange={event=>setBatchStage(event.target.value)}>{[...CANDIDATE_STAGES,'待定','已淘汰'].map(stage=><option key={stage}>{stage}</option>)}</select></label>{batchStage==='已淘汰'&&<label>淘汰原因<textarea value={batchReason} onChange={event=>setBatchReason(event.target.value)} placeholder="请填写淘汰原因" maxLength={500}/></label>}<footer><button type="button" disabled={batchSaving} onClick={()=>setBatchStageOpen(false)}>取消</button><button type="submit" disabled={batchSaving}>{batchSaving?'更新中…':'确认变更'}</button></footer></form></div>}
     {detailCandidate&&<CandidateResumeDrawer
       candidate={detailCandidate}
       job={data.jobs.find(job=>job.id===detailCandidate.jobId)}
@@ -264,18 +213,20 @@ function CandidateResumeDrawer({candidate,job,profile,review,aiInterview,saving,
   const [note,setNote]=useState(review?.comment||'');
   const [detailView,setDetailView]=useState<'resume'|'ai'|'file'>('resume');
   return <div className="drawer-backdrop hr-resume-backdrop" onMouseDown={onClose}>
-    <aside className="detail-drawer candidate-drawer hr-resume-drawer" aria-label={`${candidate.name}的简历`} onMouseDown={event=>event.stopPropagation()}>
+    <aside className={`detail-drawer candidate-drawer hr-resume-drawer ${detailView==='file'?'file-review-mode':''}`} aria-label={`${candidate.name}的简历`} onMouseDown={event=>event.stopPropagation()}>
       <button type="button" className="drawer-close" onClick={onClose} aria-label="关闭简历">×</button>
       <p className="drawer-label">CANDIDATE RESUME</p>
       <div className="candidate-profile hr-resume-profile"><span>{candidate.name.slice(0,1)}</span><div><div className="hr-resume-name-line"><h2>{candidate.name}</h2><em><b>{profile?.matchScore??candidate.score??'—'}</b><small>匹配度</small></em><strong className={`hr-resume-inline-status ${status==='已拒绝'?'reject':status==='待定'?'pending':status==='已通过'?'pass':'screen'}`}>{status}</strong></div><p>{candidate.company||'公司未填写'} · {candidate.role||job?.title||'职位未填写'}</p></div></div>
-      <div className="hr-review-actions" aria-label="候选人审核操作">
-        <button type="button" className={status==='已通过'?'active pass':'pass'} disabled={saving} onClick={()=>onReview('pass')}><i>✓</i><span><b>通过</b><small>进入安排面试</small></span></button>
-        <button type="button" className={status==='待定'?'active pending':'pending'} disabled={saving} onClick={()=>onReview('pending')}><i>◷</i><span><b>待定</b><small>保留候选人</small></span></button>
-        <button type="button" className={status==='已拒绝'?'active reject':'reject'} disabled={saving} onClick={()=>onReview('reject')}><i>×</i><span><b>拒绝</b><small>结束初筛</small></span></button>
-        <button type="button" className={noteOpen?'active note':'note'} disabled={saving} onClick={()=>setNoteOpen(current=>!current)}><i>✎</i><span><b>备注</b><small>{review?.comment?'查看或修改':'添加候选人备注'}</small></span></button>
+      <div className="hr-review-sidebar">
+        <div className="hr-review-actions" aria-label="候选人审核操作">
+          <button type="button" className={status==='已通过'?'active pass':'pass'} disabled={saving} onClick={()=>onReview('pass')}><i>✓</i><span><b>通过</b><small>进入安排面试</small></span></button>
+          <button type="button" className={status==='待定'?'active pending':'pending'} disabled={saving} onClick={()=>onReview('pending')}><i>◷</i><span><b>待定</b><small>保留候选人</small></span></button>
+          <button type="button" className={status==='已拒绝'?'active reject':'reject'} disabled={saving} onClick={()=>onReview('reject')}><i>×</i><span><b>拒绝</b><small>结束初筛</small></span></button>
+          <button type="button" className={noteOpen?'active note':'note'} disabled={saving} onClick={()=>setNoteOpen(current=>!current)}><i>✎</i><span><b>备注</b><small>{review?.comment?'查看或修改':'添加候选人备注'}</small></span></button>
+        </div>
+        {noteOpen&&<form className="hr-resume-note" onSubmit={event=>{event.preventDefault();void onSaveNote(note).then(saved=>{if(saved)setNoteOpen(false)})}}><label>候选人备注<textarea value={note} maxLength={2000} onChange={event=>setNote(event.target.value)} placeholder="记录沟通情况、筛选意见或后续关注事项"/></label><footer><small>{note.length}/2000</small><button type="button" disabled={saving} onClick={()=>setNoteOpen(false)}>取消</button><button type="submit" disabled={saving}>{saving?'保存中…':'保存备注'}</button></footer></form>}
+        {saving&&<p className="hr-resume-saving">正在同步审核结果…</p>}
       </div>
-      {noteOpen&&<form className="hr-resume-note" onSubmit={event=>{event.preventDefault();void onSaveNote(note).then(saved=>{if(saved)setNoteOpen(false)})}}><label>候选人备注<textarea value={note} maxLength={2000} onChange={event=>setNote(event.target.value)} placeholder="记录沟通情况、筛选意见或后续关注事项"/></label><footer><small>{note.length}/2000</small><button type="button" disabled={saving} onClick={()=>setNoteOpen(false)}>取消</button><button type="submit" disabled={saving}>{saving?'保存中…':'保存备注'}</button></footer></form>}
-      {saving&&<p className="hr-resume-saving">正在同步审核结果…</p>}
       <div className="hr-resume-tabs" role="tablist" aria-label="候选人详情内容">
         <button type="button" role="tab" aria-selected={detailView==='resume'} className={detailView==='resume'?'active':''} onClick={()=>setDetailView('resume')}>基本信息</button>
         <button type="button" role="tab" aria-selected={detailView==='ai'} className={detailView==='ai'?'active':''} onClick={()=>setDetailView('ai')}>AI 面试结果 <span>{aiInterview?.score!==null&&aiInterview?.score!==undefined?`${aiInterview.score} 分`:aiInterview?'待确认':'暂无'}</span></button>
@@ -406,20 +357,4 @@ function formatDate(value:string){
   const date=new Date(value);
   if(Number.isNaN(date.getTime()))return '-';
   return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
-}
-
-function csvCell(value:unknown){
-  const text=String(value??'');
-  return /[",\r\n]/.test(text)?`"${text.replaceAll('"','""')}"`:text;
-}
-
-function downloadText(content:string,fileName:string,type:string){
-  const url=URL.createObjectURL(new Blob([content],{type}));
-  const link=document.createElement('a');
-  link.href=url;
-  link.download=fileName;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.setTimeout(()=>URL.revokeObjectURL(url),1000);
 }

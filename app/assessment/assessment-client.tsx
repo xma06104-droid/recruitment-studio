@@ -1,8 +1,10 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { announceWorkbenchChange, useWorkbenchSync } from '@/app/workbench-sync';
 import HrAccountMenu from '@/app/components/hr-account-menu';
+import { HR_WORKBENCH_CACHE, readHrSessionCache, writeHrSessionCache } from '@/app/hr-session-cache';
 
 type Account = { contact:string; phone:string; email:string; role:'super_admin'|'hr' };
 type Job = { id:string; title:string; department:string; city:string; status:string; ownerName:string; createdAt:string };
@@ -37,10 +39,11 @@ export default function AssessmentClient() {
       if(!response.ok)throw new Error('load');
       const result=await response.json() as Dataset;
       setData(result);
+      writeHrSessionCache(HR_WORKBENCH_CACHE,result);
       setError('');
     });
   }
-  useEffect(()=>{void load().catch(()=>setError('评估数据加载失败，请稍后刷新。'))},[]);
+  useEffect(()=>{const cached=readHrSessionCache<Dataset>(HR_WORKBENCH_CACHE);if(cached)setData(cached);void load().catch(()=>{if(!cached)setError('评估数据加载失败，请稍后刷新。')})},[]);
   useWorkbenchSync(()=>load().catch(()=>undefined));
   const assessments=useMemo(()=>Object.fromEntries((data?.manualAssessments||[]).map(item=>[item.candidateId,item])) as Record<string,Assessment>,[data]);
 
@@ -82,9 +85,9 @@ export default function AssessmentClient() {
 
   return <main className="interviewer-page assessment-page">
     <aside className="interviewer-rail">
-      <a className="interviewer-logo" href="/workbench" aria-label="返回星鉴人才招聘工作台"><span>星</span><b>星鉴人才<small>HIRING DEPARTMENT</small></b></a>
+      <Link className="interviewer-logo" href="/workbench" aria-label="返回星鉴人才招聘工作台"><span>星</span><b>星鉴人才<small>HIRING DEPARTMENT</small></b></Link>
       <p className="interviewer-role-label">HR 工作台</p>
-      <nav>{menuItems.map((item,index)=><a key={item.label} className={index===1?'active':''} href={item.href} title={item.label}><i>{item.icon}</i><span>{item.label}</span></a>)}</nav>
+      <nav>{menuItems.map((item,index)=><Link key={item.label} className={index===1?'active':''} href={item.href} title={item.label}><i>{item.icon}</i><span>{item.label}</span></Link>)}</nav>
       <button type="button" title="收起菜单">«</button>
     </aside>
 
@@ -96,7 +99,7 @@ export default function AssessmentClient() {
           <HrAccountMenu contact={data.account.contact} phone={data.account.phone} email={data.account.email} role={data.account.role}/>
         </div>
       </header>
-      <div className="interviewer-open-tabs"><a href="/interviewer-candidate">候选人筛选</a><i>›</i><button type="button" className="active">人工评估</button></div>
+      <div className="interviewer-open-tabs"><Link href="/interviewer-candidate">候选人筛选</Link><i>›</i><button type="button" className="active">人工评估</button></div>
 
       <div className="assessment-content">
         <aside className="assessment-filter-card">

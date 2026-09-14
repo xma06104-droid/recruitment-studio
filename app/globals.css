@@ -1806,6 +1806,45 @@ input[type="checkbox"],input[type="radio"]{accent-color:var(--control-accent-str
 .hr-resume-tabs button:disabled{opacity:.42;cursor:not-allowed}
 .hr-resume-file-panel{height:min(72vh,900px);padding-top:18px}
 .hr-resume-file-panel iframe{width:100%;height:100%;border:1px solid rgba(69,211,229,.2);border-radius:14px;background:#fff}
+
+/* Keep the HR workspace painted through the viewport, even for short result sets. */
+.interviewer-page,.interviewer-main{min-height:100dvh}
+.interviewer-page{background-color:#07101d;background-attachment:fixed}
+.interviewer-content{height:calc(100dvh - 134px);min-height:584px}
+.interviewer-filter-panel,.interviewer-list-panel{height:100%}
+.interviewer-list-panel,.interviewer-candidate-list{background-color:#111a2b}
+
+/* Original resume review: document-first canvas with a fixed decision rail. */
+.hr-review-sidebar{display:contents}
+.hr-resume-drawer.file-review-mode{
+  height:100dvh;
+  max-height:100dvh;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) clamp(250px,21vw,320px);
+  grid-template-rows:auto auto auto minmax(0,1fr);
+  column-gap:24px;
+  overflow:hidden;
+  padding:28px clamp(24px,4vw,58px) 26px;
+}
+.file-review-mode>.drawer-label{grid-column:1;grid-row:1;margin:0}
+.file-review-mode>.hr-resume-profile{grid-column:1;grid-row:2;margin:13px 0 10px}
+.file-review-mode>.hr-resume-tabs{grid-column:1;grid-row:3;margin-top:8px}
+.file-review-mode>.hr-resume-file-panel{grid-column:1;grid-row:4;min-height:0;height:auto;overflow:hidden;padding-top:14px}
+.file-review-mode>.hr-review-sidebar{grid-column:2;grid-row:1/-1;min-height:0;display:flex;flex-direction:column;gap:14px;padding:50px 0 0 24px;border-left:1px solid rgba(162,181,211,.11)}
+.file-review-mode .hr-review-actions{display:flex;flex-direction:column;gap:12px;margin:0}
+.file-review-mode .hr-review-actions button{min-height:68px}
+.file-review-mode .hr-resume-note{margin:0}
+.file-review-mode .hr-resume-note textarea{min-height:140px}
+.file-review-mode .hr-resume-file-panel iframe{height:100%;border-radius:10px}
+.file-review-mode>.drawer-close{top:22px;right:24px}
+@media(max-width:900px){
+  .interviewer-content{height:auto;min-height:calc(100dvh - 118px)}
+  .interviewer-filter-panel,.interviewer-list-panel{height:auto}
+  .hr-resume-drawer.file-review-mode{height:100dvh;display:block;overflow:auto;padding:38px 22px 32px}
+  .file-review-mode>.hr-review-sidebar{display:contents}
+  .file-review-mode .hr-review-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));margin-top:10px}
+  .file-review-mode>.hr-resume-file-panel{height:68vh;min-height:440px}
+}
 @media(max-width:620px){.assessment-questionnaire>header{padding:24px 20px 18px}.assessment-questionnaire-score{position:static;width:max-content;margin-top:14px}.assessment-question-list{padding:16px 14px 3px}.assessment-question{padding:16px 14px}.assessment-question h3{font-size:14px}.assessment-question-stars{gap:3px}.assessment-questionnaire>footer{padding:15px 20px 19px}}
 @media print{
   body{background:#fff!important}

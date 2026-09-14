@@ -1,7 +1,9 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
+import Link from 'next/link';
 import HrAccountMenu from '@/app/components/hr-account-menu';
+import { HR_ACCOUNT_CACHE, readHrSessionCache, writeHrSessionCache } from '@/app/hr-session-cache';
 
 type Account={contact:string;phone:string;email:string;role:'super_admin'|'hr'};
 type Feedback={kind:'success'|'error';text:string}|null;
@@ -23,12 +25,15 @@ export default function HrSettingsClient(){
   const [passwordFeedback,setPasswordFeedback]=useState<Feedback>(null);
 
   useEffect(()=>{
+    const cached=readHrSessionCache<Account>(HR_ACCOUNT_CACHE);
+    if(cached)setAccount(cached);
     void fetch('/api/auth/me',{cache:'no-store'}).then(async response=>{
       if(response.status===401){window.location.assign('/');return}
       if(!response.ok)throw new Error('load');
       const result=await response.json() as {account:Account};
       setAccount(result.account);
-    }).catch(()=>setError('账号信息加载失败，请稍后刷新。'));
+      writeHrSessionCache(HR_ACCOUNT_CACHE,result.account);
+    }).catch(()=>{if(!cached)setError('账号信息加载失败，请稍后刷新。')});
   },[]);
 
   async function saveProfile(event:FormEvent<HTMLFormElement>){
@@ -42,6 +47,7 @@ export default function HrSettingsClient(){
       const result=await response.json().catch(()=>({})) as {message?:string;account?:Account};
       if(!response.ok)throw new Error(result.message||'个人资料保存失败。');
       setAccount(result.account||{...account,contact});
+      writeHrSessionCache(HR_ACCOUNT_CACHE,result.account||{...account,contact});
       setProfileFeedback({kind:'success',text:'个人资料已保存，工作台显示姓名已同步更新。'});
     }catch(saveError){
       setProfileFeedback({kind:'error',text:saveError instanceof Error?saveError.message:'个人资料保存失败。'});
@@ -77,9 +83,9 @@ export default function HrSettingsClient(){
 
   return <main className="interviewer-page">
     <aside className="interviewer-rail">
-      <a className="interviewer-logo" href="/workbench"><span>星</span><b>星鉴人才<small>HIRING DEPARTMENT</small></b></a>
+      <Link className="interviewer-logo" href="/workbench"><span>星</span><b>星鉴人才<small>HIRING DEPARTMENT</small></b></Link>
       <p className="interviewer-role-label">HR 工作台</p>
-      <nav>{menuItems.map(item=><a key={item.label} className={item.label==='设置'?'active':''} href={item.href}><i>{item.icon}</i><span>{item.label}</span></a>)}</nav>
+      <nav>{menuItems.map(item=><Link key={item.label} className={item.label==='设置'?'active':''} href={item.href}><i>{item.icon}</i><span>{item.label}</span></Link>)}</nav>
       <button type="button">«</button>
     </aside>
     <section className="interviewer-main">
@@ -87,7 +93,7 @@ export default function HrSettingsClient(){
         <div className="interviewer-heading"><h1>设置</h1><small>HR 账号与安全</small></div>
         <div className="interviewer-tools"><HrAccountMenu key={account.contact} contact={account.contact} phone={account.phone} email={account.email} role={account.role}/></div>
       </header>
-      <div className="interviewer-open-tabs"><a href="/interviewer-candidate">候选人筛选</a><i>›</i><button type="button" className="active">设置</button></div>
+      <div className="interviewer-open-tabs"><Link href="/interviewer-candidate">候选人筛选</Link><i>›</i><button type="button" className="active">设置</button></div>
       <div className="hr-module-content hr-settings-content">
         <section className="hr-module-hero"><div><p>ACCOUNT SETTINGS</p><h2>账号设置</h2><span>维护个人资料并定期更新登录密码，保障账号安全</span></div></section>
         <div className="hr-settings-grid">
