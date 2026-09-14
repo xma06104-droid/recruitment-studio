@@ -9,14 +9,15 @@ import AiInterviewRecordings from '@/app/components/ai-interview-recordings';
 import RoleManagement from '@/app/components/role-management';
 import { CANDIDATE_STAGES, candidateStageIndex, normalizeCandidateStage } from '@/app/candidate-stages';
 import { CHINA_CITIES, CHINA_CITY_GROUPS } from '@/app/china-cities';
-import { questionMaxScores, weightedQuestionScore } from '@/app/interview-score-weights';
+import { weightedQuestionScore } from '@/app/interview-score-weights';
+import { displayCandidateStage } from '@/app/candidate-stages';
 
 type Account = { id:string; contact:string; phone:string; email:string; role:'super_admin'|'hr'; createdAt:string };
 type Job = { id:string; title:string; department:string; city:string; status:string; headcount:number; ownerName:string; createdAt:string; updatedAt:string };
 type Candidate = { id:string; jobId:string|null; name:string; role:string; company:string; years:string; stage:string; source:string; skills:string[]; score:number|null; phone:string; email:string; city:string; gender?:string; age?:number|null; education?:string; workYears?:number|null; resumeFileName?:string; assignedHrId?:string; assignedHrName?:string; assignedAt?:string; createdAt:string; updatedAt:string };
 type Interview = { id:string; candidateId:string; scheduledAt:string; round:string; mode:string; interviewer:string; status:string; createdAt:string; updatedAt:string };
 type Offer = { id:string; candidateId:string; jobTitle:string; salary:string; recipientEmail:string; content:string; ownerName:string; status:string; deadline:string; createdAt:string; updatedAt:string };
-type AiQuestion = { id:string; jobId:string|null; title:string; category:string; questionType:string; duration:number; competency:string; keywords:string; referenceAnswer:string; followUp:boolean; createdAt:string; updatedAt:string };
+type AiQuestion = { id:string; jobId:string|null; title:string; category:string; questionType:string; duration:number; competency:string; keywords:string; referenceAnswer:string; followUp:boolean; maxScore:number; createdAt:string; updatedAt:string };
 type AiInterview = { id:string; candidateId:string; jobTitle:string; status:string; score:number|null; durationSeconds:number|null; summary:string; completedAt:string|null; createdAt:string; updatedAt:string };
 type AiInvitation = { id:string; candidateId:string; recipientEmail:string; jobTitle:string; status:string; sentAt:string; openedAt:string|null; completedAt:string|null; expiresAt:string; interviewUrl:string; createdAt:string; updatedAt:string };
 type ManualAssessment = { candidateId:string; total:number; professional:number; communication:number; culture:number; comment:string; reviewer:string; updatedAt:string };
@@ -93,7 +94,7 @@ export default function WorkbenchClient() {
       const response=await fetch('/api/workbench',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({resource,payload})});
       const result=await response.json().catch(()=>({})) as {message?:string};
       if(response.status===401){window.location.assign('/');return}
-      if(!response.ok){flash('保存失败');return}
+      if(!response.ok){flash(result.message||'保存失败');return}
       setModal(null);announceWorkbenchChange();await loadData();flash('保存成功');
     }catch{flash('保存失败')}finally{saveInFlight.current=false;setModalSaving(false)}
   }
@@ -105,7 +106,7 @@ export default function WorkbenchClient() {
       const response=await fetch('/api/workbench',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({resource:'aiQuestion',id,payload})});
       const result=await response.json().catch(()=>({})) as {message?:string};
       if(response.status===401){window.location.assign('/');return}
-      if(!response.ok){flash('保存失败');return}
+      if(!response.ok){flash(result.message||'保存失败');return}
       setModal(null);setEditingQuestion(null);announceWorkbenchChange();await loadData();flash('保存成功');
     }catch{flash('保存失败')}finally{saveInFlight.current=false;setModalSaving(false)}
   }
@@ -316,7 +317,9 @@ export default function WorkbenchClient() {
     {modal==='candidate'&&<CandidateModal jobs={data.jobs} close={()=>setModal(null)} upload={()=>{setModal(null);setResumeImportRequested(true);setActive('简历筛选')}} submitting={modalSaving} submit={form=>void create('candidate',formObject(form))}/>}
     {modal==='interview'&&<InterviewModal interview={editingInterview} people={activeCandidates} close={()=>{if(!modalSaving){setModal(null);setEditingInterview(null)}}} submitting={modalSaving} submit={form=>editingInterview?void updateInterview(editingInterview.id,formObject(form)):void create('interview',formObject(form))}/>}
     {modal==='offer'&&<OfferModal offer={editingOffer} people={data.candidates} close={()=>{if(!modalSaving){setModal(null);setEditingOffer(null)}}} submitting={modalSaving} submit={form=>editingOffer?void updateOffer(editingOffer.id,formObject(form)):void create('offer',formObject(form))}/>}
-    {modal==='question'&&<QuestionModal question={editingQuestion} jobs={data.jobs} close={()=>{if(!modalSaving){setModal(null);setEditingQuestion(null)}}} submitting={modalSaving} submit={form=>editingQuestion?void updateQuestion(editingQuestion.id,formObject(form)):void create('aiQuestion',formObject(form))}/>}
+    {modal==='question'&&<QuestionModal question={editingQuestion} jobs={data.jobs} questions={data.aiQuestions}
+      close={()=>{if(!modalSaving){setModal(null);setEditingQuestion(null)}}} submitting={modalSaving}
+      submit={form=>editingQuestion?void updateQuestion(editingQuestion.id,formObject(form)):void create('aiQuestion',formObject(form))}/>}
     {modal==='questionGenerator'&&<QuestionGeneratorModal jobs={data.jobs} close={()=>{if(!modalSaving)setModal(null)}} submitting={modalSaving} submit={form=>void generateQuestions(formObject(form))}/>}
     {modal==='aiResult'&&<AiResultModal people={activeCandidates} close={()=>setModal(null)} submitting={modalSaving} submit={form=>void create('aiInterview',formObject(form))}/>}
     {modal==='profile'&&<ProfileModal account={data.account} close={()=>setModal(null)} error={accountError} submitting={accountSaving} submit={form=>void updateAccount('profile',formObject(form))}/>}
@@ -574,7 +577,7 @@ function AiInterviewSession({candidate,questions,flash,close,complete}:{candidat
 
   async function finishInterview(currentScore:AnswerScore){
     const finalScores=questions.map(item=>item.id===question.id?currentScore:scores[item.id]||scoreInterviewAnswer(contextualizeSpeechTranscript(transcriptRef.current[item.id]||answers[item.id]||'',candidate.role,item),item,candidate));
-    const maxScores=questionMaxScores(questions.length);
+    const maxScores=questions.map(item=>item.maxScore);
     const weightedScores=finalScores.map((item,itemIndex)=>weightedQuestionScore(item.score,maxScores[itemIndex]||1));
     const overall=weightedScores.reduce((sum,item)=>sum+item,0);
     const details=questions.map((item,itemIndex)=>{
@@ -740,11 +743,15 @@ function parseQuestionCopy(value:string){
   return {title,keywords,referenceAnswer};
 }
 
-function QuestionModal({question,jobs,close,submit,submitting}:{question:AiQuestion|null;jobs:Job[];close:()=>void;submit:(data:FormData)=>void;submitting:boolean}){
+function QuestionModal({question,jobs,questions,close,submit,submitting}:{question:AiQuestion|null;jobs:Job[];questions:AiQuestion[];close:()=>void;submit:(data:FormData)=>void;submitting:boolean}){
   const [copy,setCopy]=useState('');
   const [title,setTitle]=useState(question?.title||'');
   const [keywords,setKeywords]=useState(question?.keywords||question?.competency||'');
   const [referenceAnswer,setReferenceAnswer]=useState(question?.referenceAnswer||'');
+  const [jobId,setJobId]=useState(question?.jobId||'');
+  const otherTotal=questions.filter(item=>item.id!==question?.id&&(item.jobId||'')===jobId).reduce((sum,item)=>sum+item.maxScore,0);
+  const remaining=Math.max(0,100-otherTotal);
+  const [maxScore,setMaxScore]=useState(Math.min(question?.maxScore||20,Math.max(1,remaining)));
   const [recognitionNote,setRecognitionNote]=useState('');
   function recognize(value=copy){
     if(!value.trim()){setRecognitionNote('请先粘贴包含面试题的文案');return}
@@ -755,17 +762,19 @@ function QuestionModal({question,jobs,close,submit,submitting}:{question:AiQuest
   }
   return <FormModal close={close} submit={submit} submitting={submitting} scrollable kicker="QUESTION BANK" title={question?'修改面试题':'新建面试题'} description="题目会按岗位匹配；参考回答和评分关键词仅供后台核验与自动评分使用。" submitLabel={question?'保存题目修改':'保存真实记录'}>
     <section className="ai-question-copy"><div><b>粘贴文案自动识别</b><small>支持“题目、评分关键词、参考回答”等常见格式</small></div><textarea value={copy} onChange={event=>{setCopy(event.target.value);setRecognitionNote('')}} onPaste={event=>{const value=event.clipboardData.getData('text');if(value){event.preventDefault();setCopy(value);recognize(value)}}} placeholder={'示例：\n题目：请介绍一次项目推进经历\n评分关键词：目标，行动，协作，结果\n参考回答：说明背景、职责、过程和最终结果'}/><button type="button" onClick={()=>recognize()}>⌕ 智能识别并填充</button>{recognitionNote&&<p role="status">{recognitionNote}</p>}</section>
-    <label>适用岗位<select name="jobId" defaultValue={question?.jobId||''}><option value="">通用题目（所有岗位无专属题目时使用）</option>{jobs.map(job=><option key={job.id} value={job.id}>{job.title} · {job.department}</option>)}</select></label>
+    <label>适用岗位<select name="jobId" value={jobId} onChange={event=>{const next=event.target.value;const total=questions.filter(item=>item.id!==question?.id&&(item.jobId||'')===next).reduce((sum,item)=>sum+item.maxScore,0);setJobId(next);setMaxScore(value=>Math.min(value,Math.max(1,100-total)))}}><option value="">通用题目（所有岗位无专属题目时使用）</option>{jobs.map(job=><option key={job.id} value={job.id}>{job.title} · {job.department}</option>)}</select></label>
     <label>面试问题<textarea required name="title" value={title} onChange={event=>setTitle(event.target.value)} placeholder="请输入实际需要使用的面试问题"/></label>
     <input type="hidden" name="competency" value={question?.competency||'综合能力'}/>
     <label>评分关键词<input required name="keywords" value={keywords} onChange={event=>setKeywords(event.target.value)} placeholder="多个关键词请用逗号分隔，例如：职责，行动，结果，复盘"/></label>
     <label>参考回答<textarea name="referenceAnswer" value={referenceAnswer} onChange={event=>setReferenceAnswer(event.target.value)} placeholder="填写理想回答的要点、结构或示例，仅后台工作人员可见"/></label>
     <div className="form-grid"><label>提问方式<select name="questionType" defaultValue={question?.questionType||'语音提问'}><option>语音提问</option><option>视频提问</option></select></label><label>回答时长（秒）<input name="duration" type="number" min="30" max="900" defaultValue={question?.duration||120}/></label></div>
+    <label>题目最高分<input required name="maxScore" type="number" min="1" max={Math.max(1,remaining)} value={maxScore} onChange={event=>setMaxScore(Number(event.target.value))}/></label>
+    <p className="ai-question-score-note">当前题库其他题目已分配 {otherTotal} 分，本题最多可设 {remaining} 分；发送面试邀请前，全部题目最高分合计必须正好为 100 分。</p>
     <label className="check"><input name="followUp" type="checkbox" defaultChecked={question?.followUp||false}/> 允许根据回答继续追问</label>
   </FormModal>
 }
 function QuestionGeneratorModal({jobs,close,submit,submitting}:{jobs:Job[];close:()=>void;submit:(data:FormData)=>void;submitting:boolean}){
-  return <FormModal close={close} submit={submit} submitting={submitting} kicker="AI QUESTION GENERATOR" title="按岗位生成面试题" description="系统会结合岗位名称与所属部门，生成岗位问题、评分关键词和参考回答；生成后可继续修改或删除。" submitLabel="生成并保存题目">
+  return <FormModal close={close} submit={submit} submitting={submitting} kicker="AI QUESTION GENERATOR" title="按岗位生成面试题" description="系统会结合岗位名称与所属部门生成题目，并自动把该题库剩余分值分配给新题；同一套题的最高分合计为 100 分。" submitLabel="生成并保存题目">
     <label>适用岗位<select required name="jobId" defaultValue=""><option value="" disabled>请选择需要生成题目的岗位</option>{jobs.map(job=><option key={job.id} value={job.id}>{job.title} · {job.department}</option>)}</select></label>
     <label>生成数量<select name="count" defaultValue="5"><option value="3">3 道</option><option value="5">5 道</option><option value="7">7 道</option></select></label>
     <div className="ai-generator-note"><span>✦</span><div><b>生成内容</b><p>岗位认知、专业能力、问题解决、数据意识和复盘成长等维度；正式面试仍按题目创建顺序提问。</p></div></div>
@@ -796,7 +805,7 @@ function CandidateStageStepper({stage,assignedName,aiCompleted,interviewComplete
     try{await advance(nextStage)}finally{setSaving('')}
   }
   return <section className={`candidate-stage-stepper ${terminal?'terminal-only':''}`} aria-label="候选人招聘阶段">
-    <header><div><span>候选人流程</span><small>仅显示当前所处阶段</small></div><b className={terminal?'terminal':''}>当前：{stage}</b></header>
+    <header><div><span>候选人流程</span><small>仅显示当前所处阶段</small></div><b className={terminal?'terminal':''}>当前：{displayCandidateStage(stage)}</b></header>
     {canAdvance&&nextStage&&<button type="button" className="candidate-next-stage-button" disabled={Boolean(saving)} onClick={()=>void moveNext(nextStage,currentIndex+1)}><span>下一阶段</span><b>{nextStage}</b><em>{saving?`正在进入${nextStage}…`:'点击进入'}</em></button>}
     {!terminal&&flowStage==='AI面试'&&!aiCompleted&&<p className="candidate-stage-waiting" role="status">候选人未答题</p>}
     {!terminal&&flowStage==='用人部门筛选'&&assignedName&&<small className="candidate-current-assignee">已推送：{assignedName}</small>}

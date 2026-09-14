@@ -11,13 +11,14 @@ const SCORE_PRESETS:Record<number,number[]> = {
   10:[10,10,10,10,10,10,10,10,10,10],
 };
 
-export function questionMaxScores(count:number) {
-  const safeCount=Math.max(0,Math.min(12,Math.round(count)));
+export function questionMaxScores(count:number,total=100) {
+  const safeCount=Math.max(0,Math.min(100,Math.round(count)));
   if(!safeCount)return [];
+  const safeTotal=Math.max(safeCount,Math.round(total));
   const preset=SCORE_PRESETS[safeCount];
-  if(preset)return [...preset];
-  const base=Math.floor(100/safeCount);
-  const remainder=100-base*safeCount;
+  if(preset&&safeTotal===100)return [...preset];
+  const base=Math.floor(safeTotal/safeCount);
+  const remainder=safeTotal-base*safeCount;
   return Array.from({length:safeCount},(_,index)=>base+(index<remainder?1:0));
 }
 

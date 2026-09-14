@@ -1784,6 +1784,28 @@ input[type="date"]::-webkit-calendar-picker-indicator,input[type="datetime-local
 .interviewer-batch-modal>label{display:grid;gap:9px;margin-top:14px;color:#c7d5e5;font-size:13px;font-weight:750}.interviewer-batch-modal select,.interviewer-batch-modal textarea{box-sizing:border-box;width:100%;border:1px solid rgba(150,182,215,.14);border-radius:11px;outline:0;color:#edf6ff;background:#091526;font:13px/1.65 inherit}.interviewer-batch-modal select{height:48px;padding:0 13px}.interviewer-batch-modal textarea{min-height:105px;padding:11px 13px;resize:vertical}.interviewer-batch-modal select:focus,.interviewer-batch-modal textarea:focus{border-color:#49cfe4;box-shadow:0 0 0 3px rgba(73,207,228,.08)}
 .interviewer-batch-modal>footer{display:flex;justify-content:flex-end;gap:9px;margin-top:22px}.interviewer-batch-modal>footer button{height:40px;padding:0 17px;border:1px solid rgba(150,182,215,.14);border-radius:10px;color:#aebed0;background:#15243a;font-weight:750;cursor:pointer}.interviewer-batch-modal>footer button[type="submit"]{border:0;color:#fff;background:linear-gradient(110deg,#18b5cc,#367fec)}.interviewer-batch-modal>footer button:disabled{cursor:wait;opacity:.55}
 @media(max-width:620px){.hr-resume-drawer{padding:32px 22px 46px}.hr-resume-drawer>.drawer-close{top:82px;right:16px}.hr-resume-profile{padding-right:50px}.hr-resume-tabs{gap:18px}.hr-resume-tabs button{font-size:13px}.hr-project-timeline article{grid-template-columns:1fr}.hr-project-timeline article>strong{padding-bottom:8px;border-bottom:1px solid rgba(162,181,211,.08)}.hr-resume-file-actions{grid-template-columns:1fr}}
+
+/* Unified interactive state */
+:root{--control-accent:#45d3e5;--control-accent-strong:#23b9d1;--control-accent-soft:rgba(69,211,229,.18)}
+::selection{color:#061522;background:#78e3ed}
+:is(input,textarea,select):focus{border-color:var(--control-accent)!important;outline:none!important;box-shadow:0 0 0 3px var(--control-accent-soft)!important}
+:is(button,a,[role="button"]):focus-visible{outline:2px solid var(--control-accent)!important;outline-offset:2px;box-shadow:0 0 0 4px rgba(69,211,229,.13)!important}
+input[type="checkbox"],input[type="radio"]{accent-color:var(--control-accent-strong)}
+.talent-tabs button.active,.tab-set button.active,.flow-stage-tabs button.active,.rs-tabs button.active,.ai-studio-tabs button.active,.ai-library-filter button.active,.interviewer-status-grid button.active,.interviewer-position-filter button.active{border-color:rgba(69,211,229,.42)!important;color:#f5feff!important;background:linear-gradient(110deg,#149cb7,#337fdc)!important;box-shadow:0 9px 22px rgba(28,156,188,.22)!important}
+.talent-tabs button.active b,.rs-tabs button.active b{color:#073047!important;background:#82e9f1!important}
+
+.ai-question-score-note{margin:-4px 0 8px;padding:11px 13px;border:1px solid rgba(69,211,229,.18);border-radius:10px;color:#91a9bd;background:rgba(10,31,48,.52);font-size:12px;line-height:1.65}
+.interviewer-filter-row{height:72px!important;gap:14px!important}
+.interviewer-filter-row select{width:min(31%,210px)!important;height:44px!important;padding:0 14px!important;border-radius:11px!important;font-size:14px!important}
+.interviewer-filter-row select:last-child{margin-left:0!important}
+.interviewer-candidate-list{height:calc(100% - 234px)!important}
+.interviewer-candidate-row{grid-template-columns:20px minmax(250px,1.1fr) minmax(190px,.8fr) minmax(180px,.65fr) 92px!important;align-items:center!important}
+.interviewer-view-detail{align-self:center;height:38px;padding:0 15px;border:1px solid rgba(69,211,229,.28);border-radius:10px;color:#6ae0eb;background:rgba(23,91,126,.25);font-weight:750;cursor:pointer}
+.interviewer-view-detail:hover{color:#fff;background:linear-gradient(110deg,#149cb7,#337fdc)}
+.hr-resume-name-line>em small{font-size:13px!important;font-weight:750;letter-spacing:.02em}
+.hr-resume-tabs button:disabled{opacity:.42;cursor:not-allowed}
+.hr-resume-file-panel{height:min(72vh,900px);padding-top:18px}
+.hr-resume-file-panel iframe{width:100%;height:100%;border:1px solid rgba(69,211,229,.2);border-radius:14px;background:#fff}
 @media(max-width:620px){.assessment-questionnaire>header{padding:24px 20px 18px}.assessment-questionnaire-score{position:static;width:max-content;margin-top:14px}.assessment-question-list{padding:16px 14px 3px}.assessment-question{padding:16px 14px}.assessment-question h3{font-size:14px}.assessment-question-stars{gap:3px}.assessment-questionnaire>footer{padding:15px 20px 19px}}
 @media print{
   body{background:#fff!important}

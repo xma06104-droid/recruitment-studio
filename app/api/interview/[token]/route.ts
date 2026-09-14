@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { env } from 'cloudflare:workers';
 import { ensureSchema, getDb, hashToken, invitationIdFromShareToken } from '@/app/server/db';
 import { contextualizeSpeechTranscript } from '@/app/speech-context';
-import { questionMaxScores, weightedQuestionScore } from '@/app/interview-score-weights';
+import { weightedQuestionScore } from '@/app/interview-score-weights';
 
 type Question = {
   id:string; title:string; duration:number; questionType:string; competency:string;
-  keywords:string; referenceAnswer:string;
+  keywords:string; referenceAnswer:string; maxScore:number;
 };
 type InvitationRow = {
   id:string; owner_id:string; candidate_id:string; recipient_email:string; job_title:string;
@@ -64,7 +64,8 @@ export async function POST(request:NextRequest, context:{ params:Promise<{ token
   ]));
   const skills = jsonList(invitation.skills_json);
   const results = questions.map(question => scoreAnswer(contextualAnswers.get(question.id) || '', question, skills));
-  const maxScores = questionMaxScores(questions.length);
+  const maxScores = questions.map(question => question.maxScore);
+  if (maxScores.reduce((sum, value) => sum + value, 0) !== 100) return failure('本次面试题最高分配置无效，请联系招聘负责人重新发送邀请。', 400);
   const weightedScores = results.map((result, index) => weightedQuestionScore(result.score, maxScores[index] || 1));
   const score = weightedScores.reduce((sum, value) => sum + value, 0);
   const details = questions.map((question, index) => {
@@ -106,6 +107,7 @@ function parseQuestions(value:string):Question[] {
       id:String(item.id || ''), title:String(item.title || ''), duration:clampNumber(item.duration, 30, 900, 120),
       questionType:String(item.questionType || '语音提问'), competency:String(item.competency || ''),
       keywords:String(item.keywords || ''), referenceAnswer:String(item.referenceAnswer || ''),
+      maxScore:clampNumber(item.maxScore, 1, 100, 1),
     })).filter(item => item.id && item.title) : [];
   } catch { return []; }
 }

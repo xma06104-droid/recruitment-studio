@@ -89,10 +89,9 @@ export function AiInterviewResultPanel({ summary, fallbackScore, durationSeconds
       <div className="structured-ai-dimensions">{result.dimensions.map(item=>{
         const itemScore=usesSystemScore?(item.score??item.stars*20):item.stars;
         const itemMax=usesSystemScore?(item.max??100):5;
-        const shownScore=usesSystemScore?(item.rawScore??Math.round(itemScore/itemMax*100)):itemScore;
         return <article key={item.name}>
-          <div><b>{item.name}</b><em>{usesSystemScore?shownScore:`${itemScore} / ${itemMax}`}</em></div>
-          <i><span style={{width:`${clamp(usesSystemScore?shownScore:itemScore/itemMax*100,0,100)}%`}}/></i>
+          <div><b>{item.name}</b><em>{usesSystemScore?itemScore:`${itemScore} / ${itemMax}`}</em></div>
+          <i><span style={{width:`${clamp(itemScore/itemMax*100,0,100)}%`}}/></i>
           {item.suggestion&&<p>{item.suggestion}</p>}
         </article>;
       })}</div>

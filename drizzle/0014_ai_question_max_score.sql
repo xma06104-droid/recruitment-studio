@@ -1,0 +1,1 @@
+ALTER TABLE ai_questions ADD COLUMN max_score INTEGER NOT NULL DEFAULT -1;

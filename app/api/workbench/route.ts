@@ -3,6 +3,7 @@ import { CANDIDATE_STAGES, normalizeCandidateStage } from '@/app/candidate-stage
 import { env } from 'cloudflare:workers';
 import { accountFromRequest, createInvitationShareToken, ensureSchema, getDb, hashToken } from '@/app/server/db';
 import { repairResumeProfiles } from '@/app/server/resume-repair';
+import { questionMaxScores } from '@/app/interview-score-weights';
 
 type DataRow = Record<string, string | number | null>;
 
@@ -180,15 +181,19 @@ export async function POST(request: NextRequest) {
     if (!job) return invalid('请选择需要生成面试题的岗位。');
     const requestedCount = integer(payload.count, 3, 8, 5);
     const generated = generateInterviewQuestions(job.title, job.department).slice(0, requestedCount);
-    const existing = await db.prepare('SELECT title FROM ai_questions WHERE owner_id = ? AND job_id = ?').bind(account.id, job.id).all<{title:string}>();
+    const existing = await db.prepare('SELECT title, max_score FROM ai_questions WHERE owner_id = ? AND job_id = ?').bind(account.id, job.id).all<{title:string;max_score:number}>();
     const existingTitles = new Set(existing.results.map(item => item.title.trim().toLowerCase()));
     const questions = generated.filter(item => !existingTitles.has(item.title.trim().toLowerCase()));
+    const allocated = existing.results.reduce((sum, item) => sum + Math.max(0, Number(item.max_score) || 0), 0);
+    const remaining = 100 - allocated;
+    if (questions.length && remaining < questions.length) return invalid(`该岗位题库只剩 ${Math.max(0, remaining)} 分可分配，无法再生成 ${questions.length} 道题。请先调整或删除现有题目。`);
+    const generatedMaxScores = questionMaxScores(questions.length, remaining);
     if (questions.length) {
       await db.batch(questions.map((question, index) => {
         const createdAt = new Date(Date.parse(now) + index).toISOString();
-        return db.prepare(`INSERT INTO ai_questions (id, owner_id, job_id, title, category, question_type, duration, competency, keywords, reference_answer, follow_up, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, '语音提问', 120, ?, ?, ?, 1, ?, ?)`
-        ).bind(crypto.randomUUID(), account.id, job.id, question.title, question.category, question.competency, question.keywords, question.referenceAnswer, createdAt, createdAt);
+        return db.prepare(`INSERT INTO ai_questions (id, owner_id, job_id, title, category, question_type, duration, competency, keywords, reference_answer, follow_up, max_score, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, '语音提问', 120, ?, ?, ?, 1, ?, ?, ?)`
+        ).bind(crypto.randomUUID(), account.id, job.id, question.title, question.category, question.competency, question.keywords, question.referenceAnswer, generatedMaxScores[index], createdAt, createdAt);
       }));
     }
     return NextResponse.json({ ok:true, count:questions.length, jobTitle:job.title }, { status:201 });
@@ -204,14 +209,20 @@ export async function POST(request: NextRequest) {
     const keywords = text(payload.keywords, 500) || competency;
     const referenceAnswer = text(payload.referenceAnswer, 3000);
     const followUp = payload.followUp ? 1 : 0;
+    const maxScore = integer(payload.maxScore, 1, 100, -1);
+    if (maxScore < 1) return invalid('请设置 1–100 分的题目最高分。');
+    const scoreTotal = await db.prepare(`SELECT COALESCE(SUM(max_score), 0) AS total FROM ai_questions
+      WHERE owner_id = ? AND COALESCE(job_id, '') = ?`).bind(account.id, jobId || '').first<{total:number}>();
+    const nextTotal = Number(scoreTotal?.total || 0) + maxScore;
+    if (nextTotal > 100) return invalid(`该题库最高分合计将达到 ${nextTotal} 分，不能超过 100 分。`);
     const duplicate = await db.prepare(`SELECT id FROM ai_questions WHERE owner_id = ? AND COALESCE(job_id, '') = ?
       AND title = ? COLLATE NOCASE AND category = ? COLLATE NOCASE AND question_type = ? COLLATE NOCASE
       AND duration = ? AND competency = ? COLLATE NOCASE AND keywords = ? COLLATE NOCASE
-      AND reference_answer = ? COLLATE NOCASE AND follow_up = ? LIMIT 1`
-    ).bind(account.id, jobId || '', title, category, questionType, duration, competency, keywords, referenceAnswer, followUp).first<{id:string}>();
+      AND reference_answer = ? COLLATE NOCASE AND follow_up = ? AND max_score = ? LIMIT 1`
+    ).bind(account.id, jobId || '', title, category, questionType, duration, competency, keywords, referenceAnswer, followUp, maxScore).first<{id:string}>();
     if (duplicate) return NextResponse.json({ ok:false, message:'相同面试题已存在，无需重复保存。' }, { status:409 });
-    await db.prepare(`INSERT INTO ai_questions (id, owner_id, job_id, title, category, question_type, duration, competency, keywords, reference_answer, follow_up, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(id, account.id, jobId, title, category, questionType, duration, competency, keywords, referenceAnswer, followUp, now, now).run();
+    await db.prepare(`INSERT INTO ai_questions (id, owner_id, job_id, title, category, question_type, duration, competency, keywords, reference_answer, follow_up, max_score, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(id, account.id, jobId, title, category, questionType, duration, competency, keywords, referenceAnswer, followUp, maxScore, now, now).run();
   } else if (resource === 'aiInterviewInvite') {
     const candidateId = text(payload.candidateId, 80);
     const candidate = candidateId ? await db.prepare(`SELECT id, job_id, name, role, email FROM candidates
@@ -221,8 +232,10 @@ export async function POST(request: NextRequest) {
     const questionRows = await db.prepare(`SELECT * FROM ai_questions WHERE owner_id = ?
       AND (job_id = ? OR job_id IS NULL) ORDER BY created_at ASC`).bind(account.id, candidate.job_id || '').all<DataRow>();
     const specific = questionRows.results.filter(row => candidate.job_id && row.job_id === candidate.job_id);
-    const selectedQuestions = (specific.length ? specific : questionRows.results.filter(row => !row.job_id)).slice(0, 12);
+    const selectedQuestions = specific.length ? specific : questionRows.results.filter(row => !row.job_id);
     if (!selectedQuestions.length) return invalid('该岗位尚未配置面试题，请先生成或新建面试题。');
+    const maxScoreTotal = selectedQuestions.reduce((sum, row) => sum + Math.max(0, Number(row.max_score) || 0), 0);
+    if (maxScoreTotal !== 100) return invalid(`当前面试题最高分合计为 ${maxScoreTotal} 分，请调整为 100 分后再发送邀请。`);
     const token = randomToken();
     const invitationId = crypto.randomUUID();
     const requestedHours = Number(payload.validityHours);
@@ -232,6 +245,7 @@ export async function POST(request: NextRequest) {
       id:String(row.id), title:String(row.title), duration:Number(row.duration) || 120,
       questionType:String(row.question_type || '语音提问'), competency:String(row.competency || ''),
       keywords:String(row.keywords || row.competency || ''), referenceAnswer:String(row.reference_answer || ''),
+      maxScore:Number(row.max_score) || 0,
     }));
     const requestUrl = new URL(request.url);
     const runtime = env as unknown as { INTERVIEW_PUBLIC_ORIGIN?:string; APP_ENV?:string };
@@ -343,14 +357,20 @@ export async function PATCH(request: NextRequest) {
     const keywords = text(payload.keywords, 500) || competency;
     const referenceAnswer = text(payload.referenceAnswer, 3000);
     const followUp = payload.followUp ? 1 : 0;
+    const maxScore = integer(payload.maxScore, 1, 100, -1);
+    if (maxScore < 1) return invalid('请设置 1–100 分的题目最高分。');
+    const scoreTotal = await db.prepare(`SELECT COALESCE(SUM(max_score), 0) AS total FROM ai_questions
+      WHERE owner_id = ? AND id <> ? AND COALESCE(job_id, '') = ?`).bind(account.id, id, jobId || '').first<{total:number}>();
+    const nextTotal = Number(scoreTotal?.total || 0) + maxScore;
+    if (nextTotal > 100) return invalid(`该题库最高分合计将达到 ${nextTotal} 分，不能超过 100 分。`);
     const duplicate = await db.prepare(`SELECT id FROM ai_questions WHERE owner_id = ? AND id <> ? AND COALESCE(job_id, '') = ?
       AND title = ? COLLATE NOCASE AND category = ? COLLATE NOCASE AND question_type = ? COLLATE NOCASE
       AND duration = ? AND competency = ? COLLATE NOCASE AND keywords = ? COLLATE NOCASE
-      AND reference_answer = ? COLLATE NOCASE AND follow_up = ? LIMIT 1`
-    ).bind(account.id, id, jobId || '', title, category, questionType, duration, competency, keywords, referenceAnswer, followUp).first<{id:string}>();
+      AND reference_answer = ? COLLATE NOCASE AND follow_up = ? AND max_score = ? LIMIT 1`
+    ).bind(account.id, id, jobId || '', title, category, questionType, duration, competency, keywords, referenceAnswer, followUp, maxScore).first<{id:string}>();
     if (duplicate) return NextResponse.json({ ok:false, message:'相同面试题已存在，请直接使用现有题目。' }, { status:409 });
-    await db.prepare(`UPDATE ai_questions SET job_id = ?, title = ?, category = ?, question_type = ?, duration = ?, competency = ?, keywords = ?, reference_answer = ?, follow_up = ?, updated_at = ?
-      WHERE id = ? AND owner_id = ?`).bind(jobId, title, category, questionType, duration, competency, keywords, referenceAnswer, followUp, now, id, account.id).run();
+    await db.prepare(`UPDATE ai_questions SET job_id = ?, title = ?, category = ?, question_type = ?, duration = ?, competency = ?, keywords = ?, reference_answer = ?, follow_up = ?, max_score = ?, updated_at = ?
+      WHERE id = ? AND owner_id = ?`).bind(jobId, title, category, questionType, duration, competency, keywords, referenceAnswer, followUp, maxScore, now, id, account.id).run();
     return NextResponse.json({ ok: true });
   }
 
@@ -550,7 +570,7 @@ function mapManualAssessment(row: DataRow) {
 }
 
 function mapAiQuestion(row: DataRow) {
-  return { id: row.id, jobId: row.job_id, title: row.title, category: row.category, questionType: row.question_type, duration: row.duration, competency: row.competency, keywords: row.keywords || row.competency, referenceAnswer: row.reference_answer || '', followUp: Boolean(row.follow_up), createdAt: row.created_at, updatedAt: row.updated_at };
+  return { id: row.id, jobId: row.job_id, title: row.title, category: row.category, questionType: row.question_type, duration: row.duration, competency: row.competency, keywords: row.keywords || row.competency, referenceAnswer: row.reference_answer || '', followUp: Boolean(row.follow_up), maxScore: Number(row.max_score) || 0, createdAt: row.created_at, updatedAt: row.updated_at };
 }
 
 function deduplicateAiQuestions(rows: DataRow[]) {
@@ -558,7 +578,7 @@ function deduplicateAiQuestions(rows: DataRow[]) {
   const unique: DataRow[] = [];
   const duplicateIds: string[] = [];
   for (const row of rows) {
-    const key = [row.job_id, row.title, row.category, row.question_type, row.duration, row.competency, row.keywords, row.reference_answer, row.follow_up]
+    const key = [row.job_id, row.title, row.category, row.question_type, row.duration, row.competency, row.keywords, row.reference_answer, row.follow_up, row.max_score]
       .map(value => String(value ?? '').trim().toLowerCase()).join('\u0000');
     if (seen.has(key)) duplicateIds.push(String(row.id));
     else { seen.add(key); unique.push(row); }

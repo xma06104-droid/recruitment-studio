@@ -22,6 +22,11 @@ export function normalizeCandidateStage(stage: string) {
   return LEGACY_STAGE_MAP[stage] || stage || '简历筛选';
 }
 
+export function displayCandidateStage(stage: string) {
+  const normalized = normalizeCandidateStage(stage);
+  return normalized === '用人部门筛选' ? '待用人部门审核' : normalized;
+}
+
 export function candidateStageIndex(stage: string) {
   const index = CANDIDATE_STAGES.indexOf(normalizeCandidateStage(stage) as (typeof CANDIDATE_STAGES)[number]);
   return index < 0 ? 0 : index;

@@ -1,6 +1,7 @@
 import { env } from 'cloudflare:workers';
 import type { NextRequest } from 'next/server';
 import { SCHEMA_STATEMENTS } from '@/db/schema';
+import { questionMaxScores } from '@/app/interview-score-weights';
 
 export type AppAccount = {
   id: string;
@@ -86,12 +87,32 @@ export async function ensureSchema() {
         ]);
       }
       await db.batch(SCHEMA_STATEMENTS.map(statement => db.prepare(statement)));
+      const currentQuestionColumns=await db.prepare('PRAGMA table_info(ai_questions)').all<{name:string}>();
+      if(currentQuestionColumns.results.some(column=>column.name==='max_score'))await backfillLegacyQuestionScores(db);
     })().catch(error => {
       schemaReady = null;
       throw error;
     });
   }
   await schemaReady;
+}
+
+async function backfillLegacyQuestionScores(db:D1Database){
+  const legacy=await db.prepare(`SELECT id, owner_id, job_id FROM ai_questions
+    WHERE max_score = -1 ORDER BY owner_id, COALESCE(job_id, ''), created_at ASC`).all<{id:string;owner_id:string;job_id:string|null}>();
+  if(!legacy.results.length)return;
+  const groups=new Map<string,{id:string}[]>();
+  for(const row of legacy.results){
+    const key=`${row.owner_id}\u0000${row.job_id||''}`;
+    const group=groups.get(key)||[];
+    group.push({id:row.id});groups.set(key,group);
+  }
+  const updates:D1PreparedStatement[]=[];
+  for(const group of groups.values()){
+    const scores=questionMaxScores(group.length);
+    group.forEach((row,index)=>updates.push(db.prepare('UPDATE ai_questions SET max_score = ? WHERE id = ? AND max_score = -1').bind(scores[index],row.id)));
+  }
+  if(updates.length)await db.batch(updates);
 }
 
 export async function createPasswordHash(password: string) {

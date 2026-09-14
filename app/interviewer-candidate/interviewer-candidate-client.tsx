@@ -228,13 +228,14 @@ export default function InterviewerCandidateClient() {
         <section className="interviewer-list-panel">
           <h2>{status}{currentJob?<small>{currentJob.title}</small>:null}</h2>
           <div className="interviewer-filter-row"><select defaultValue=""><option value="">沟通状态</option><option>未沟通</option><option>已沟通</option></select><select defaultValue=""><option value="">推荐筛选状态</option><option>未推荐</option><option>已推荐</option></select><select defaultValue="time"><option value="time">状态变更时间　⇅</option></select></div>
-          <div className="interviewer-batch-row"><label><input type="checkbox" checked={allSelected} onChange={toggleAll}/> 全选</label><button type="button" onClick={sendBatchNotification}><span>发送通知</span></button><button type="button" onClick={openBatchStage}><span>变更阶段</span><i aria-hidden="true">⌄</i></button><button type="button" onClick={downloadBatchResumes}><span>下载简历</span></button><button type="button" onClick={exportBatchData}><span>导出数据</span></button><button type="button" onClick={()=>flash(selected.length?'更多批量操作正在完善':'请先选择候选人')}><span>更多</span><i aria-hidden="true">⌄</i></button></div>
+          <div className="interviewer-batch-row"><label><input type="checkbox" checked={allSelected} onChange={toggleAll}/> 全选</label><button type="button" onClick={downloadBatchResumes}><span>下载简历</span></button><button type="button" onClick={exportBatchData}><span>导出数据</span></button><button type="button" onClick={()=>flash(selected.length?'更多批量操作正在完善':'请先选择候选人')}><span>更多</span><i aria-hidden="true">⌄</i></button></div>
           <div className="interviewer-candidate-list">
             {candidates.length?candidates.map(candidate=>{const job=data.jobs.find(item=>item.id===candidate.jobId);return <article className="interviewer-candidate-row" key={candidate.id} role="button" tabIndex={0} onClick={()=>setDetailId(candidate.id)} onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();setDetailId(candidate.id)}}}>
               <label onClick={event=>event.stopPropagation()}><input type="checkbox" checked={selected.includes(candidate.id)} onChange={()=>setSelected(selected.includes(candidate.id)?selected.filter(id=>id!==candidate.id):[...selected,candidate.id])}/></label>
               <div className="interviewer-candidate-profile"><p>{job?.title||candidate.role||'未关联职位'}　{formatDate(candidate.createdAt)}申请</p><h3>{candidate.name}<b>{candidate.score===null?'—':Math.max(1,Math.round(candidate.score/20))}</b><span>{candidate.city||'城市未填写'}</span>{candidate.years&&<span>{candidate.years}工作经验</span>}</h3><p>◼ {candidate.company||'最近公司未填写'}　{candidate.role||'职位未填写'}　{candidate.skills.slice(0,2).join('｜')||'暂无技能标签'}</p></div>
               <div className="interviewer-candidate-owner"><p>接收 HR： <b>{candidate.assignedHrName||data.account.contact}</b></p><p>当前状态： <span>◢ {candidateDisplayStatus(candidate.stage)}</span></p></div>
               <div className="interviewer-candidate-note"><p>推荐时间：{formatDate(candidate.assignedAt||candidate.updatedAt)}</p><p>最近备注： {reviews.find(review=>review.candidateId===candidate.id)?.comment||'-'}</p></div>
+              <button type="button" className="interviewer-view-detail" onClick={event=>{event.stopPropagation();setDetailId(candidate.id)}}>查看详情</button>
             </article>}):<div className="interviewer-empty"><span>⌕</span><b>暂无候选人</b><p>当前筛选条件下没有候选人记录</p></div>}
           </div>
           <footer className="interviewer-pagination"><span>共 {candidates.length} 条</span><button type="button" disabled>‹</button><button type="button" className="active">1</button><button type="button" disabled>›</button><select><option>10条/页</option><option>20条/页</option></select><label>前往 <input defaultValue="1"/> 页</label></footer>
@@ -261,7 +262,7 @@ function CandidateResumeDrawer({candidate,job,profile,review,aiInterview,saving,
   const status=candidateDisplayStatus(candidate.stage);
   const [noteOpen,setNoteOpen]=useState(false);
   const [note,setNote]=useState(review?.comment||'');
-  const [detailView,setDetailView]=useState<'resume'|'ai'>('resume');
+  const [detailView,setDetailView]=useState<'resume'|'ai'|'file'>('resume');
   return <div className="drawer-backdrop hr-resume-backdrop" onMouseDown={onClose}>
     <aside className="detail-drawer candidate-drawer hr-resume-drawer" aria-label={`${candidate.name}的简历`} onMouseDown={event=>event.stopPropagation()}>
       <button type="button" className="drawer-close" onClick={onClose} aria-label="关闭简历">×</button>
@@ -278,29 +279,34 @@ function CandidateResumeDrawer({candidate,job,profile,review,aiInterview,saving,
       <div className="hr-resume-tabs" role="tablist" aria-label="候选人详情内容">
         <button type="button" role="tab" aria-selected={detailView==='resume'} className={detailView==='resume'?'active':''} onClick={()=>setDetailView('resume')}>基本信息</button>
         <button type="button" role="tab" aria-selected={detailView==='ai'} className={detailView==='ai'?'active':''} onClick={()=>setDetailView('ai')}>AI 面试结果 <span>{aiInterview?.score!==null&&aiInterview?.score!==undefined?`${aiInterview.score} 分`:aiInterview?'待确认':'暂无'}</span></button>
+        <button type="button" role="tab" aria-selected={detailView==='file'} className={detailView==='file'?'active':''} disabled={!profile?.fileName} onClick={()=>setDetailView('file')}>查看简历</button>
       </div>
       {detailView==='resume'?<div className="hr-resume-tab-panel" role="tabpanel">
         <section className="hr-resume-section hr-resume-basic"><div className="profile-info"><p><span>应聘职位</span>{job?.title||candidate.role||'-'}</p><p><span>手机号</span>{candidate.phone||'-'}</p><p><span>邮箱</span>{candidate.email||'-'}</p><p><span>所在城市</span>{candidate.city||'-'}</p><p><span>工作经验</span>{profile?.workYears!==null&&profile?.workYears!==undefined?`${profile.workYears}年`:candidate.years||'-'}</p><p><span>期望薪资</span>{profile?.expectedSalary?`${profile.expectedSalary}元/月`:'-'}</p></div></section>
         <section className="hr-resume-section"><h3>教育背景</h3><p className="hr-resume-copy">{[profile?.school,profile?.major,profile?.education].filter(Boolean).join(' · ')||'暂无教育背景信息'}</p></section>
-        <ResumeList title="工作经历" items={profile?.workHistory}/>
-        <ProjectTimeline items={profile?.projectHistory}/>
+        <ExperienceTimeline title="工作经历" items={profile?.workHistory}/>
+        <ExperienceTimeline title="项目经历" items={profile?.projectHistory}/>
         <section className="hr-resume-section"><h3>技能与证书</h3><div className="channel-tags">{[...candidate.skills,...(profile?.certificates||[])].length?[...candidate.skills,...(profile?.certificates||[])].map((item,index)=><span key={`${item}-${index}`}>{item}</span>):<p className="hr-resume-copy">暂无技能与证书信息</p>}</div></section>
         {(profile?.highlights.length||profile?.risks.length)?<section className="hr-resume-section hr-resume-insights"><h3>AI 简历摘要</h3>{profile?.highlights.length?<div className="hr-insight-group highlight"><b>优势</b><div>{profile.highlights.map((item,index)=><span key={`highlight-${index}`}>{item}</span>)}</div></div>:null}{profile?.risks.length?<div className="hr-insight-group risk"><b>关注</b><div>{profile.risks.map((item,index)=><span key={`risk-${index}`}>{item}</span>)}</div></div>:null}</section>:null}
         {profile?.fileName?<div className="hr-resume-file-actions"><button type="button" onClick={()=>window.print()}>打印简历</button><a className="hr-resume-file" href={`/api/screening/file?candidateId=${encodeURIComponent(candidate.id)}`} target="_blank" rel="noreferrer">查看原始简历 · {profile.fileName}</a></div>:<p className="hr-resume-copy hr-resume-file-empty">未找到可预览的原始简历文件</p>}
-      </div>:<div className="hr-resume-tab-panel hr-resume-ai-panel" role="tabpanel">
+      </div>:detailView==='ai'?<div className="hr-resume-tab-panel hr-resume-ai-panel" role="tabpanel">
         {aiInterview?<section className="hr-resume-section hr-ai-interview-result"><AiInterviewResultPanel summary={aiInterview.summary} fallbackScore={aiInterview.score} durationSeconds={aiInterview.durationSeconds} completedAt={aiInterview.completedAt} compact/><AiInterviewRecordings candidateId={candidate.id}/></section>:<div className="hr-resume-ai-empty"><span>AI</span><b>暂无 AI 面试结果</b><p>候选人完成 AI 面试后，评分、能力维度和面试摘要会显示在这里。</p></div>}
-      </div>}
+      </div>:<div className="hr-resume-tab-panel hr-resume-file-panel" role="tabpanel"><iframe title={`${candidate.name}的原始简历`} src={`/api/screening/file?candidateId=${encodeURIComponent(candidate.id)}`}/></div>}
     </aside>
   </div>;
 }
 
-function ResumeList({title,items}:{title:string;items:string[]|undefined}){
-  return <section className="hr-resume-section"><h3>{title}</h3>{items?.length?<div className="hr-resume-list">{items.map((item,index)=><p key={`${title}-${index}`}>{item}</p>)}</div>:<p className="hr-resume-copy">暂无{title}信息</p>}</section>;
+function ExperienceTimeline({title,items}:{title:string;items:string[]|undefined}){
+  const source=title==='工作经历'?mergeLeadingWorkDates(items||[]):items||[];
+  const projects=groupProjectHistory(source);
+  return <section className="hr-resume-section"><h3>{title}</h3>{projects.length?<div className="hr-project-timeline">{projects.map((project,index)=><article key={`${project.label}-${index}`}><strong>{project.label}</strong><div>{project.details.length?project.details.map((detail,detailIndex)=><p key={`${project.label}-${detailIndex}`}>{detail}</p>):<p>暂无详细描述</p>}</div></article>)}</div>:<p className="hr-resume-copy">暂无{title}信息</p>}</section>;
 }
 
-function ProjectTimeline({items}:{items:string[]|undefined}){
-  const projects=groupProjectHistory(items||[]);
-  return <section className="hr-resume-section"><h3>项目经历</h3>{projects.length?<div className="hr-project-timeline">{projects.map((project,index)=><article key={`${project.label}-${index}`}><strong>{project.label}</strong><div>{project.details.length?project.details.map((detail,detailIndex)=><p key={`${project.label}-${detailIndex}`}>{detail}</p>):<p>暂无详细项目描述</p>}</div></article>)}</div>:<p className="hr-resume-copy">暂无项目经历信息</p>}</section>;
+function mergeLeadingWorkDates(items:string[]){
+  const values=items.map(item=>item.trim()).filter(Boolean);
+  const singleDate=/^(?:19|20)\d{2}(?:[.\/\-年]\d{1,2})?$/;
+  if(values.length>=3&&singleDate.test(values[0])&&singleDate.test(values[1]))return [`${values[0]} — ${values[1]}`,values.slice(2).join(' · ')];
+  return values;
 }
 
 function groupProjectHistory(items:string[]){
@@ -391,7 +397,8 @@ function candidateReviewStatus(stage:string):ReviewStatus {
 function candidateDisplayStatus(stage:string){
   if(stage==='已淘汰')return '已拒绝';
   if(stage==='待定')return '待定';
-  if(['简历筛选','AI面试','用人部门筛选'].includes(stage))return '待筛选';
+  if(stage==='用人部门筛选')return '待用人部门审核';
+  if(['简历筛选','AI面试'].includes(stage))return '待筛选';
   return '已通过';
 }
 

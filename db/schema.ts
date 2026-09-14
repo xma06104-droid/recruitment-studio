@@ -111,6 +111,7 @@ export const SCHEMA_STATEMENTS = [
     competency TEXT NOT NULL,
     keywords TEXT NOT NULL DEFAULT '',
     reference_answer TEXT NOT NULL DEFAULT '',
+    max_score INTEGER NOT NULL DEFAULT 0,
     follow_up INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
