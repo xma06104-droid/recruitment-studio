@@ -53,7 +53,7 @@ export function aiInterviewQuestionTotal(summary:string,fallbackScore:number|nul
   const result=normalizeAiInterviewResult(summary,fallbackScore);
   if(result.source!=='system-interview')return null;
   return {
-    score:Math.round(clamp(fallbackScore,result.rating*20,100)),
+    score:fallbackScore===null?0:Math.round(clamp(fallbackScore,0,100)),
     max:100,
   };
 }
@@ -63,7 +63,7 @@ export function AiInterviewResultPanel({ summary, fallbackScore, durationSeconds
   const usesQuestionTotal=result.source==='system-interview'&&result.dimensions.length>0;
   const questionTotal=result.dimensions.reduce((total,item)=>total+item.stars,0);
   const usesSystemScore=result.source==='system-interview';
-  const displayScore=usesSystemScore?Math.round(clamp(fallbackScore,result.rating*20,100)):result.rating;
+  const displayScore=usesSystemScore?(fallbackScore===null?0:Math.round(clamp(fallbackScore,0,100))):result.rating;
   const displayMax=usesSystemScore?100:result.ratingMax;
   const averageRating=usesQuestionTotal?questionTotal/result.dimensions.length:result.rating;
   const stars = Array.from({ length:result.ratingMax }, (_, index) => index < Math.round(averageRating) ? '★' : '☆').join('');
