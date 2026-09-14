@@ -249,11 +249,11 @@ export default function CandidateInterview({ token }:{ token:string }) {
 
   async function transcribeRecording(audio:Blob,questionId:string){
     try{
-      setSpeechNotice('正在处理本题录音…');
+      setSpeechNotice('处理中');
       const chunks=await audioToWavChunks(audio);
       let transcript='';
       for(let index=0;index<chunks.length;index+=1){
-        setSpeechNotice(`正在转写录音 ${index+1}/${chunks.length}…`);
+        setSpeechNotice('处理中');
         const form=new FormData();form.set('audio',chunks[index],`answer-${index+1}.wav`);form.set('questionId',questionId);
         const response=await fetch(`/api/interview/${encodeURIComponent(token)}/transcribe`,{method:'POST',body:form});
         const result=await response.json().catch(()=>({})) as {transcript?:string;message?:string};
