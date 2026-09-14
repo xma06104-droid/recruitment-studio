@@ -9,7 +9,7 @@ export type StructuredAiInterviewResult = {
   ratingMax: number;
   duration: string;
   summary: string;
-  dimensions: { name: string; stars: number; suggestion: string }[];
+  dimensions: { name: string; stars: number; score?: number; max?: number; suggestion: string }[];
   presentation: { name: string; score: number; max: number; comment: string }[];
   cognitive?: { score: number; max: number; comment: string };
   personality?: { name: string; score: number }[];
@@ -80,12 +80,16 @@ export function AiInterviewResultPanel({ summary, fallbackScore, durationSeconds
     </section>
 
     {result.dimensions.length>0&&<section className="structured-ai-section">
-      <header><h3>能力维度与答题表现</h3><span>统一量纲：5 星</span></header>
-      <div className="structured-ai-dimensions">{result.dimensions.map(item=><article key={item.name}>
-        <div><b>{item.name}</b><em>{item.stars} / 5</em></div>
-        <i><span style={{width:`${item.stars/5*100}%`}}/></i>
-        {item.suggestion&&<p>{item.suggestion}</p>}
-      </article>)}</div>
+      <header><h3>能力维度与答题表现</h3><span>{usesSystemScore?'统一量纲：100 分':'统一量纲：5 星'}</span></header>
+      <div className="structured-ai-dimensions">{result.dimensions.map(item=>{
+        const itemScore=usesSystemScore?(item.score??item.stars*20):item.stars;
+        const itemMax=usesSystemScore?(item.max??100):5;
+        return <article key={item.name}>
+          <div><b>{item.name}</b><em>{itemScore} / {itemMax}</em></div>
+          <i><span style={{width:`${clamp(itemScore/itemMax*100,0,100)}%`}}/></i>
+          {item.suggestion&&<p>{item.suggestion}</p>}
+        </article>;
+      })}</div>
     </section>}
 
     {(result.presentation.length>0||result.cognitive)&&<section className="structured-ai-section">
@@ -117,6 +121,8 @@ export function normalizeAiInterviewResult(summary:string, fallbackScore:number|
   const dimensions=parsed.items.map(item=>({
     name:`第 ${item.number} 题 · ${item.question}`,
     stars:Math.round(clamp(item.score,0,100)/20),
+    score:Math.round(clamp(item.score,0,100)),
+    max:100,
     suggestion:[`自动评分 ${item.score}/100`,item.keywords&&item.keywords!=='无'?`命中关键词：${item.keywords}`:'未命中配置关键词',item.answer&&item.answer!=='未作答'?`完整转写：${item.answer}`:'本题未有效作答'].join('；'),
   }));
   const presentation=[
