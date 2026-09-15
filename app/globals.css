@@ -1150,6 +1150,7 @@ button:disabled{cursor:wait}
 .candidate-top b{color:#f4f8ff;font-size:16px}.candidate-top small{margin-top:6px;color:#97a5b8;font-size:12px;line-height:1.45}
 .candidate-top em{padding:0;color:#65d7e8;background:transparent!important;font-size:16px}
 .candidate-card h3{margin:24px 0 15px;color:#f4f8ff;font-size:15px}
+.candidate-card h3 span{display:block;margin-bottom:7px;color:#7f91a8;font-size:11px;font-weight:700;letter-spacing:.04em}
 .skill-row{gap:8px}.skill-row i{padding:7px 10px;border:1px solid rgba(162,181,211,.1);border-radius:8px;color:#b7c5d5;background:#172438;font-size:11px}
 .candidate-card footer{gap:10px;margin-top:24px;padding-top:17px;border-color:rgba(162,181,211,.1)}
 .candidate-card footer span{padding:7px 10px;color:#65d9e8;background:#162940;font-size:11px}.candidate-card footer small,.candidate-card footer b{font-size:11px}.candidate-card footer small{color:#94a2b6}.candidate-card footer b{color:#67d7e7}
