@@ -1107,7 +1107,11 @@ button:disabled{cursor:wait}
 }
 .ai-ranking,.ranking-row{border-color:rgba(162,181,211,.09);color:#c5cfdd;background:#111a2b}.ranking-row strong{color:#f4f8ff}.ranking-row small,.rank-num{color:#8998ad}
 .week-strip{border-color:rgba(162,181,211,.11);background:#111a2b}.week-strip button{border-color:rgba(162,181,211,.09);color:#96a4b8;background:#111a2b}.week-strip button:hover,.week-strip button:focus-visible{outline:0;color:#eaf4ff;background:#16243a}.week-strip button.active{color:#fff;background:linear-gradient(110deg,#168da8,#347ce4)}
-.interview-side>div{background:#0d1728}
+.interview-side>div{gap:15px;padding:17px;background:#0d1728}
+.interview-side h3{font-size:16px}
+.interview-side>div>b{font-size:28px}
+.interview-side>div>span{font-size:12px;line-height:1.45}
+.interview-side small{margin-top:7px;font-size:10px;line-height:1.55}
 .manage-row:active,.manage-row:focus,.flow-person-row:active,.ai-question-row:active,.rs-person-row:active{background:linear-gradient(90deg,rgba(30,183,211,.15),rgba(34,102,181,.09));box-shadow:inset 4px 0 0 #43cfe7}
 .candidate-card:active,.candidate-card:focus-visible,.interview-card:active,.interview-card:focus-visible,.kpi-grid article.clickable:active,.kpi-grid article.clickable:focus-visible{outline:0;border-color:rgba(67,207,231,.3);background:#15243a;box-shadow:0 18px 42px rgba(0,8,24,.28),inset 0 0 0 1px rgba(67,207,231,.07)}
 
