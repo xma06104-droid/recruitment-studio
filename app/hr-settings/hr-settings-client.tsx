@@ -1,7 +1,6 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
-import Link from 'next/link';
 import HrAccountMenu from '@/app/components/hr-account-menu';
 import { HR_ACCOUNT_CACHE, readHrSessionCache, writeHrSessionCache } from '@/app/hr-session-cache';
 
@@ -83,9 +82,9 @@ export default function HrSettingsClient(){
 
   return <main className="interviewer-page">
     <aside className="interviewer-rail">
-      <Link className="interviewer-logo" href="/workbench"><span>星</span><b>星鉴人才<small>HIRING DEPARTMENT</small></b></Link>
+      <a className="interviewer-logo" href="/workbench"><span>星</span><b>星鉴人才<small>HIRING DEPARTMENT</small></b></a>
       <p className="interviewer-role-label">HR 工作台</p>
-      <nav>{menuItems.map(item=><Link key={item.label} className={item.label==='设置'?'active':''} href={item.href}><i>{item.icon}</i><span>{item.label}</span></Link>)}</nav>
+      <nav>{menuItems.map(item=><a key={item.label} className={item.label==='设置'?'active':''} href={item.href}><i>{item.icon}</i><span>{item.label}</span></a>)}</nav>
       <button type="button">«</button>
     </aside>
     <section className="interviewer-main">
@@ -93,7 +92,7 @@ export default function HrSettingsClient(){
         <div className="interviewer-heading"><h1>设置</h1><small>HR 账号与安全</small></div>
         <div className="interviewer-tools"><HrAccountMenu key={account.contact} contact={account.contact} phone={account.phone} email={account.email} role={account.role}/></div>
       </header>
-      <div className="interviewer-open-tabs"><Link href="/interviewer-candidate">候选人筛选</Link><i>›</i><button type="button" className="active">设置</button></div>
+      <div className="interviewer-open-tabs"><a href="/interviewer-candidate">候选人筛选</a><i>›</i><button type="button" className="active">设置</button></div>
       <div className="hr-module-content hr-settings-content">
         <section className="hr-module-hero"><div><p>ACCOUNT SETTINGS</p><h2>账号设置</h2><span>维护个人资料并定期更新登录密码，保障账号安全</span></div></section>
         <div className="hr-settings-grid">

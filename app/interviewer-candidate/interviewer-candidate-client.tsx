@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { announceWorkbenchChange, useWorkbenchSync } from '@/app/workbench-sync';
 import { AiInterviewResultPanel } from '@/app/components/ai-interview-result';
 import AiInterviewRecordings from '@/app/components/ai-interview-recordings';
@@ -144,9 +143,9 @@ export default function InterviewerCandidateClient() {
 
   return <main className="interviewer-page">
     <aside className="interviewer-rail">
-      <Link className="interviewer-logo" href="/workbench" aria-label="返回星鉴人才招聘工作台"><span>星</span><b>星鉴人才<small>HIRING DEPARTMENT</small></b></Link>
+      <a className="interviewer-logo" href="/workbench" aria-label="返回星鉴人才招聘工作台"><span>星</span><b>星鉴人才<small>HIRING DEPARTMENT</small></b></a>
       <p className="interviewer-role-label">HR 工作台</p>
-      <nav>{menuItems.map((item,index)=><Link key={item.label} className={index===0?'active':''} href={item.href} title={item.label}><i>{item.icon}</i><span>{item.label}</span></Link>)}</nav>
+      <nav>{menuItems.map((item,index)=><a key={item.label} className={index===0?'active':''} href={item.href} title={item.label}><i>{item.icon}</i><span>{item.label}</span></a>)}</nav>
       <button type="button" title="收起菜单">«</button>
     </aside>
 
@@ -158,7 +157,7 @@ export default function InterviewerCandidateClient() {
           <HrAccountMenu contact={data.account.contact} phone={data.account.phone} email={data.account.email} role={data.account.role}/>
         </div>
       </header>
-      <div className="interviewer-open-tabs"><Link href="/workbench">招聘管理</Link><i>›</i><button type="button" className="active">候选人筛选</button></div>
+      <div className="interviewer-open-tabs"><a href="/workbench">招聘管理</a><i>›</i><button type="button" className="active">候选人筛选</button></div>
 
       <div className="interviewer-content">
         <aside className="interviewer-filter-panel">

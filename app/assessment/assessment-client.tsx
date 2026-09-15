@@ -1,7 +1,6 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { announceWorkbenchChange, useWorkbenchSync } from '@/app/workbench-sync';
 import HrAccountMenu from '@/app/components/hr-account-menu';
 import { HR_WORKBENCH_CACHE, readHrSessionCache, writeHrSessionCache } from '@/app/hr-session-cache';
@@ -85,9 +84,9 @@ export default function AssessmentClient() {
 
   return <main className="interviewer-page assessment-page">
     <aside className="interviewer-rail">
-      <Link className="interviewer-logo" href="/workbench" aria-label="返回星鉴人才招聘工作台"><span>星</span><b>星鉴人才<small>HIRING DEPARTMENT</small></b></Link>
+      <a className="interviewer-logo" href="/workbench" aria-label="返回星鉴人才招聘工作台"><span>星</span><b>星鉴人才<small>HIRING DEPARTMENT</small></b></a>
       <p className="interviewer-role-label">HR 工作台</p>
-      <nav>{menuItems.map((item,index)=><Link key={item.label} className={index===1?'active':''} href={item.href} title={item.label}><i>{item.icon}</i><span>{item.label}</span></Link>)}</nav>
+      <nav>{menuItems.map((item,index)=><a key={item.label} className={index===1?'active':''} href={item.href} title={item.label}><i>{item.icon}</i><span>{item.label}</span></a>)}</nav>
       <button type="button" title="收起菜单">«</button>
     </aside>
 
@@ -99,7 +98,7 @@ export default function AssessmentClient() {
           <HrAccountMenu contact={data.account.contact} phone={data.account.phone} email={data.account.email} role={data.account.role}/>
         </div>
       </header>
-      <div className="interviewer-open-tabs"><Link href="/interviewer-candidate">候选人筛选</Link><i>›</i><button type="button" className="active">人工评估</button></div>
+      <div className="interviewer-open-tabs"><a href="/interviewer-candidate">候选人筛选</a><i>›</i><button type="button" className="active">人工评估</button></div>
 
       <div className="assessment-content">
         <aside className="assessment-filter-card">

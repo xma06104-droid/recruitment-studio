@@ -13,19 +13,19 @@ export async function POST(request:NextRequest, context:{ params:Promise<{token:
   const invitation = await invitationForToken(token);
   if (!invitation) return failure('面试地址无效或已被重新发送。', 404);
   if (Date.parse(invitation.expires_at) < Date.now() || ['已超时','已过期','已失效','已完成'].includes(invitation.status)) {
-    return failure('当前面试已结束，无法继续上传录像。', 410);
+    return failure('当前面试已结束，无法继续上传音视频。', 410);
   }
   const form = await request.formData().catch(() => null);
   const recording = form?.get('recording');
   const questionId = String(form?.get('questionId') || '').trim().slice(0, 120);
   const durationSeconds = clampNumber(form?.get('durationSeconds'), 1, 900, 1);
-  if (!(recording instanceof File) || recording.size < 1024) return failure('没有收到有效的面试录像。', 400);
-  if (recording.size > MAX_RECORDING_BYTES) return failure('本题录像过大，请联系招聘负责人。', 413);
-  if (!recording.type.startsWith('video/')) return failure('录像格式无效。', 415);
+  if (!(recording instanceof File) || recording.size < 512) return failure('没有收到有效的面试音视频。', 400);
+  if (recording.size > MAX_RECORDING_BYTES) return failure('本题音视频文件过大，请联系招聘负责人。', 413);
+  if (!recording.type.startsWith('audio/') && !recording.type.startsWith('video/')) return failure('音视频格式无效。', 415);
   const question = parseQuestions(invitation.questions_json).find(item => item.id === questionId);
   if (!question) return failure('面试题不存在或已更新。', 400);
 
-  const extension = recording.type.includes('mp4') ? 'mp4' : 'webm';
+  const extension = recordingExtension(recording.type);
   const objectKey = `ai-interviews/${invitation.owner_id}/${invitation.id}/${safeSegment(questionId)}.${extension}`;
   const now = new Date().toISOString();
   const db = getDb();
@@ -73,5 +73,6 @@ function parseQuestions(value:string):{id:string;title:string}[] {
 }
 
 function safeSegment(value:string) { return value.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 100) || crypto.randomUUID(); }
+function recordingExtension(type:string) { if(type.startsWith('video/')&&type.includes('mp4'))return 'mp4';if(type.includes('mp4'))return 'm4a';if(type.includes('ogg'))return 'ogg';if(type.includes('wav'))return 'wav';return 'webm'; }
 function clampNumber(value:unknown, min:number, max:number, fallback:number) { const parsed=Number(value);return Number.isFinite(parsed)?Math.min(max,Math.max(min,Math.round(parsed))):fallback; }
 function failure(message:string,status:number){return NextResponse.json({ok:false,message},{status});}

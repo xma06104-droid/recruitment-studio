@@ -12,17 +12,17 @@ export async function GET(request:NextRequest, context:{ params:Promise<{id:stri
     FROM ai_interview_recordings r
     LEFT JOIN candidate_assignments ca ON ca.candidate_id = r.candidate_id
     WHERE r.id = ? AND (r.owner_id = ? OR ca.hr_account_id = ?) LIMIT 1`).bind(id, account.id, account.id).first<RecordingRow>();
-  if (!row) return NextResponse.json({ ok:false, message:'录像不存在或没有查看权限。' }, { status:404 });
+  if (!row) return NextResponse.json({ ok:false, message:'音视频不存在或没有查看权限。' }, { status:404 });
   const bucket = getResumeBucket();
   const metadata = await bucket.head(row.object_key);
-  if (!metadata) return NextResponse.json({ ok:false, message:'录像文件不存在。' }, { status:404 });
+  if (!metadata) return NextResponse.json({ ok:false, message:'音视频文件不存在。' }, { status:404 });
   const total = metadata.size || Number(row.size_bytes || 0);
   const range = parseRange(request.headers.get('range'), total);
   const object = await bucket.get(row.object_key, range ? { range:{ offset:range.start, length:range.end-range.start+1 } } : undefined);
-  if (!object) return NextResponse.json({ ok:false, message:'录像文件不存在。' }, { status:404 });
+  if (!object) return NextResponse.json({ ok:false, message:'音视频文件不存在。' }, { status:404 });
   const headers = new Headers();
   object.writeHttpMetadata(headers);
-  headers.set('Content-Type', row.content_type || headers.get('Content-Type') || 'video/webm');
+  headers.set('Content-Type', row.content_type || headers.get('Content-Type') || 'audio/webm');
   headers.set('Accept-Ranges', 'bytes');
   headers.set('Cache-Control', 'private, no-store');
   headers.set('ETag', object.httpEtag);

@@ -23,6 +23,7 @@ export default function CandidateInterview({ token }:{ token:string }) {
   const recognitionRef=useRef<SpeechRecognitionLike|null>(null);
   const recorderRef=useRef<MediaRecorder|null>(null);
   const recordingChunksRef=useRef<Blob[]>([]);
+  const pendingRecordingsRef=useRef<Record<string,Blob>>({});
   const transcriptRef=useRef<Record<string,string>>({});
   const committedTranscriptRef=useRef<Record<string,string>>({});
   const listenWantedRef=useRef(false);
@@ -208,13 +209,21 @@ export default function CandidateInterview({ token }:{ token:string }) {
     if(saving)return;
     setSaving(true);
     listenWantedRef.current=false;recognitionGenerationRef.current+=1;recognitionRef.current?.stop();setListening(false);
-    const recordingBlob=await stopQuestionRecording();
+    const freshRecordingBlob=await stopQuestionRecording();
+    if(question&&freshRecordingBlob)pendingRecordingsRef.current[question.id]=freshRecordingBlob;
+    const recordingBlob=question?pendingRecordingsRef.current[question.id]||null:null;
     let currentAnswer=question?contextualizeSpeechTranscript(transcriptRef.current[question.id]||answers[question.id]||'',invitation?.jobTitle||'',question):'';
-    if(question&&serverTranscription&&recordingBlob){
-      const transcript=await transcribeRecording(recordingBlob,question.id);
+    if(question&&serverTranscription&&freshRecordingBlob){
+      const transcript=await transcribeRecording(freshRecordingBlob,question.id);
       if(transcript)currentAnswer=contextualizeSpeechTranscript(transcript,invitation?.jobTitle||'',question);
     }
     if(question&&currentAnswer){transcriptRef.current[question.id]=currentAnswer;committedTranscriptRef.current[question.id]=currentAnswer;setAnswers(current=>({...current,[question.id]:currentAnswer}))}
+    if(question&&recordingBlob){
+      const durationSeconds=Math.max(1,(question.duration||120)-seconds);
+      const stored=await uploadQuestionRecording(recordingBlob,question.id,durationSeconds);
+      if(!stored){if(auto)setSeconds(5);setSaving(false);return}
+      delete pendingRecordingsRef.current[question.id];
+    }
     if(!auto&&!currentAnswer.trim()){setError(serverTranscription?'没有识别到清晰回答，请点击“重新识别”后再试。':'请先完成语音作答，识别到回答后才能提交。');setSaving(false);startListening();return}
     if(currentAnswer.trim())setError('');
     if(index<questions.length-1){setSaving(false);setIndex(value=>value+1);return}
@@ -227,7 +236,7 @@ export default function CandidateInterview({ token }:{ token:string }) {
   }
 
   function startQuestionRecording(){
-    if(!serverTranscription||recorderRef.current?.state==='recording'||typeof MediaRecorder==='undefined')return;
+    if(recorderRef.current?.state==='recording'||typeof MediaRecorder==='undefined')return;
     const audioTracks=streamRef.current?.getAudioTracks().filter(track=>track.readyState==='live')||[];
     if(!audioTracks.length)return;
     try{
@@ -262,6 +271,20 @@ export default function CandidateInterview({ token }:{ token:string }) {
       }
       setError('');setSpeechNotice('');return transcript;
     }catch{setError('录音上传失败，请检查网络后重试。');return ''}
+  }
+
+  async function uploadQuestionRecording(audio:Blob,questionId:string,durationSeconds:number){
+    try{
+      const extension=audio.type.includes('mp4')?'m4a':audio.type.includes('ogg')?'ogg':'webm';
+      const form=new FormData();
+      form.set('recording',audio,`answer.${extension}`);
+      form.set('questionId',questionId);
+      form.set('durationSeconds',String(durationSeconds));
+      const response=await fetch(`/api/interview/${encodeURIComponent(token)}/recording`,{method:'POST',body:form});
+      const result=await response.json().catch(()=>({})) as {message?:string};
+      if(!response.ok){setError(result.message||'录音保存失败，请重试后再提交本题。');return false}
+      return true;
+    }catch{setError('录音上传失败，请检查网络后重试。');return false}
   }
 
   function stopDevices(){listenWantedRef.current=false;recognitionGenerationRef.current+=1;if(speechRestartTimerRef.current!==null)window.clearTimeout(speechRestartTimerRef.current);if(speechWatchdogTimerRef.current!==null)window.clearTimeout(speechWatchdogTimerRef.current);if(recorderRef.current?.state==='recording')recorderRef.current.stop();setRecording(false);streamRef.current?.getTracks().forEach(track=>track.stop());recognitionRef.current?.abort();if(typeof window!=='undefined'&&'speechSynthesis'in window)window.speechSynthesis.cancel()}
