@@ -9,7 +9,7 @@ type SpeechAlternativeLike = { transcript:string;confidence?:number };
 type SpeechResultLike = { [index:number]:SpeechAlternativeLike;length:number;isFinal?:boolean };
 type SpeechRecognitionEventLike = { resultIndex?:number;results:ArrayLike<SpeechResultLike> };
 type SpeechRecognitionPhraseLike = { phrase:string;boost:number };
-type SpeechRecognitionLike = { lang:string;continuous:boolean;interimResults:boolean;maxAlternatives?:number;phrases?:SpeechRecognitionPhraseLike[];processLocally?:boolean;start:()=>void;stop:()=>void;abort:()=>void;onresult:((event:SpeechRecognitionEventLike)=>void)|null;onend:(()=>void)|null;onerror:((event:{error?:string})=>void)|null };
+type SpeechRecognitionLike = { lang:string;continuous:boolean;interimResults:boolean;maxAlternatives?:number;phrases?:SpeechRecognitionPhraseLike[];processLocally?:boolean;start:()=>void;stop:()=>void;abort:()=>void;onresult:((event:SpeechRecognitionEventLike)=>void)|null;onspeechstart:(()=>void)|null;onspeechend:(()=>void)|null;onend:(()=>void)|null;onerror:((event:{error?:string})=>void)|null };
 type SpeechRecognitionOptionsLike = { langs:string[];processLocally:boolean;quality:'dictation' };
 type SpeechRecognitionConstructor = {
   new():SpeechRecognitionLike;
@@ -30,6 +30,7 @@ export default function CandidateInterview({ token }:{ token:string }) {
   const recognitionGenerationRef=useRef(0);
   const speechRestartTimerRef=useRef<number|null>(null);
   const speechWatchdogTimerRef=useRef<number|null>(null);
+  const speechPendingTimerRef=useRef<number|null>(null);
   const speechFailureCountRef=useRef(0);
   const preferLocalSpeechRef=useRef(false);
   const startedAt=useRef(0);
@@ -41,6 +42,7 @@ export default function CandidateInterview({ token }:{ token:string }) {
   const [answers,setAnswers]=useState<Record<string,string>>({});
   const [seconds,setSeconds]=useState(120);
   const [listening,setListening]=useState(false);
+  const [speechPending,setSpeechPending]=useState(false);
   const [speechMode,setSpeechMode]=useState<'preparing'|'local'|'online'>('online');
   const [speechNotice,setSpeechNotice]=useState('');
   const [recording,setRecording]=useState(false);
@@ -61,6 +63,8 @@ export default function CandidateInterview({ token }:{ token:string }) {
   useEffect(()=>{
     if(phase!=='interview'||!question)return;
     listenWantedRef.current=false;recognitionGenerationRef.current+=1;recognitionRef.current?.abort();
+    if(speechPendingTimerRef.current!==null)window.clearTimeout(speechPendingTimerRef.current);
+    setSpeechPending(false);
     setSeconds(question.duration||120);
     const timer=window.setTimeout(()=>{setSpeechNotice('');speakAndListen(question.title)},400);
     return()=>window.clearTimeout(timer);
@@ -131,7 +135,7 @@ export default function CandidateInterview({ token }:{ token:string }) {
     if(speechWatchdogTimerRef.current!==null){window.clearTimeout(speechWatchdogTimerRef.current);speechWatchdogTimerRef.current=null}
     if(!resume){
       listenWantedRef.current=false;recognitionGenerationRef.current+=1;
-      const previous=recognitionRef.current;if(previous){previous.onend=null;previous.onerror=null;previous.onresult=null;previous.abort()}
+      const previous=recognitionRef.current;if(previous){previous.onend=null;previous.onerror=null;previous.onresult=null;previous.onspeechstart=null;previous.onspeechend=null;previous.abort()}
     }
     const generation=recognitionGenerationRef.current;const recognition=new Recognition();const questionId=question.id;
     const sessionBase=committedTranscriptRef.current[questionId]||transcriptRef.current[questionId]||answers[questionId]||'';let committed=sessionBase;let latestInterim='';let fatalError=false;
@@ -151,6 +155,17 @@ export default function CandidateInterview({ token }:{ token:string }) {
         if(listenWantedRef.current&&generation===recognitionGenerationRef.current&&recognitionRef.current===recognition)recognition.abort();
       },18000);
     };
+    const schedulePendingRelease=()=>{
+      if(speechPendingTimerRef.current!==null)window.clearTimeout(speechPendingTimerRef.current);
+      speechPendingTimerRef.current=window.setTimeout(()=>{speechPendingTimerRef.current=null;setSpeechPending(false)},2500);
+    };
+    recognition.onspeechstart=()=>{
+      if(speechPendingTimerRef.current!==null)window.clearTimeout(speechPendingTimerRef.current);
+      setSpeechPending(true);
+    };
+    recognition.onspeechend=()=>{
+      schedulePendingRelease();
+    };
     recognition.onresult=event=>{
       speechFailureCountRef.current=0;setSpeechNotice('');setError(current=>current.startsWith('语音识别')?'':current);
       armWatchdog();
@@ -163,10 +178,12 @@ export default function CandidateInterview({ token }:{ token:string }) {
       committed=joinSpeechTranscript(sessionBase,sessionFinal);committedTranscriptRef.current[questionId]=committed;
       latestInterim=interim;
       const transcript=contextualizeSpeechTranscript(joinSpeechTranscript(committed,interim),invitation?.jobTitle||'',question);transcriptRef.current[questionId]=transcript;
+      if(transcript){if(speechPendingTimerRef.current!==null){window.clearTimeout(speechPendingTimerRef.current);speechPendingTimerRef.current=null}setSpeechPending(false)}
       setAnswers(current=>({...current,[questionId]:transcript}));
     };
     recognition.onerror=event=>{
       const code=event.error||'';
+      schedulePendingRelease();
       if(['not-allowed','audio-capture'].includes(code)){fatalError=true;listenWantedRef.current=false;setError('无法使用麦克风进行语音识别，请检查浏览器权限后重试。')}
       else if(code==='service-not-allowed'){fatalError=true;listenWantedRef.current=false;setError('当前浏览器无法连接实时语音识别服务，请使用最新版 Chrome 或 Edge 打开后重试。')}
       else if(code==='language-not-supported'&&preferLocalSpeechRef.current){preferLocalSpeechRef.current=false;setSpeechMode('online')}
@@ -181,6 +198,7 @@ export default function CandidateInterview({ token }:{ token:string }) {
     recognition.onend=()=>{
       if(speechWatchdogTimerRef.current!==null){window.clearTimeout(speechWatchdogTimerRef.current);speechWatchdogTimerRef.current=null}
       if(latestInterim){committed=contextualizeSpeechTranscript(joinSpeechTranscript(committed,latestInterim),invitation?.jobTitle||'',question);committedTranscriptRef.current[questionId]=committed;transcriptRef.current[questionId]=committed;setAnswers(current=>({...current,[questionId]:committed}))}
+      schedulePendingRelease();
       if(!fatalError&&listenWantedRef.current&&generation===recognitionGenerationRef.current)scheduleRestart();else setListening(false);
     };
     recognitionRef.current=recognition;
@@ -253,14 +271,14 @@ export default function CandidateInterview({ token }:{ token:string }) {
     }catch{setError('录音上传失败，请检查网络后重试。');return false}
   }
 
-  function stopDevices(){listenWantedRef.current=false;recognitionGenerationRef.current+=1;if(speechRestartTimerRef.current!==null)window.clearTimeout(speechRestartTimerRef.current);if(speechWatchdogTimerRef.current!==null)window.clearTimeout(speechWatchdogTimerRef.current);if(recorderRef.current?.state==='recording')recorderRef.current.stop();setRecording(false);streamRef.current?.getTracks().forEach(track=>track.stop());recognitionRef.current?.abort();if(typeof window!=='undefined'&&'speechSynthesis'in window)window.speechSynthesis.cancel()}
+  function stopDevices(){listenWantedRef.current=false;recognitionGenerationRef.current+=1;if(speechRestartTimerRef.current!==null)window.clearTimeout(speechRestartTimerRef.current);if(speechWatchdogTimerRef.current!==null)window.clearTimeout(speechWatchdogTimerRef.current);if(speechPendingTimerRef.current!==null)window.clearTimeout(speechPendingTimerRef.current);setSpeechPending(false);if(recorderRef.current?.state==='recording')recorderRef.current.stop();setRecording(false);streamRef.current?.getTracks().forEach(track=>track.stop());recognitionRef.current?.abort();if(typeof window!=='undefined'&&'speechSynthesis'in window)window.speechSynthesis.cancel()}
 
   if(phase==='loading')return <main className="candidate-interview-shell"><div className="candidate-interview-state"><i>✦</i><h1>正在验证面试邀请</h1><p>请稍候，系统正在读取您的专属面试题。</p></div></main>;
   if(phase==='error')return <main className="candidate-interview-shell"><div className="candidate-interview-state error"><i>!</i><h1>无法进入面试</h1><p>{error}</p></div></main>;
   if(phase==='complete')return <main className="candidate-interview-shell"><div className="candidate-interview-state complete"><i>✓</i><h1>AI 面试已完成</h1><p>感谢您的参与。回答与面试结果已安全提交给招聘团队，您可以关闭此页面。</p></div></main>;
   if(phase==='intro')return <main className="candidate-interview-shell"><section className="candidate-interview-welcome"><span>AI INTERVIEW INVITATION</span><div className="candidate-brand">星鉴人才</div><h1>{invitation?.candidateName}，您好</h1><p>您即将参加 <b>{invitation?.jobTitle}</b> 岗位的 AI 面试。本次共 {questions.length} 道题，建议在安静、网络稳定的环境中完成。</p><div className="candidate-device-list"><div><i>01</i><span><b>使用 Chrome 或 Edge</b><small>请在系统浏览器打开，避免使用应用内置浏览器</small></span></div><div><i>02</i><span><b>开启摄像头，仅录制语音</b><small>语音将在作答过程中实时转为文字，录音同步保存用于招聘评估</small></span></div><div><i>03</i><span><b>一次提交，不可重复作答</b><small>请勿关闭页面或将专属链接转发他人</small></span></div></div>{error&&<div className="candidate-submit-error">{error}</div>}<button disabled={speechMode==='preparing'} onClick={()=>void start()}>{speechMode==='preparing'?'正在准备中文语音识别…':'同意录音并开始面试'} <b>→</b></button><small>点击开始即表示您知悉摄像头将开启、系统仅录制语音。链接有效期至 {invitation?new Intl.DateTimeFormat('zh-CN',{year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(invitation.expiresAt)):''}</small></section></main>;
   const answer=question?answers[question.id]||'':'';const progress=Math.round((index+1)/Math.max(1,questions.length)*100);
-  return <main className="candidate-interview-shell live"><header className="candidate-live-head"><div><span>星鉴人才 · AI 面试</span><h1>{invitation?.jobTitle}</h1></div><div><b>{index+1}</b><span>/ {questions.length}</span></div></header><div className="candidate-live-progress"><i style={{width:`${progress}%`}}/></div><div className="candidate-live-grid"><section className="candidate-video"><video ref={videoRef} autoPlay playsInline muted onPlaying={()=>{setCamera('ready');setError(current=>current.startsWith('摄像头')?'':current)}} onStalled={()=>setCamera('blocked')} onError={()=>setCamera('blocked')}/><div className={`candidate-camera-badge ${camera}`}>{camera==='ready'?'● 摄像头与麦克风已连接':camera==='blocked'?'摄像头已连接，画面等待播放':camera==='denied'?'未获得摄像头权限':'正在加载摄像头画面…'}</div>{camera==='blocked'&&<button type="button" className="candidate-video-retry" onClick={()=>void playVideo()}>重新显示摄像头画面</button>}<footer><b>{invitation?.candidateName}</b><span>{recording?'● 语音录音已同步保存':'正在准备录音'}</span></footer></section><section className="candidate-question"><div className="candidate-question-meta"><span>QUESTION {String(index+1).padStart(2,'0')}</span><time>{String(Math.floor(seconds/60)).padStart(2,'0')}:{String(seconds%60).padStart(2,'0')}</time></div><h2>{question?.title}</h2><p>请直接口述回答。系统会实时识别并显示文字，同时保存语音录音；倒计时结束后自动进入下一题。</p><div className={`candidate-voice-answer ${listening||recording?'listening':''}`}><i>◉</i><span><b>{listening?(speechMode==='local'?'正在本机实时识别':'正在实时识别语音'):'实时语音识别'}</b><p>{answer||(speechMode==='preparing'?'正在准备中文语音识别…':'请开始口述，识别出的文字会实时显示在这里。')}</p></span></div>{speechNotice&&<div className="candidate-submit-notice" role="status">{speechNotice}</div>}{error&&<div className="candidate-submit-error">{error}</div>}<div className="candidate-question-actions"><span className={listening||recording?'active':''}>{saving?'正在保存本题…':listening?(speechMode==='local'?'● 本机实时识别中':'● 在线实时识别中'):'实时语音识别已暂停'}</span>{!listening&&<button className="voice-retry" disabled={saving||speechMode==='preparing'} onClick={()=>void retryListening()}>{speechMode==='preparing'?'正在准备…':'重新识别'}</button>}<button disabled={saving} onClick={()=>void nextQuestion()}>{saving?'正在保存…':index===questions.length-1?'提交全部回答':'提交并进入下一题'} <b>→</b></button></div></section></div></main>;
+  return <main className="candidate-interview-shell live"><header className="candidate-live-head"><div><span>星鉴人才 · AI 面试</span><h1>{invitation?.jobTitle}</h1></div><div><b>{index+1}</b><span>/ {questions.length}</span></div></header><div className="candidate-live-progress"><i style={{width:`${progress}%`}}/></div><div className="candidate-live-grid"><section className="candidate-video"><video ref={videoRef} autoPlay playsInline muted onPlaying={()=>{setCamera('ready');setError(current=>current.startsWith('摄像头')?'':current)}} onStalled={()=>setCamera('blocked')} onError={()=>setCamera('blocked')}/><div className={`candidate-camera-badge ${camera}`}>{camera==='ready'?'● 摄像头与麦克风已连接':camera==='blocked'?'摄像头已连接，画面等待播放':camera==='denied'?'未获得摄像头权限':'正在加载摄像头画面…'}</div>{camera==='blocked'&&<button type="button" className="candidate-video-retry" onClick={()=>void playVideo()}>重新显示摄像头画面</button>}<footer><b>{invitation?.candidateName}</b><span>{recording?'● 语音录音已同步保存':'正在准备录音'}</span></footer></section><section className="candidate-question"><div className="candidate-question-meta"><span>QUESTION {String(index+1).padStart(2,'0')}</span><time>{String(Math.floor(seconds/60)).padStart(2,'0')}:{String(seconds%60).padStart(2,'0')}</time></div><h2>{question?.title}</h2><p>请直接口述回答。系统会实时识别并显示文字，同时保存语音录音；倒计时结束后自动进入下一题。</p><div className={`candidate-voice-answer ${listening||recording?'listening':''}`}><i>◉</i><span><b>{speechPending?'正在识别当前语音':listening?(speechMode==='local'?'正在本机实时识别':'正在实时识别语音'):'实时语音识别'}</b><p>{answer||(speechMode==='preparing'?'正在准备中文语音识别…':speechPending?'正在将刚才的语音转换为文字…':'请开始口述，识别出的文字会实时显示在这里。')}</p></span></div>{speechNotice&&<div className="candidate-submit-notice" role="status">{speechNotice}</div>}{error&&<div className="candidate-submit-error">{error}</div>}<div className="candidate-question-actions"><span className={listening||recording?'active':''}>{saving?'正在保存本题…':speechPending?'● 正在识别当前语音':listening?(speechMode==='local'?'● 本机实时识别中':'● 在线实时识别中'):'实时语音识别已暂停'}</span>{!listening&&<button className="voice-retry" disabled={saving||speechMode==='preparing'} onClick={()=>void retryListening()}>{speechMode==='preparing'?'正在准备…':'重新识别'}</button>}<button disabled={saving||speechPending} onClick={()=>void nextQuestion()}>{speechPending?'识别中…':saving?'正在保存…':index===questions.length-1?'提交全部回答':'提交并进入下一题'} <b>→</b></button></div></section></div></main>;
 }
 
 function speechAlternatives(result:SpeechResultLike){return Array.from({length:result.length},(_,index)=>({transcript:String(result[index]?.transcript||''),confidence:result[index]?.confidence}))}
