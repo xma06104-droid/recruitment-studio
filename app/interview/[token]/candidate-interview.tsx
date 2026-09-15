@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { buildSpeechHints, contextualizeSpeechTranscript, selectContextualSpeechTranscript } from '@/app/speech-context';
+import { createInterviewUtterance } from '@/app/interview-voice';
 
 type Question = { id:string; title:string; duration:number; questionType:string; competency?:string };
 type Invitation = { id:string; candidateName:string; jobTitle:string; status:string; expiresAt:string };
@@ -114,7 +115,7 @@ export default function CandidateInterview({ token }:{ token:string }) {
   }
 
   function speakAndListen(text:string){
-    if('speechSynthesis'in window){window.speechSynthesis.cancel();const speech=new SpeechSynthesisUtterance(text);speech.lang='zh-CN';speech.rate=.95;speech.onend=startListening;window.speechSynthesis.speak(speech)}else startListening();
+    if('speechSynthesis'in window){window.speechSynthesis.cancel();const speech=createInterviewUtterance(text);speech.onend=startListening;window.speechSynthesis.speak(speech)}else startListening();
   }
 
   function startListening(){startQuestionRecording();beginListening(false)}
