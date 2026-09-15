@@ -47,14 +47,17 @@ export async function GET(request: NextRequest) {
   const [jobs, candidates, interviews, offers, aiQuestions, aiInterviews, aiInvitations, manualAssessments, recipientAccounts] = await Promise.all([
     db.prepare(`SELECT DISTINCT j.* FROM jobs j WHERE j.owner_id = ? OR j.id IN (${assignedJobSql}) ORDER BY j.created_at DESC`).bind(account.id, account.id).all<DataRow>(),
     db.prepare(`SELECT c.*,
-          (SELECT ca.hr_account_id FROM candidate_assignments ca WHERE ca.candidate_id = c.id ORDER BY ca.assigned_at DESC LIMIT 1) AS hr_account_id,
+          COALESCE(
+            (SELECT ca.hr_account_id FROM candidate_assignments ca WHERE ca.candidate_id = c.id AND ca.hr_account_id = ? LIMIT 1),
+            (SELECT ca.hr_account_id FROM candidate_assignments ca WHERE ca.candidate_id = c.id ORDER BY ca.assigned_at DESC LIMIT 1)
+          ) AS hr_account_id,
           (SELECT MAX(ca.assigned_at) FROM candidate_assignments ca WHERE ca.candidate_id = c.id) AS assigned_at,
           (SELECT GROUP_CONCAT(a.contact, '、') FROM candidate_assignments ca JOIN accounts a ON a.id = ca.hr_account_id WHERE ca.candidate_id = c.id) AS assigned_hr_name,
           rp.gender AS resume_gender, rp.age AS resume_age, rp.education AS resume_education, rp.work_years AS resume_work_years,
           rp.file_name AS resume_file_name
         FROM candidates c LEFT JOIN resume_profiles rp ON rp.candidate_id = c.id
         WHERE c.owner_id = ? OR c.id IN (${assignedCandidateSql})
-        ORDER BY COALESCE((SELECT MAX(ca.assigned_at) FROM candidate_assignments ca WHERE ca.candidate_id = c.id), c.created_at) DESC`).bind(account.id, account.id).all<DataRow>(),
+        ORDER BY COALESCE((SELECT MAX(ca.assigned_at) FROM candidate_assignments ca WHERE ca.candidate_id = c.id), c.created_at) DESC`).bind(account.id, account.id, account.id).all<DataRow>(),
     db.prepare(`SELECT * FROM interviews WHERE owner_id = ? OR ${relatedCandidateSql} ORDER BY scheduled_at ASC`).bind(account.id, account.id, account.id).all<DataRow>(),
     db.prepare(`SELECT * FROM offers WHERE owner_id = ? OR ${relatedCandidateSql} ORDER BY created_at DESC`).bind(account.id, account.id, account.id).all<DataRow>(),
     db.prepare(`SELECT * FROM ai_questions WHERE owner_id = ? OR job_id IN (${assignedJobSql}) ORDER BY created_at DESC`).bind(account.id, account.id).all<DataRow>(),
@@ -268,9 +271,10 @@ export async function POST(request: NextRequest) {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(id, account.id, jobId, title, category, questionType, duration, competency, keywords, referenceAnswer, followUp, maxScore, now, now).run();
   } else if (resource === 'aiInterviewInvite') {
     const candidateId = text(payload.candidateId, 80);
-    const candidate = candidateId ? await db.prepare(`SELECT id, job_id, name, role, email FROM candidates
-      WHERE id = ? AND owner_id = ?`).bind(candidateId, account.id).first<{ id:string; job_id:string|null; name:string; role:string; email:string }>() : null;
+    const candidate = candidateId ? await db.prepare(`SELECT id, job_id, name, role, email, stage FROM candidates
+      WHERE id = ? AND owner_id = ?`).bind(candidateId, account.id).first<{ id:string; job_id:string|null; name:string; role:string; email:string; stage:string }>() : null;
     if (!candidate) return invalid('请选择有效候选人。');
+    if (normalizeCandidateStage(String(candidate.stage)) !== 'AI面试') return invalid('用人部门筛选通过后，才能发送 AI 面试邀请。');
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate.email)) return invalid('该候选人尚未填写有效邮箱，请先补充邮箱。');
     const questionRows = await db.prepare(`SELECT * FROM ai_questions WHERE owner_id = ?
       AND (job_id = ? OR job_id IS NULL) ORDER BY created_at ASC`).bind(account.id, candidate.job_id || '').all<DataRow>();
@@ -317,8 +321,9 @@ export async function POST(request: NextRequest) {
     }, { status:201 });
   } else if (resource === 'aiInterview') {
     const candidateId = text(payload.candidateId, 80);
-    const candidate = candidateId ? await db.prepare('SELECT role FROM candidates WHERE id = ? AND owner_id = ?').bind(candidateId, account.id).first<{ role: string }>() : null;
+    const candidate = candidateId ? await db.prepare('SELECT role, stage FROM candidates WHERE id = ? AND owner_id = ?').bind(candidateId, account.id).first<{ role:string; stage:string }>() : null;
     if (!candidate) return invalid('请选择有效候选人。');
+    if (normalizeCandidateStage(candidate.stage) !== 'AI面试') return invalid('用人部门筛选通过后，才能录入 AI 面试结果。');
     const score = integer(payload.score, 0, 100, -1);
     const summary = text(payload.summary, 12000);
     if (score < 0 || !summary) return invalid('请填写真实面试得分和总结。');
@@ -518,16 +523,18 @@ export async function PATCH(request: NextRequest) {
     if (!candidate) return invalid('候选人不存在或无权操作。');
     const currentStage = normalizeCandidateStage(candidate.stage);
     if (currentStage === value) return NextResponse.json({ ok: true });
-    if (value === 'AI面试' && currentStage !== '简历筛选') return invalid('请按候选人流程顺序推进。');
-    if (value === '用人部门筛选') {
-      if (currentStage !== 'AI面试') return invalid('请先进入 AI 面试阶段。');
-      const completedAiInterview = await db.prepare("SELECT id FROM ai_interviews WHERE candidate_id = ? AND status = '已完成' LIMIT 1").bind(id).first<{id:string}>();
-      if (!completedAiInterview) return invalid('候选人完成 AI 面试后，才能进入用人部门筛选。');
-    }
-    if (value === '安排面试') {
-      if (!['用人部门筛选', '待定'].includes(currentStage)) return invalid('请先完成用人部门筛选。');
+    if (value === 'AI面试') {
+      if (!['用人部门筛选', '待定'].includes(currentStage)) return invalid('请先推送给用人部门筛选。');
       const assignedRecipient = await db.prepare('SELECT candidate_id FROM candidate_assignments WHERE candidate_id = ? AND hr_account_id = ? LIMIT 1').bind(id, account.id).first<{candidate_id:string}>();
       if (!assignedRecipient) return invalid('仅接收该简历的用人部门账号可以确认通过。');
+    }
+    if (value === '用人部门筛选') {
+      return invalid('请从简历筛选页选择接收人并推送给用人部门。');
+    }
+    if (value === '安排面试') {
+      if (currentStage !== 'AI面试') return invalid('请先进入 AI 面试阶段。');
+      const completedAiInterview = await db.prepare("SELECT id FROM ai_interviews WHERE candidate_id = ? AND status = '已完成' LIMIT 1").bind(id).first<{id:string}>();
+      if (!completedAiInterview) return invalid('候选人完成 AI 面试后，才能安排人工面试。');
     }
     if (value === '录用') {
       if (currentStage !== '安排面试') return invalid('请先进入安排面试阶段。');

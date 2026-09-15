@@ -102,7 +102,7 @@ export default function InterviewerCandidateClient() {
   async function updateReview(candidate:Candidate,action:ReviewAction){
     if(savingId)return;
     const next={
-      pass:{stage:'安排面试',message:'已通过，状态已更新为安排面试'},
+      pass:{stage:'AI面试',message:'已通过，状态已更新为 AI 面试'},
       pending:{stage:'待定',message:'已设为待定'},
       reject:{stage:'已淘汰',message:'已拒绝'},
     }[action];
@@ -218,7 +218,7 @@ function CandidateResumeDrawer({candidate,job,profile,review,aiInterview,saving,
       <div className="candidate-profile hr-resume-profile"><span>{candidate.name.slice(0,1)}</span><div><div className="hr-resume-name-line"><h2>{candidate.name}</h2><em><b>{profile?.matchScore??candidate.score??'—'}</b><small>匹配度</small></em><strong className={`hr-resume-inline-status ${status==='已拒绝'?'reject':status==='待定'?'pending':status==='已通过'?'pass':'screen'}`}>{status}</strong></div><p>{candidate.company||'公司未填写'} · {candidate.role||job?.title||'职位未填写'}</p></div></div>
       <div className="hr-review-sidebar">
         <div className="hr-review-actions" aria-label="候选人审核操作">
-          <button type="button" className={status==='已通过'?'active pass':'pass'} disabled={saving} onClick={()=>onReview('pass')}><i>✓</i><span><b>通过</b><small>进入安排面试</small></span></button>
+          <button type="button" className={status==='已通过'?'active pass':'pass'} disabled={saving} onClick={()=>onReview('pass')}><i>✓</i><span><b>通过</b><small>进入 AI 面试</small></span></button>
           <button type="button" className={status==='待定'?'active pending':'pending'} disabled={saving} onClick={()=>onReview('pending')}><i>◷</i><span><b>待定</b><small>保留候选人</small></span></button>
           <button type="button" className={status==='已拒绝'?'active reject':'reject'} disabled={saving} onClick={()=>onReview('reject')}><i>×</i><span><b>拒绝</b><small>结束初筛</small></span></button>
           <button type="button" className={noteOpen?'active note':'note'} disabled={saving} onClick={()=>setNoteOpen(current=>!current)}><i>✎</i><span><b>备注</b><small>{review?.comment?'查看或修改':'添加候选人备注'}</small></span></button>
@@ -340,7 +340,7 @@ function projectDateValue(value:string){
 function candidateReviewStatus(stage:string):ReviewStatus {
   if(stage==='已淘汰')return '已拒绝';
   if(stage==='待定')return '待定';
-  if(['简历筛选','AI面试','用人部门筛选'].includes(stage))return '待筛选';
+  if(['简历筛选','用人部门筛选'].includes(stage))return '待筛选';
   return '已通过';
 }
 
@@ -348,7 +348,7 @@ function candidateDisplayStatus(stage:string){
   if(stage==='已淘汰')return '已拒绝';
   if(stage==='待定')return '待定';
   if(stage==='用人部门筛选')return '待用人部门审核';
-  if(['简历筛选','AI面试'].includes(stage))return '待筛选';
+  if(stage==='简历筛选')return '待筛选';
   return '已通过';
 }
 

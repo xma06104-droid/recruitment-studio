@@ -1,4 +1,4 @@
-export const CANDIDATE_STAGES = ['简历筛选', 'AI面试', '用人部门筛选', '安排面试', '录用', '待入职', '已入职'] as const;
+export const CANDIDATE_STAGES = ['简历筛选', '用人部门筛选', 'AI面试', '安排面试', '录用', '待入职', '已入职'] as const;
 
 export const REJECTED_CANDIDATE_STAGES = new Set(['初筛淘汰', '淘汰人才库', '已淘汰']);
 

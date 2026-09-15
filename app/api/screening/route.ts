@@ -86,11 +86,9 @@ export async function POST(request: NextRequest) {
     if (accountRows.results.length !== hrAccountIds.length) return invalid('部分所选人员不是有效的超级管理员或 HR 用户。');
     const hrAccounts = hrAccountIds.map(id => accountRows.results.find(item => item.id === id)).filter(Boolean) as {id:string;contact:string;email:string;role:string}[];
     const placeholders = candidateIds.map(() => '?').join(',');
-    const owned = await db.prepare(`SELECT id, job_id, name FROM candidates WHERE owner_id = ? AND id IN (${placeholders})`).bind(account.id, ...candidateIds).all<DataRow>();
+    const owned = await db.prepare(`SELECT id, job_id, name, stage FROM candidates WHERE owner_id = ? AND id IN (${placeholders})`).bind(account.id, ...candidateIds).all<DataRow>();
     if (owned.results.length !== candidateIds.length) return invalid('部分候选人不存在或无权推荐。');
-    const completedAiInterviews = await db.prepare(`SELECT DISTINCT candidate_id FROM ai_interviews
-      WHERE owner_id = ? AND status = '已完成' AND candidate_id IN (${placeholders})`).bind(account.id, ...candidateIds).all<{candidate_id:string}>();
-    if (completedAiInterviews.results.length !== candidateIds.length) return invalid('候选人完成 AI 面试后，才能进入用人部门筛选。');
+    if (owned.results.some(row => String(row.stage || '') !== '简历筛选')) return invalid('只有处于简历筛选阶段的候选人可以推送给用人部门。');
     const statements: D1PreparedStatement[] = [];
     for (const row of owned.results) {
       statements.push(db.prepare('DELETE FROM candidate_assignments WHERE candidate_id = ? AND owner_id = ?').bind(row.id, account.id));
@@ -195,7 +193,7 @@ export async function POST(request: NextRequest) {
       if ((row.age === null || row.age === '') && parsedIdentity.age !== null) row.age = parsedIdentity.age;
       if (!row.education && parsedIdentity.education) row.education = parsedIdentity.education;
       const outcome = scoreCandidate(row, rule);
-      const stage = outcome.knockout ? '已淘汰' : 'AI面试';
+      const stage = outcome.knockout ? '已淘汰' : '简历筛选';
       statements.push(db.prepare(`UPDATE resume_profiles SET age = COALESCE(age, ?),
         gender = CASE WHEN gender = '' THEN ? ELSE gender END,
         education = CASE WHEN education = '' THEN ? ELSE education END,
@@ -220,7 +218,6 @@ export async function POST(request: NextRequest) {
         crypto.randomUUID(), account.id, row.id, row.job_id, account.contact,
         outcome.knockout ? `命中硬性淘汰：${outcome.failures.join('、')}` : `匹配度 ${outcome.total} 分，标记${outcome.level}`, now,
       ));
-      if (!outcome.knockout) statements.push(autoInterviewStatement(db, account.id, account.contact, String(row.id), now));
     }
     await executeBatches(db, statements);
     return NextResponse.json({ ok: true, count: target.length });
@@ -245,7 +242,7 @@ export async function POST(request: NextRequest) {
     if ((row.age === null || row.age === '') && parsedIdentity.age !== null) row.age = parsedIdentity.age;
     if (!row.education && parsedIdentity.education) row.education = parsedIdentity.education;
     const outcome = scoreCandidate(row, rule);
-    const stage = outcome.knockout ? '已淘汰' : 'AI面试';
+    const stage = outcome.knockout ? '已淘汰' : '简历筛选';
     const statements: D1PreparedStatement[] = [
       db.prepare(`UPDATE resume_profiles SET age = COALESCE(age, ?),
         gender = CASE WHEN gender = '' THEN ? ELSE gender END,
@@ -269,10 +266,9 @@ export async function POST(request: NextRequest) {
       db.prepare(`INSERT INTO screening_logs (id, owner_id, candidate_id, job_id, operator_name, action, detail, created_at)
         VALUES (?, ?, ?, ?, ?, '自动初筛', ?, ?)`).bind(
         crypto.randomUUID(), account.id, candidateId, resolved.job.id, account.contact,
-        outcome.knockout ? `岗位“${resolved.job.title}”命中硬性淘汰：${outcome.failures.join('、')}` : `岗位“${resolved.job.title}”匹配度 ${outcome.total} 分，已自动关联面试`, now,
+        outcome.knockout ? `岗位“${resolved.job.title}”命中硬性淘汰：${outcome.failures.join('、')}` : `岗位“${resolved.job.title}”匹配度 ${outcome.total} 分，等待推送用人部门筛选`, now,
       ),
     ];
-    if (!outcome.knockout) statements.push(autoInterviewStatement(db, account.id, account.contact, candidateId, now));
     await db.batch(statements);
     return NextResponse.json({
       ok: true, count: 1, score: outcome.total, level: outcome.level,
@@ -350,6 +346,7 @@ export async function POST(request: NextRequest) {
     const stage = text(body?.stage, 40);
     const reason = text(body?.reason, 500);
     if (!candidateIds.length || !transitionStages.includes(stage)) return invalid('请选择候选人和有效流转动作。');
+    if (stage !== '已淘汰') return invalid('简历筛选阶段只能推送用人部门或淘汰候选人。');
     if (stage === '已淘汰' && !reason) return invalid('淘汰操作必须填写淘汰原因。');
     const placeholders = candidateIds.map(() => '?').join(',');
     const owned = await db.prepare(`SELECT id, job_id FROM candidates WHERE owner_id = ? AND id IN (${placeholders})`).bind(account.id, ...candidateIds).all<DataRow>();
@@ -511,14 +508,6 @@ async function ensureCandidateJob(ownerId: string, ownerName: string, row: DataR
     created ? `重新筛选识别到新岗位“${persisted.title}”，已自动新增岗位并关联简历` : `重新筛选时已将简历关联至岗位“${persisted.title}”`,
   );
   return { job: persisted satisfies ResumeJob, created };
-}
-
-function autoInterviewStatement(db: D1Database, ownerId: string, interviewer: string, candidateId: string, now: string) {
-  return db.prepare(`INSERT INTO interviews (id, owner_id, candidate_id, scheduled_at, round, mode, interviewer, status, created_at, updated_at)
-    SELECT ?, ?, ?, ?, 'AI 初面', '待确认', ?, '待确认', ?, ?
-    WHERE NOT EXISTS (
-      SELECT 1 FROM interviews WHERE owner_id = ? AND candidate_id = ? AND status NOT IN ('已完成', '已取消')
-    )`).bind(crypto.randomUUID(), ownerId, candidateId, now, interviewer, now, now, ownerId, candidateId);
 }
 
 async function executeBatches(db: D1Database, statements: D1PreparedStatement[]) {
