@@ -135,7 +135,7 @@ export default function ScreeningWorkspace({people,jobs,questions,account,reload
       jobs={jobs}
       busy={busy}
       close={()=>setShowImport(false)}
-      openNewJob={openNewJob}
+      openNewJob={()=>{setShowImport(true);openNewJob()}}
       done={async form=>{
         if(mutationInFlight.current)return '简历正在提交，请稍候。';
         mutationInFlight.current=true;setBusy(true);

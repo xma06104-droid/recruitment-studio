@@ -108,6 +108,21 @@ export default function WorkbenchClient() {
     }catch{flash('保存失败')}finally{saveInFlight.current=false;setModalSaving(false)}
   }
 
+  async function createManualCandidate(form:FormData) {
+    if(saveInFlight.current)return;
+    saveInFlight.current=true;setModalSaving(true);
+    form.set('manualOnly','1');
+    form.set('channel',String(form.get('source')||'手动创建'));
+    try{
+      const response=await fetch('/api/screening/import',{method:'POST',body:form});
+      const result=await response.json().catch(()=>({})) as {message?:string;duplicate?:boolean};
+      if(response.status===401){window.location.assign('/');return}
+      if(!response.ok){flash(result.message||'提交失败，请检查填写内容。');return}
+      setModal(null);announceWorkbenchChange();await loadData();
+      flash(result.duplicate?'已合并到现有候选人档案':'候选人已提交');
+    }catch{flash('提交失败，请检查网络后重试。')}finally{saveInFlight.current=false;setModalSaving(false)}
+  }
+
   async function updateQuestion(id:string,payload:Record<string,unknown>){
     if(saveInFlight.current)return;
     saveInFlight.current=true;setModalSaving(true);
@@ -307,7 +322,7 @@ export default function WorkbenchClient() {
           <Talent people={filteredCandidates} aiInterviews={data.aiInterviews} onNew={()=>setModal('candidateEntry')} onPick={id=>setDrawer({type:'candidate',id})}/>
         )}
         {active==='简历筛选'&&(
-          <ScreeningWorkspace people={filteredCandidates} jobs={data.jobs} questions={data.aiQuestions} account={data.account} reload={loadData} openCandidate={id=>setDrawer({type:'candidate',id})} openNewJob={()=>{setEditingJob(null);setActive('职位管理');setModal('job')}} flash={flash} openImport={resumeImportRequested} onImportOpened={()=>setResumeImportRequested(false)}/>
+          <ScreeningWorkspace people={filteredCandidates} jobs={data.jobs} questions={data.aiQuestions} account={data.account} reload={loadData} openCandidate={id=>setDrawer({type:'candidate',id})} openNewJob={()=>{setEditingJob(null);setModal('job')}} flash={flash} openImport={resumeImportRequested} onImportOpened={()=>setResumeImportRequested(false)}/>
         )}
         {active==='AI 面试'&&<AiStudio
           data={{...data,candidates:activeCandidates,aiInterviews:visibleAiInterviews}}
@@ -327,7 +342,7 @@ export default function WorkbenchClient() {
     </section>
     {modal==='candidateEntry'&&<CandidateEntryModal close={()=>setModal(null)} manual={()=>setModal('candidate')} upload={()=>{setModal(null);setResumeImportRequested(true);setActive('简历筛选')}}/>}
     {modal==='job'&&<JobModal job={editingJob} close={()=>{if(!modalSaving){setModal(null);setEditingJob(null)}}} submitting={modalSaving} submit={form=>editingJob?void updateJob(editingJob.id,formObject(form)):void create('job',formObject(form))}/>}
-    {modal==='candidate'&&<CandidateModal jobs={data.jobs} close={()=>setModal(null)} upload={()=>{setModal(null);setResumeImportRequested(true);setActive('简历筛选')}} submitting={modalSaving} submit={form=>void create('candidate',formObject(form))}/>}
+    {modal==='candidate'&&<CandidateModal jobs={data.jobs} close={()=>setModal(null)} submitting={modalSaving} submit={form=>void createManualCandidate(form)}/>}
     {modal==='interview'&&<InterviewModal interview={editingInterview} people={interviewCandidates} account={data.account} accounts={data.recipientAccounts} close={()=>{if(!modalSaving){setModal(null);setEditingInterview(null)}}} submitting={modalSaving} submit={form=>editingInterview?void updateInterview(editingInterview.id,formObject(form)):void create('interview',formObject(form))}/>}
     {modal==='offer'&&<OfferModal offer={editingOffer} people={data.candidates} close={()=>{if(!modalSaving){setModal(null);setEditingOffer(null)}}} submitting={modalSaving} submit={form=>editingOffer?void updateOffer(editingOffer.id,formObject(form)):void create('offer',formObject(form))}/>}
     {modal==='question'&&<QuestionModal question={editingQuestion} jobs={data.jobs} questions={data.aiQuestions}
@@ -704,7 +719,7 @@ function Analytics({data}:{data:Dataset}){
 }
 
 function FormModal({close,submit,kicker,title,description,children,submitLabel='保存真实记录',error='',submitting=false,scrollable=false,className=''}:{close:()=>void;submit:(data:FormData)=>void;kicker:string;title:string;description:string;children:ReactNode;submitLabel?:string;error?:string;submitting?:boolean;scrollable?:boolean;className?:string}){return <div className="modal-backdrop" onMouseDown={close}><form className={`job-modal${scrollable?' scrollable-modal':''}${className?` ${className}`:''}`} onSubmit={(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();submit(new FormData(event.currentTarget))}} onMouseDown={event=>event.stopPropagation()}><button type="button" className="modal-close" onClick={close}>×</button><span className="eyebrow purple">{kicker}</span><h2>{title}</h2><p>{description}</p>{children}{error&&<div className="account-form-error">{error}</div>}<button className="primary-button" type="submit" disabled={submitting}>{submitting?'正在保存…':submitLabel} <span>→</span></button></form></div>}
-function CandidateEntryModal({close,manual,upload}:{close:()=>void;manual:()=>void;upload:()=>void}){return <div className="modal-backdrop" onMouseDown={close}><section className="candidate-entry-modal" role="dialog" aria-modal="true" aria-labelledby="candidate-entry-title" onMouseDown={event=>event.stopPropagation()}><button type="button" className="modal-close" onClick={close}>×</button><span className="eyebrow purple">ADD CANDIDATE</span><h2 id="candidate-entry-title">添加候选人</h2><p>选择录入方式，候选人会统一进入候选人管理并同步到后续招聘流程。</p><div className="candidate-entry-options"><button type="button" onClick={manual}><i>＋</i><span><b>手动添加</b><small>直接填写候选人、职位与联系方式</small></span><em>→</em></button><button type="button" onClick={upload}><i>⇧</i><span><b>上传简历添加</b><small>上传文件并自动解析为候选人档案</small></span><em>→</em></button></div></section></div>}
+function CandidateEntryModal({close,manual,upload}:{close:()=>void;manual:()=>void;upload:()=>void}){return <div className="modal-backdrop" onMouseDown={close}><section className="candidate-entry-modal" role="dialog" aria-modal="true" aria-labelledby="candidate-entry-title" onMouseDown={event=>event.stopPropagation()}><button type="button" className="modal-close" onClick={close}>×</button><span className="eyebrow purple">ADD CANDIDATE</span><h2 id="candidate-entry-title">添加候选人</h2><p>选择录入方式，候选人会统一进入候选人管理并同步到后续招聘流程。</p><div className="candidate-entry-options"><button type="button" onClick={upload}><i>⇧</i><span><b>上传简历添加</b><small>上传文件并自动解析为候选人档案</small></span><em>→</em></button><button type="button" onClick={manual}><i>＋</i><span><b>手动添加</b><small>直接填写信息，可附加原件但不自动解析</small></span><em>→</em></button></div></section></div>}
 function CityPicker({defaultValue}:{defaultValue:string}){
   const customCity=defaultValue&&!CHINA_CITIES.includes(defaultValue)?defaultValue:'';
   const groups=customCity?[['其他',[customCity]] as [string,string[]],...cityPickerGroups]:cityPickerGroups;
@@ -751,7 +766,10 @@ function JobModal({job,close,submit,submitting}:{job:Job|null;close:()=>void;sub
     <div className="form-grid"><div className="job-form-label"><span>工作城市</span><CityPicker defaultValue={selectedCity}/></div><label>招聘人数<input name="headcount" type="number" min="1" max="999" defaultValue={job?.headcount||1}/></label></div>
   </FormModal>
 }
-function CandidateModal({jobs,close,upload,submit,submitting}:{jobs:Job[];close:()=>void;upload:()=>void;submit:(data:FormData)=>void;submitting:boolean}){return <FormModal close={close} submit={submit} submitting={submitting} kicker="REAL CANDIDATE" title="添加候选人" description="请录入真实候选人信息；未填写的字段会明确显示为未填写。"><button type="button" className="candidate-modal-upload" onClick={upload}><span>⇧</span><div><b>上传简历自动填写</b><small>识别姓名、履历、项目与联系方式</small></div><em>→</em></button><div className="form-grid"><label>姓名<input required name="name" placeholder="候选人姓名"/></label><label>应聘职位<input required name="role" placeholder="实际应聘职位"/></label></div><label>关联职位<select name="jobId" defaultValue=""><option value="">暂不关联</option>{jobs.map(job=><option key={job.id} value={job.id}>{job.title}</option>)}</select></label><div className="form-grid"><label>最近公司<input name="company" placeholder="可选"/></label><label>工作经验<input name="years" placeholder="例如：5 年"/></label></div><div className="form-grid"><label>来源<input name="source" placeholder="例如：内部推荐"/></label><label>所在城市<input name="city" placeholder="可选"/></label></div><label>技能标签<input name="skills" placeholder="多个技能请用逗号分隔"/></label><div className="form-grid"><label>手机号<input name="phone" type="tel" placeholder="可选"/></label><label>邮箱<input name="email" type="email" placeholder="可选"/></label></div></FormModal>}
+function CandidateModal({jobs,close,submit,submitting}:{jobs:Job[];close:()=>void;submit:(data:FormData)=>void;submitting:boolean}){
+  const [fileName,setFileName]=useState('');
+  return <FormModal close={close} submit={submit} submitting={submitting} submitLabel="提交" kicker="REAL CANDIDATE" title="手动添加候选人" description="直接填写候选人信息；可附加原件简历，文件只保存、不自动解析。"><label className="candidate-modal-upload"><input name="resume" type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.txt,.html" onChange={event=>setFileName(event.target.files?.[0]?.name||'')}/><span>⇧</span><div><b>{fileName||'上传原件简历（可选）'}</b><small>仅保存原件附件，不识别、不回填字段</small></div><em>{fileName?'✓':'＋'}</em></label><div className="form-grid"><label>姓名<input required name="name" placeholder="候选人姓名"/></label><label>应聘职位<input required name="role" placeholder="实际应聘职位"/></label></div><label>关联职位<select name="jobId" defaultValue=""><option value="">暂不关联</option>{jobs.map(job=><option key={job.id} value={job.id}>{job.title}</option>)}</select></label><div className="form-grid"><label>最近公司<input name="company" placeholder="可选"/></label><label>工作经验（年）<input name="workYears" type="number" min="0" step="0.5" placeholder="例如：5"/></label></div><div className="form-grid"><label>来源<input name="source" placeholder="例如：内部推荐"/></label><label>所在城市<input name="city" placeholder="可选"/></label></div><label>技能标签<input name="skills" placeholder="多个技能请用逗号分隔"/></label><div className="form-grid"><label>手机号<input name="phone" type="tel" placeholder="可选"/></label><label>邮箱<input name="email" type="email" placeholder="可选"/></label></div></FormModal>
+}
 function InterviewModal({interview,people,account,accounts,close,submit,submitting}:{interview:Interview|null;people:Candidate[];account:Account;accounts:RecipientAccount[];close:()=>void;submit:(data:FormData)=>void;submitting:boolean}){
   const initialStart=interview?.scheduledAt||'';
   const initialEnd=interview?.endAt||addMinutes(initialStart,60);

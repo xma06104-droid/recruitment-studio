@@ -13,6 +13,7 @@ export async function POST(request: NextRequest) {
   await ensureSchema();
   const form = await request.formData().catch(() => null);
   if (!form) return invalid('导入内容无法读取。');
+  const manualOnly = field(form, 'manualOnly', 10) === '1';
   const fileValue = form.get('resume');
   const file = fileValue instanceof File && fileValue.size > 0 ? fileValue : null;
   if (file && file.size > MAX_FILE_SIZE) return invalid('简历附件不能超过 10MB。');
@@ -20,12 +21,12 @@ export async function POST(request: NextRequest) {
 
   let rawText = field(form, 'rawText', 120_000);
   let extraction: ResumeFileExtraction | null = null;
-  if (file) {
+  if (file && !manualOnly) {
     extraction = await extractResumeFileText(file);
     if (extraction.text) rawText = extraction.text;
   }
   let parsed = parseResumeText(rawText);
-  if (file) {
+  if (file && !manualOnly) {
     const fallback = parseResumeFileName(file.name);
     parsed = { ...parsed, name: fallback.name || parsed.name, role: fallback.role || parsed.role };
   }
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest) {
   let job = jobId ? jobs.find(item => item.id === jobId) || null : null;
   if (jobId && !job) return invalid('关联职位不存在。');
   let matchedJob = null;
-  if (!jobId) {
+  if (!jobId && !manualOnly) {
     matchedJob = matchResumeJob(requestedRole, rawText, jobs);
     if (matchedJob) { jobId = matchedJob.id; job = matchedJob; }
   }
@@ -70,7 +71,7 @@ export async function POST(request: NextRequest) {
   const city = field(form, 'city', 80) || parsed.city;
   const company = field(form, 'company', 100) || parsed.company;
   let createdJob = false;
-  if (!job) {
+  if (!job && !manualOnly) {
     if (jobResolution !== 'auto-create') return invalid('未找到匹配职位，请选择现有职位或确认自动新建职位。');
     const created = await ensureSystemJob(account.id, account.contact, role, city, now);
     job = created.job;
@@ -82,9 +83,9 @@ export async function POST(request: NextRequest) {
     ...parsed, name, role, phone, email, education, major, school, age, gender, workYears, stabilityMonths,
     city, company, industry, expectedSalary, skills, certificates, workHistory, projectHistory,
   };
-  const match = job ? scoreResumeForJob(scoredResume, rawText, job) : null;
+  const match = job && !manualOnly ? scoreResumeForJob(scoredResume, rawText, job) : null;
   const fileKey = file ? `${account.id}/${candidateId}/${crypto.randomUUID()}-${safeFileName(file.name)}` : null;
-  const parsingStatus = file && extraction?.status !== 'extracted' && !rawText ? '解析待复核' : '结构化完成';
+  const parsingStatus = manualOnly ? '结构化完成' : file && extraction?.status !== 'extracted' && !rawText ? '解析待复核' : '结构化完成';
 
   if (file && fileKey) {
     await getResumeBucket().put(fileKey, await file.arrayBuffer(), {
@@ -157,7 +158,7 @@ export async function POST(request: NextRequest) {
     db.prepare(`INSERT INTO screening_logs (id, owner_id, candidate_id, job_id, operator_name, action, detail, created_at)
       VALUES (?, ?, ?, ?, ?, '简历入库', ?, ?)`).bind(
       crypto.randomUUID(), account.id, candidateId, jobId, account.contact,
-      `${existing ? '识别重复投递并合并' : '新简历完成结构化入库'}，来源：${channel}${match ? `；${job?.title}匹配度 ${match.score} 分（${match.level}）` : ''}`, now,
+      `${existing ? '识别重复投递并合并' : manualOnly ? '手动创建候选人并保存简历原件' : '新简历完成结构化入库'}，来源：${channel}${match ? `；${job?.title}匹配度 ${match.score} 分（${match.level}）` : ''}`, now,
     ),
   ]);
 
