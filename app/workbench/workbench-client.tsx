@@ -636,11 +636,10 @@ function Interviews({items,people,onNew,onPick,updateStatus}:{items:Interview[];
   const today=useMemo(()=>new Date(),[]);
   const week=useMemo(()=>weekDays(today),[today]);
   const [selectedDate,setSelectedDate]=useState(today);
-  const currentItems=items.filter(item=>new Date(item.endAt||item.scheduledAt).getTime()>=Date.now());
-  const dayItems=currentItems.filter(item=>sameDay(new Date(item.scheduledAt),selectedDate));
+  const dayItems=items.filter(item=>sameDay(new Date(item.scheduledAt),selectedDate));
   return <section>
     <Head path="面试管理" title="面试管理" sub="日程来自实际保存的面试安排" action="安排面试" click={onNew}/>
-    <div className="week-strip">{week.map(date=><button type="button" aria-pressed={sameDay(date,selectedDate)} className={sameDay(date,selectedDate)?'active':''} key={date.toISOString()} onClick={()=>setSelectedDate(date)}><span>{weekLabel(date)}</span><b>{date.getDate()}</b>{currentItems.some(item=>sameDay(new Date(item.scheduledAt),date))&&<i/>}</button>)}</div>
+    <div className="week-strip">{week.map(date=><button type="button" aria-pressed={sameDay(date,selectedDate)} className={sameDay(date,selectedDate)?'active':''} key={date.toISOString()} onClick={()=>setSelectedDate(date)}><span>{weekLabel(date)}</span><b>{date.getDate()}</b>{items.some(item=>sameDay(new Date(item.scheduledAt),date))&&<i/>}</button>)}</div>
     <div className="interview-layout">
       <div className="interview-list">
         <div className="list-title"><h3>面试日程</h3><span>{dayItems.length} 场当天面试</span></div>
@@ -648,7 +647,7 @@ function Interviews({items,people,onNew,onPick,updateStatus}:{items:Interview[];
           ?<Empty icon="◴" title="当天暂无面试" text="请选择其他日期，或为候选人安排新的面试。" action="安排面试" click={onNew}/>
           :dayItems.map(item=><article className="interview-card clickable" role="button" tabIndex={0} key={item.id} onClick={()=>onPick(item.id)} onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();onPick(item.id)}}}><time><b>{formatTime(item.scheduledAt)}</b><small>{formatMonthDay(item.scheduledAt)}</small></time><i className="interview-color"/><div><h3>{candidateName(item.candidateId,people)} · {item.round}</h3><p>{people.find(person=>person.id===item.candidateId)?.role||'职位未关联'}</p><span>{item.mode}　面试官：{item.interviewer}</span></div><select value={item.status} onClick={event=>event.stopPropagation()} onChange={event=>updateStatus(item.id,event.target.value)}>{interviewStatuses.map(status=><option key={status}>{status}</option>)}</select></article>)}
       </div>
-      <aside className="interview-side"><h3>面试协同提醒</h3><div><b>{items.filter(item=>new Date(item.scheduledAt)<new Date()&&item.status!=='已完成'&&item.status!=='已取消').length}</b><span>待补充面试结果<small>基于已过期且未完成的真实日程</small></span></div><div><b>{currentItems.filter(item=>item.status==='待确认').length}</b><span>候选人待确认<small>来自当前实际安排</small></span></div></aside>
+      <aside className="interview-side"><h3>面试协同提醒</h3><div><b>{items.filter(item=>new Date(item.scheduledAt)<new Date()&&item.status!=='已完成'&&item.status!=='已取消').length}</b><span>待补充面试结果<small>基于已过期且未完成的真实日程</small></span></div><div><b>{items.filter(item=>item.status==='待确认').length}</b><span>候选人待确认<small>来自当前实际安排</small></span></div></aside>
     </div>
   </section>
 }
