@@ -149,12 +149,42 @@ export async function POST(request: NextRequest) {
     if (!candidate) return invalid('请选择有效候选人。');
     const scheduledAt = text(payload.scheduledAt, 80);
     if (!scheduledAt || Number.isNaN(Date.parse(scheduledAt))) return invalid('请选择有效的面试日期和时间。');
+    const endAt = text(payload.endAt, 80);
+    if (!endAt || Number.isNaN(Date.parse(endAt)) || Date.parse(endAt) <= Date.parse(scheduledAt)) return invalid('面试结束时间必须晚于开始时间。');
+    const mode = text(payload.mode, 40) || '线下面试';
+    const round = text(payload.round, 80) || '初试';
+    const interviewer = text(payload.interviewer, 80) || account.contact;
+    const location = text(payload.location, 300);
+    if (!interviewer || !location) return invalid('请选择面试人员并填写面试场地或会议地址。');
+    const assistant = text(payload.assistant, 80);
+    const contactName = text(payload.contactName, 80) || account.contact;
+    const contactMethod = text(payload.contactMethod, 120) || account.phone || account.email;
+    const feedbackEmail = text(payload.feedbackEmail, 120) || account.email;
+    if (feedbackEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(feedbackEmail)) return invalid('请输入有效的反馈邮箱。');
+    const notifyCandidate = truthy(payload.notifyCandidate);
+    if (notifyCandidate && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate.email)) return invalid('该候选人尚未填写有效邮箱，请先补充候选人邮箱。');
+    const emailSubject = text(payload.emailSubject, 240) || `星鉴人才｜${candidate.role}面试邀请`;
+    const emailContent = text(payload.emailContent, 10000) || createScheduledInterviewEmail(candidate.name, candidate.role, scheduledAt, endAt, round, mode, location, contactName, contactMethod);
     await db.batch([
-      db.prepare(`INSERT INTO interviews (id, owner_id, candidate_id, scheduled_at, round, mode, interviewer, status, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, '待确认', ?, ?)`).bind(id, candidate.owner_id, candidateId, new Date(scheduledAt).toISOString(), text(payload.round, 80) || '业务一面', text(payload.mode, 100) || '待确认', account.contact, now, now),
+      db.prepare(`INSERT INTO interviews (
+        id, owner_id, candidate_id, scheduled_at, end_at, round, mode, interviewer, assistant, location,
+        contact_name, contact_method, feedback_email, notify_candidate, email_subject, email_content,
+        status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '待确认', ?, ?)`).bind(
+        id, candidate.owner_id, candidateId, new Date(scheduledAt).toISOString(), new Date(endAt).toISOString(), round, mode,
+        interviewer, assistant, location, contactName, contactMethod, feedbackEmail, notifyCandidate ? 1 : 0,
+        emailSubject, emailContent, now, now,
+      ),
       db.prepare("UPDATE candidates SET stage = '安排面试', updated_at = ? WHERE id = ?").bind(now, candidateId),
       db.prepare("UPDATE resume_applications SET status = '安排面试' WHERE candidate_id = ? AND owner_id = ?").bind(candidateId, candidate.owner_id),
     ]);
+    if (notifyCandidate) {
+      const delivery = await deliverInterviewEmail(candidate.email, emailSubject, emailContent);
+      return NextResponse.json({
+        ok:true, id, emailSent:delivery.sent, recipientEmail:candidate.email,
+        mailtoUrl:delivery.sent ? '' : `mailto:${encodeURIComponent(candidate.email)}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailContent)}`,
+      }, { status:201 });
+    }
   } else if (resource === 'offer') {
     const candidateId = text(payload.candidateId, 80);
     const candidate = candidateId ? await db.prepare('SELECT name, role, email FROM candidates WHERE id = ? AND owner_id = ?').bind(candidateId, account.id).first<{ name: string; role: string; email: string }>() : null;
@@ -404,9 +434,39 @@ export async function PATCH(request: NextRequest) {
     if (!candidateId || !(await accessibleCandidate(candidateId, account.id))) return invalid('请选择有效候选人。');
     const scheduledAt = text(payload.scheduledAt, 80);
     if (!scheduledAt || Number.isNaN(Date.parse(scheduledAt))) return invalid('请选择有效的面试日期和时间。');
-    await db.prepare(`UPDATE interviews SET candidate_id = ?, scheduled_at = ?, round = ?, mode = ?, updated_at = ?
-      WHERE id = ?`).bind(candidateId, new Date(scheduledAt).toISOString(), text(payload.round, 80) || '业务一面', text(payload.mode, 100) || '待确认', now, id).run();
-    return NextResponse.json({ ok: true });
+    const endAt = text(payload.endAt, 80);
+    if (!endAt || Number.isNaN(Date.parse(endAt)) || Date.parse(endAt) <= Date.parse(scheduledAt)) return invalid('面试结束时间必须晚于开始时间。');
+    const candidate = await accessibleCandidate(candidateId, account.id);
+    if (!candidate) return invalid('请选择有效候选人。');
+    const mode = text(payload.mode, 40) || '线下面试';
+    const round = text(payload.round, 80) || '初试';
+    const interviewer = text(payload.interviewer, 80) || account.contact;
+    const location = text(payload.location, 300);
+    if (!interviewer || !location) return invalid('请选择面试人员并填写面试场地或会议地址。');
+    const assistant = text(payload.assistant, 80);
+    const contactName = text(payload.contactName, 80) || account.contact;
+    const contactMethod = text(payload.contactMethod, 120) || account.phone || account.email;
+    const feedbackEmail = text(payload.feedbackEmail, 120) || account.email;
+    if (feedbackEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(feedbackEmail)) return invalid('请输入有效的反馈邮箱。');
+    const notifyCandidate = truthy(payload.notifyCandidate);
+    if (notifyCandidate && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate.email)) return invalid('该候选人尚未填写有效邮箱，请先补充候选人邮箱。');
+    const emailSubject = text(payload.emailSubject, 240) || `星鉴人才｜${candidate.role}面试邀请`;
+    const emailContent = text(payload.emailContent, 10000) || createScheduledInterviewEmail(candidate.name, candidate.role, scheduledAt, endAt, round, mode, location, contactName, contactMethod);
+    await db.prepare(`UPDATE interviews SET candidate_id = ?, scheduled_at = ?, end_at = ?, round = ?, mode = ?, interviewer = ?,
+      assistant = ?, location = ?, contact_name = ?, contact_method = ?, feedback_email = ?, notify_candidate = ?,
+      email_subject = ?, email_content = ?, updated_at = ? WHERE id = ?`).bind(
+      candidateId, new Date(scheduledAt).toISOString(), new Date(endAt).toISOString(), round, mode, interviewer,
+      assistant, location, contactName, contactMethod, feedbackEmail, notifyCandidate ? 1 : 0,
+      emailSubject, emailContent, now, id,
+    ).run();
+    if (notifyCandidate) {
+      const delivery = await deliverInterviewEmail(candidate.email, emailSubject, emailContent);
+      return NextResponse.json({
+        ok:true, emailSent:delivery.sent, recipientEmail:candidate.email,
+        mailtoUrl:delivery.sent ? '' : `mailto:${encodeURIComponent(candidate.email)}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailContent)}`,
+      });
+    }
+    return NextResponse.json({ ok: true, emailSent:false });
   }
 
   if (resource === 'offer') {
@@ -532,9 +592,9 @@ async function ownedRecord(table: 'jobs' | 'candidates', id: string, ownerId: st
 }
 
 async function accessibleCandidate(id: string, accountId: string) {
-  return getDb().prepare(`SELECT id, owner_id, job_id, stage FROM candidates WHERE id = ? AND (
+  return getDb().prepare(`SELECT id, owner_id, job_id, stage, name, role, email FROM candidates WHERE id = ? AND (
     owner_id = ? OR id IN (SELECT candidate_id FROM candidate_assignments WHERE hr_account_id = ?)
-  ) LIMIT 1`).bind(id, accountId, accountId).first<{id:string;owner_id:string;job_id:string|null;stage:string}>();
+  ) LIMIT 1`).bind(id, accountId, accountId).first<{id:string;owner_id:string;job_id:string|null;stage:string;name:string;role:string;email:string}>();
 }
 
 function mapJob(row: DataRow) {
@@ -548,7 +608,13 @@ function mapCandidate(row: DataRow) {
 }
 
 function mapInterview(row: DataRow) {
-  return { id: row.id, candidateId: row.candidate_id, scheduledAt: row.scheduled_at, round: row.round, mode: row.mode, interviewer: row.interviewer, status: row.status, createdAt: row.created_at, updatedAt: row.updated_at };
+  return {
+    id: row.id, candidateId: row.candidate_id, scheduledAt: row.scheduled_at, endAt: row.end_at || '',
+    round: row.round, mode: row.mode, interviewer: row.interviewer, assistant: row.assistant || '', location: row.location || '',
+    contactName: row.contact_name || '', contactMethod: row.contact_method || '', feedbackEmail: row.feedback_email || '',
+    notifyCandidate: Boolean(row.notify_candidate), emailSubject: row.email_subject || '', emailContent: row.email_content || '',
+    status: row.status, createdAt: row.created_at, updatedAt: row.updated_at,
+  };
 }
 
 function mapOffer(row: DataRow) {
@@ -630,10 +696,24 @@ function integer(value: unknown, min: number, max: number, fallback: number) {
   return Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
 }
 
+function truthy(value:unknown) {
+  return value === true || ['1', 'true', 'on', 'yes'].includes(String(value ?? '').toLowerCase());
+}
+
 function createOfferContent(name: string, jobTitle: string, salary: string, deadline: string) {
   const date = new Date(`${deadline}T00:00:00`);
   const confirmBy = Number.isNaN(date.getTime()) ? deadline : new Intl.DateTimeFormat('zh-CN', { year:'numeric', month:'long', day:'numeric' }).format(date);
   return `尊敬的${name}：\n\n您好！我们诚挚邀请您加入星鉴人才，担任${jobTitle}一职，薪资方案为${salary}。请您于${confirmBy}前确认是否接受本次录用邀请。\n\n期待您的加入！`;
+}
+
+function createScheduledInterviewEmail(name:string, jobTitle:string, scheduledAt:string, endAt:string, round:string, mode:string, location:string, contactName:string, contactMethod:string) {
+  const formatter = new Intl.DateTimeFormat('zh-CN', {
+    timeZone:'Asia/Shanghai', year:'numeric', month:'long', day:'numeric', weekday:'long', hour:'2-digit', minute:'2-digit', hour12:false,
+  });
+  const timeFormatter = new Intl.DateTimeFormat('zh-CN', { timeZone:'Asia/Shanghai', hour:'2-digit', minute:'2-digit', hour12:false });
+  const start = formatter.format(new Date(scheduledAt));
+  const end = timeFormatter.format(new Date(endAt));
+  return `尊敬的${name}：\n\n您好！感谢您对“${jobTitle}”岗位的关注。现诚挚邀请您参加${round}。\n\n面试时间：${start}—${end}\n面试方式：${mode}\n面试地点/会议地址：${location}\n联系人：${contactName || '招聘负责人'}${contactMethod ? `（${contactMethod}）` : ''}\n\n请您提前做好准备并准时参加。如时间安排有冲突，请及时与我们联系。\n\n星鉴人才`;
 }
 
 function createInterviewInvitation(name:string, jobTitle:string, interviewUrl:string, expiresAt:string) {

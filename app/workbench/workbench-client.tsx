@@ -15,7 +15,11 @@ import { displayCandidateStage } from '@/app/candidate-stages';
 type Account = { id:string; contact:string; phone:string; email:string; role:'super_admin'|'hr'; createdAt:string };
 type Job = { id:string; title:string; department:string; city:string; status:string; headcount:number; ownerName:string; createdAt:string; updatedAt:string };
 type Candidate = { id:string; jobId:string|null; name:string; role:string; company:string; years:string; stage:string; source:string; skills:string[]; score:number|null; phone:string; email:string; city:string; gender?:string; age?:number|null; education?:string; workYears?:number|null; resumeFileName?:string; assignedHrId?:string; assignedHrName?:string; assignedAt?:string; createdAt:string; updatedAt:string };
-type Interview = { id:string; candidateId:string; scheduledAt:string; round:string; mode:string; interviewer:string; status:string; createdAt:string; updatedAt:string };
+type Interview = {
+  id:string; candidateId:string; scheduledAt:string; endAt:string; round:string; mode:string; interviewer:string;
+  assistant:string; location:string; contactName:string; contactMethod:string; feedbackEmail:string; notifyCandidate:boolean;
+  emailSubject:string; emailContent:string; status:string; createdAt:string; updatedAt:string;
+};
 type Offer = { id:string; candidateId:string; jobTitle:string; salary:string; recipientEmail:string; content:string; ownerName:string; status:string; deadline:string; createdAt:string; updatedAt:string };
 type AiQuestion = { id:string; jobId:string|null; title:string; category:string; questionType:string; duration:number; competency:string; keywords:string; referenceAnswer:string; followUp:boolean; maxScore:number; createdAt:string; updatedAt:string };
 type AiInterview = { id:string; candidateId:string; jobTitle:string; status:string; score:number|null; durationSeconds:number|null; summary:string; completedAt:string|null; createdAt:string; updatedAt:string };
@@ -92,10 +96,13 @@ export default function WorkbenchClient() {
     saveInFlight.current=true;setModalSaving(true);
     try{
       const response=await fetch('/api/workbench',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({resource,payload})});
-      const result=await response.json().catch(()=>({})) as {message?:string};
+      const result=await response.json().catch(()=>({})) as {message?:string;emailSent?:boolean;recipientEmail?:string;mailtoUrl?:string};
       if(response.status===401){window.location.assign('/');return}
       if(!response.ok){flash(result.message||'保存失败');return}
-      setModal(null);announceWorkbenchChange();await loadData();flash('保存成功');
+      setModal(null);announceWorkbenchChange();await loadData();
+      if(result.mailtoUrl){window.location.href=result.mailtoUrl;flash('面试已保存，邮件内容已带入邮箱，请确认发送')}
+      else if(result.emailSent)flash(`面试已保存，邀请邮件已发送至 ${result.recipientEmail}`);
+      else flash('保存成功');
     }catch{flash('保存失败')}finally{saveInFlight.current=false;setModalSaving(false)}
   }
 
@@ -183,10 +190,13 @@ export default function WorkbenchClient() {
     saveInFlight.current=true;setModalSaving(true);
     try{
       const response=await fetch('/api/workbench',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({resource:'interview',id,payload})});
-      const result=await response.json().catch(()=>({})) as {message?:string};
+      const result=await response.json().catch(()=>({})) as {message?:string;emailSent?:boolean;recipientEmail?:string;mailtoUrl?:string};
       if(response.status===401){window.location.assign('/');return}
       if(!response.ok){flash('保存失败');return}
-      setModal(null);setEditingInterview(null);announceWorkbenchChange();await loadData();flash('保存成功');
+      setModal(null);setEditingInterview(null);announceWorkbenchChange();await loadData();
+      if(result.mailtoUrl){window.location.href=result.mailtoUrl;flash('面试已更新，邮件内容已带入邮箱，请确认发送')}
+      else if(result.emailSent)flash(`面试已更新，邀请邮件已发送至 ${result.recipientEmail}`);
+      else flash('保存成功');
     }catch{flash('保存失败')}finally{saveInFlight.current=false;setModalSaving(false)}
   }
 
@@ -315,7 +325,7 @@ export default function WorkbenchClient() {
     {modal==='candidateEntry'&&<CandidateEntryModal close={()=>setModal(null)} manual={()=>setModal('candidate')} upload={()=>{setModal(null);setResumeImportRequested(true);setActive('简历筛选')}}/>}
     {modal==='job'&&<JobModal job={editingJob} close={()=>{if(!modalSaving){setModal(null);setEditingJob(null)}}} submitting={modalSaving} submit={form=>editingJob?void updateJob(editingJob.id,formObject(form)):void create('job',formObject(form))}/>}
     {modal==='candidate'&&<CandidateModal jobs={data.jobs} close={()=>setModal(null)} upload={()=>{setModal(null);setResumeImportRequested(true);setActive('简历筛选')}} submitting={modalSaving} submit={form=>void create('candidate',formObject(form))}/>}
-    {modal==='interview'&&<InterviewModal interview={editingInterview} people={activeCandidates} close={()=>{if(!modalSaving){setModal(null);setEditingInterview(null)}}} submitting={modalSaving} submit={form=>editingInterview?void updateInterview(editingInterview.id,formObject(form)):void create('interview',formObject(form))}/>}
+    {modal==='interview'&&<InterviewModal interview={editingInterview} people={activeCandidates} account={data.account} accounts={data.recipientAccounts} close={()=>{if(!modalSaving){setModal(null);setEditingInterview(null)}}} submitting={modalSaving} submit={form=>editingInterview?void updateInterview(editingInterview.id,formObject(form)):void create('interview',formObject(form))}/>}
     {modal==='offer'&&<OfferModal offer={editingOffer} people={data.candidates} close={()=>{if(!modalSaving){setModal(null);setEditingOffer(null)}}} submitting={modalSaving} submit={form=>editingOffer?void updateOffer(editingOffer.id,formObject(form)):void create('offer',formObject(form))}/>}
     {modal==='question'&&<QuestionModal question={editingQuestion} jobs={data.jobs} questions={data.aiQuestions}
       close={()=>{if(!modalSaving){setModal(null);setEditingQuestion(null)}}} submitting={modalSaving}
@@ -647,7 +657,7 @@ function Analytics({data}:{data:Dataset}){
   </section>
 }
 
-function FormModal({close,submit,kicker,title,description,children,submitLabel='保存真实记录',error='',submitting=false,scrollable=false}:{close:()=>void;submit:(data:FormData)=>void;kicker:string;title:string;description:string;children:ReactNode;submitLabel?:string;error?:string;submitting?:boolean;scrollable?:boolean}){return <div className="modal-backdrop" onMouseDown={close}><form className={`job-modal${scrollable?' scrollable-modal':''}`} onSubmit={(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();submit(new FormData(event.currentTarget))}} onMouseDown={event=>event.stopPropagation()}><button type="button" className="modal-close" onClick={close}>×</button><span className="eyebrow purple">{kicker}</span><h2>{title}</h2><p>{description}</p>{children}{error&&<div className="account-form-error">{error}</div>}<button className="primary-button" type="submit" disabled={submitting}>{submitting?'正在保存…':submitLabel} <span>→</span></button></form></div>}
+function FormModal({close,submit,kicker,title,description,children,submitLabel='保存真实记录',error='',submitting=false,scrollable=false,className=''}:{close:()=>void;submit:(data:FormData)=>void;kicker:string;title:string;description:string;children:ReactNode;submitLabel?:string;error?:string;submitting?:boolean;scrollable?:boolean;className?:string}){return <div className="modal-backdrop" onMouseDown={close}><form className={`job-modal${scrollable?' scrollable-modal':''}${className?` ${className}`:''}`} onSubmit={(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();submit(new FormData(event.currentTarget))}} onMouseDown={event=>event.stopPropagation()}><button type="button" className="modal-close" onClick={close}>×</button><span className="eyebrow purple">{kicker}</span><h2>{title}</h2><p>{description}</p>{children}{error&&<div className="account-form-error">{error}</div>}<button className="primary-button" type="submit" disabled={submitting}>{submitting?'正在保存…':submitLabel} <span>→</span></button></form></div>}
 function CandidateEntryModal({close,manual,upload}:{close:()=>void;manual:()=>void;upload:()=>void}){return <div className="modal-backdrop" onMouseDown={close}><section className="candidate-entry-modal" role="dialog" aria-modal="true" aria-labelledby="candidate-entry-title" onMouseDown={event=>event.stopPropagation()}><button type="button" className="modal-close" onClick={close}>×</button><span className="eyebrow purple">ADD CANDIDATE</span><h2 id="candidate-entry-title">添加候选人</h2><p>选择录入方式，候选人会统一进入候选人管理并同步到后续招聘流程。</p><div className="candidate-entry-options"><button type="button" onClick={manual}><i>＋</i><span><b>手动添加</b><small>直接填写候选人、职位与联系方式</small></span><em>→</em></button><button type="button" onClick={upload}><i>⇧</i><span><b>上传简历添加</b><small>上传文件并自动解析为候选人档案</small></span><em>→</em></button></div></section></div>}
 function CityPicker({defaultValue}:{defaultValue:string}){
   const customCity=defaultValue&&!CHINA_CITIES.includes(defaultValue)?defaultValue:'';
@@ -696,7 +706,57 @@ function JobModal({job,close,submit,submitting}:{job:Job|null;close:()=>void;sub
   </FormModal>
 }
 function CandidateModal({jobs,close,upload,submit,submitting}:{jobs:Job[];close:()=>void;upload:()=>void;submit:(data:FormData)=>void;submitting:boolean}){return <FormModal close={close} submit={submit} submitting={submitting} kicker="REAL CANDIDATE" title="添加候选人" description="请录入真实候选人信息；未填写的字段会明确显示为未填写。"><button type="button" className="candidate-modal-upload" onClick={upload}><span>⇧</span><div><b>上传简历自动填写</b><small>识别姓名、履历、项目与联系方式</small></div><em>→</em></button><div className="form-grid"><label>姓名<input required name="name" placeholder="候选人姓名"/></label><label>应聘职位<input required name="role" placeholder="实际应聘职位"/></label></div><label>关联职位<select name="jobId" defaultValue=""><option value="">暂不关联</option>{jobs.map(job=><option key={job.id} value={job.id}>{job.title}</option>)}</select></label><div className="form-grid"><label>最近公司<input name="company" placeholder="可选"/></label><label>工作经验<input name="years" placeholder="例如：5 年"/></label></div><div className="form-grid"><label>来源<input name="source" placeholder="例如：内部推荐"/></label><label>所在城市<input name="city" placeholder="可选"/></label></div><label>技能标签<input name="skills" placeholder="多个技能请用逗号分隔"/></label><div className="form-grid"><label>手机号<input name="phone" type="tel" placeholder="可选"/></label><label>邮箱<input name="email" type="email" placeholder="可选"/></label></div></FormModal>}
-function InterviewModal({interview,people,close,submit,submitting}:{interview:Interview|null;people:Candidate[];close:()=>void;submit:(data:FormData)=>void;submitting:boolean}){return <FormModal close={close} submit={submit} submitting={submitting} kicker="SCHEDULE" title={interview?'查看与修改面试':'安排面试'} description="面试日程会按实际日期和候选人保存。" submitLabel={interview?'保存面试修改':'保存真实记录'}><label>候选人<select required name="candidateId" defaultValue={interview?.candidateId||''}><option value="" disabled>请选择真实候选人</option>{people.map(person=><option key={person.id} value={person.id}>{person.name} · {person.role}</option>)}</select></label><div className="form-grid"><label>面试日期<input required name="scheduledDate" type="date" defaultValue={interview?dateLocalValue(interview.scheduledAt):''}/></label><label>面试时间<input required name="scheduledTime" type="time" step="300" defaultValue={interview?timeLocalValue(interview.scheduledAt):''}/></label></div><div className="form-grid"><label>面试轮次<input name="round" defaultValue={interview?.round||''} placeholder="例如：业务一面"/></label><label>面试方式<input name="mode" defaultValue={interview?.mode||''} placeholder="例如：线下面试"/></label></div></FormModal>}
+function InterviewModal({interview,people,account,accounts,close,submit,submitting}:{interview:Interview|null;people:Candidate[];account:Account;accounts:RecipientAccount[];close:()=>void;submit:(data:FormData)=>void;submitting:boolean}){
+  const initialStart=interview?.scheduledAt||'';
+  const initialEnd=interview?.endAt||addMinutes(initialStart,60);
+  const [candidateId,setCandidateId]=useState(interview?.candidateId||'');
+  const [mode,setMode]=useState(interview?.mode||'线下面试');
+  const [round,setRound]=useState(interview?.round||'初试');
+  const [date,setDate]=useState(initialStart?dateLocalValue(initialStart):'');
+  const [startTime,setStartTime]=useState(initialStart?timeLocalValue(initialStart):'');
+  const [endTime,setEndTime]=useState(initialEnd?timeLocalValue(initialEnd):'');
+  const [interviewer,setInterviewer]=useState(interview?.interviewer||account.contact);
+  const [assistant,setAssistant]=useState(interview?.assistant||'');
+  const [location,setLocation]=useState(interview?.location||'');
+  const [contactName,setContactName]=useState(interview?.contactName||account.contact);
+  const [contactMethod,setContactMethod]=useState(interview?.contactMethod||account.phone||account.email);
+  const [feedbackEmail,setFeedbackEmail]=useState(interview?.feedbackEmail||account.email);
+  const [notifyCandidate,setNotifyCandidate]=useState(Boolean(interview?.notifyCandidate));
+  const [emailEdited,setEmailEdited]=useState(Boolean(interview?.emailContent));
+  const selected=people.find(person=>person.id===candidateId);
+  const staff=useMemo(()=>{
+    const source:[string,string][]=[[account.contact,account.email||account.phone],...accounts.map(item=>[item.contact,item.email||item.phone] as [string,string])];
+    return source.filter(([name],index)=>name&&source.findIndex(item=>item[0]===name)===index);
+  },[account,accounts]);
+  const generated=useMemo(()=>interviewEmailDraft(selected,date,startTime,endTime,round,mode,location,contactName,contactMethod),[selected,date,startTime,endTime,round,mode,location,contactName,contactMethod]);
+  const [emailSubject,setEmailSubject]=useState(interview?.emailSubject||generated.subject);
+  const [emailContent,setEmailContent]=useState(interview?.emailContent||generated.content);
+  const week=useMemo(()=>scheduleWeek(date),[date]);
+  useEffect(()=>{if(!emailEdited){setEmailSubject(generated.subject);setEmailContent(generated.content)}},[generated,emailEdited]);
+  useEffect(()=>{if(startTime&&!endTime)setEndTime(addClockMinutes(startTime,60))},[startTime,endTime]);
+  const hasCandidateEmail=Boolean(selected&&validEmail(selected.email));
+  return <FormModal close={close} submit={submit} submitting={submitting} scrollable className="interview-schedule-modal" kicker="SCHEDULE" title={interview?'查看与修改面试':'安排面试'} description="设置完整面试安排；勾选邮件通知后，会向候选人发送或生成邀请邮件。" submitLabel={interview?'保存面试修改':'保存并安排面试'}>
+    <div className="interview-schedule-layout">
+      <section className="interview-schedule-form">
+        <label>候选人<select required name="candidateId" value={candidateId} onChange={event=>{setCandidateId(event.target.value);setEmailEdited(false)}}><option value="" disabled>请选择真实候选人</option>{people.map(person=><option key={person.id} value={person.id}>{person.name} · {person.role}</option>)}</select></label>
+        <fieldset className="interview-mode-field"><legend>面试方式</legend><div><label className={mode==='线下面试'?'active':''}><input type="radio" name="mode" value="线下面试" checked={mode==='线下面试'} onChange={()=>{setMode('线下面试');setEmailEdited(false)}}/><span>线下面试</span></label><label className={mode==='线上视频面试'?'active':''}><input type="radio" name="mode" value="线上视频面试" checked={mode==='线上视频面试'} onChange={()=>{setMode('线上视频面试');setEmailEdited(false)}}/><span>线上视频面试</span></label></div></fieldset>
+        <label>面试轮次<select required name="round" value={round} onChange={event=>{setRound(event.target.value);setEmailEdited(false)}}><option>初试</option><option>复试</option><option>终试</option><option>HR 面试</option><option>业务一面</option><option>业务二面</option></select></label>
+        <div className="form-grid"><label>面试人员<span className="interview-select-control"><select required name="interviewer" value={interviewer} onChange={event=>setInterviewer(event.target.value)}>{staff.map(([name,detail])=><option key={name} value={name}>{name}{detail?` · ${detail}`:''}</option>)}</select><i>＋</i></span></label><label>面试助理<span className="interview-select-control"><select name="assistant" value={assistant} onChange={event=>setAssistant(event.target.value)}><option value="">不设置</option>{staff.map(([name,detail])=><option key={name} value={name}>{name}{detail?` · ${detail}`:''}</option>)}</select><i>＋</i></span></label></div>
+        <label>{mode==='线上视频面试'?'会议地址':'面试场地'}<input required name="location" value={location} onChange={event=>{setLocation(event.target.value);setEmailEdited(false)}} placeholder={mode==='线上视频面试'?'请输入线上会议链接或会议号':'请输入场地或选择已有场地'}/></label>
+        <div className="interview-time-grid"><label>面试日期<input required name="scheduledDate" type="date" value={date} onChange={event=>{setDate(event.target.value);setEmailEdited(false)}}/></label><label>开始时间<input required name="scheduledTime" type="time" step="300" value={startTime} onChange={event=>{const value=event.target.value;setStartTime(value);if(!endTime||endTime<=value)setEndTime(addClockMinutes(value,60));setEmailEdited(false)}}/></label><label>结束时间<input required name="endTime" type="time" step="300" value={endTime} min={startTime} onChange={event=>{setEndTime(event.target.value);setEmailEdited(false)}}/></label></div>
+        <div className="form-grid"><label>联系人<input required name="contactName" value={contactName} onChange={event=>{setContactName(event.target.value);setEmailEdited(false)}}/></label><label>联系方式<input required name="contactMethod" value={contactMethod} onChange={event=>{setContactMethod(event.target.value);setEmailEdited(false)}} placeholder="手机号或邮箱"/></label></div>
+        <label>接收反馈邮箱<input name="feedbackEmail" type="email" value={feedbackEmail} onChange={event=>setFeedbackEmail(event.target.value)} placeholder="面试反馈接收邮箱"/></label>
+        <div className="interview-notify-card"><label><input type="checkbox" name="notifyCandidate" checked={notifyCandidate&&hasCandidateEmail} disabled={!hasCandidateEmail} onChange={event=>setNotifyCandidate(event.target.checked)}/><span><b>邮件通知候选人</b><small>{selected?(hasCandidateEmail?`发送至 ${selected.email}`:'该候选人暂无有效邮箱，请先在候选人档案中补充'):'选择候选人后可发送邀请邮件'}</small></span></label>{notifyCandidate&&hasCandidateEmail&&<div className="interview-email-editor"><label>邮件主题<input name="emailSubject" value={emailSubject} onChange={event=>{setEmailSubject(event.target.value);setEmailEdited(true)}}/></label><label>邮件内容<textarea name="emailContent" value={emailContent} onChange={event=>{setEmailContent(event.target.value);setEmailEdited(true)}}/></label><button type="button" onClick={()=>{setEmailEdited(false);setEmailSubject(generated.subject);setEmailContent(generated.content)}}>重新生成标准模板</button></div>}</div>
+      </section>
+      <aside className="interview-calendar-preview">
+        <header><div><span>面试日程</span><b>{date?formatScheduleMonth(date):'请选择日期'}</b></div><em>周</em></header>
+        <div className="interview-calendar-week">{week.map(day=><div key={day.key} className={day.selected?'active':''}><span>{day.weekday}</span><b>{day.day}</b></div>)}</div>
+        <div className="interview-calendar-grid">{['09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00'].map(time=><div key={time}><span>{time}</span><i/></div>)}{date&&startTime&&<article><b>{selected?.name||'候选人面试'}</b><span>{startTime}—{endTime||'待定'} · {round}</span><small>{location||mode}</small></article>}</div>
+        <footer><span>当前安排</span><b>{selected?`${selected.name} · ${selected.role}`:'尚未选择候选人'}</b><small>{date&&startTime?`${date} ${startTime}—${endTime||'待定'}`:'请选择面试时段'}</small></footer>
+      </aside>
+    </div>
+  </FormModal>;
+}
 function OfferModal({offer,people,close,submit,submitting}:{offer:Offer|null;people:Candidate[];close:()=>void;submit:(data:FormData)=>void;submitting:boolean}){
   const [candidateId,setCandidateId]=useState(offer?.candidateId||'');
   const [jobTitle,setJobTitle]=useState(offer?.jobTitle||'');
@@ -892,7 +952,7 @@ function CandidateAssignmentDialog({candidate,accounts,busy,close,submit}:{candi
 }
 
 function Empty({icon,title,text,action,click,compact=false}:{icon?:string;title:string;text:string;action?:string;click?:()=>void;compact?:boolean}){return <div className={'real-empty '+(compact?'compact':'')}>{icon&&<span>{icon}</span>}<h3>{title}</h3><p>{text}</p>{action&&click&&<button onClick={click}>{action}</button>}</div>}
-function formObject(data:FormData){const result:Record<string,unknown>={};data.forEach((value,key)=>{result[key]=value});result.followUp=data.get('followUp')==='on';const scheduledDate=String(data.get('scheduledDate')||'');const scheduledTime=String(data.get('scheduledTime')||'');if(scheduledDate&&scheduledTime){result.scheduledAt=`${scheduledDate}T${scheduledTime}`;delete result.scheduledDate;delete result.scheduledTime}return result}
+function formObject(data:FormData){const result:Record<string,unknown>={};data.forEach((value,key)=>{result[key]=value});result.followUp=data.get('followUp')==='on';result.notifyCandidate=data.get('notifyCandidate')==='on';const scheduledDate=String(data.get('scheduledDate')||'');const scheduledTime=String(data.get('scheduledTime')||'');const endTime=String(data.get('endTime')||'');if(scheduledDate&&scheduledTime){const start=new Date(`${scheduledDate}T${scheduledTime}`);result.scheduledAt=Number.isNaN(start.getTime())?'':start.toISOString();delete result.scheduledDate;delete result.scheduledTime}if(scheduledDate&&endTime){const end=new Date(`${scheduledDate}T${endTime}`);result.endAt=Number.isNaN(end.getTime())?'':end.toISOString();delete result.endTime}return result}
 function validEmail(value:string){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())}
 function questionKey(question:AiQuestion){return [question.jobId,question.title,question.category,question.questionType,question.duration,question.competency,question.keywords,question.referenceAnswer,question.followUp].map(value=>String(value??'').trim().toLowerCase()).join('\u0000')}
 function compareJobs(first:Job,second:Job){return (jobStatusPriority[first.status]??99)-(jobStatusPriority[second.status]??99)||Date.parse(second.updatedAt)-Date.parse(first.updatedAt)||first.title.localeCompare(second.title,'zh-CN')}
@@ -904,6 +964,18 @@ function stageIndex(stage:string){return candidateStageIndex(stage)}
 function sameDay(a:Date,b:Date){return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate()}
 function formatDate(value:string){const date=new Date(value);return Number.isNaN(date.getTime())?'未记录':new Intl.DateTimeFormat('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit'}).format(date)}
 function offerDraft(name:string,jobTitle:string,salary:string,deadline:string){const confirmBy=deadline?formatOfferDate(deadline):'约定的截止日期';return `尊敬的${name}：\n\n您好！我们诚挚邀请您加入星鉴人才，担任${jobTitle}一职${salary?`，薪资方案为${salary}`:''}。请您于${confirmBy}前确认是否接受本次录用邀请。\n\n期待您的加入！`}
+function interviewEmailDraft(person:Candidate|undefined,date:string,startTime:string,endTime:string,round:string,mode:string,location:string,contactName:string,contactMethod:string){
+  if(!person)return {subject:'',content:''};
+  const when=date&&startTime?`${formatOfferDate(date)} ${startTime}${endTime?`—${endTime}`:''}`:'待确认';
+  return {
+    subject:`星鉴人才｜${person.role}面试邀请`,
+    content:`尊敬的${person.name}：\n\n您好！感谢您对“${person.role}”岗位的关注。现诚挚邀请您参加${round||'面试'}。\n\n面试时间：${when}\n面试方式：${mode||'待确认'}\n面试地点/会议地址：${location||'待确认'}\n联系人：${contactName||'招聘负责人'}${contactMethod?`（${contactMethod}）`:''}\n\n请您提前做好准备并准时参加。如时间安排有冲突，请及时与我们联系。\n\n星鉴人才`,
+  };
+}
+function addMinutes(value:string,minutes:number){const date=new Date(value);if(Number.isNaN(date.getTime()))return '';date.setMinutes(date.getMinutes()+minutes);return date.toISOString()}
+function addClockMinutes(value:string,minutes:number){if(!/^\d{2}:\d{2}$/.test(value))return '';const [hour,minute]=value.split(':').map(Number);const total=Math.min(23*60+59,hour*60+minute+minutes);return `${String(Math.floor(total/60)).padStart(2,'0')}:${String(total%60).padStart(2,'0')}`}
+function scheduleWeek(value:string){const selected=value?new Date(`${value}T12:00:00`):new Date();const monday=new Date(selected);const day=monday.getDay()||7;monday.setDate(monday.getDate()-day+1);return Array.from({length:7},(_,index)=>{const date=new Date(monday);date.setDate(monday.getDate()+index);const key=`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;return {key,day:date.getDate(),weekday:['一','二','三','四','五','六','日'][index],selected:key===value}})}
+function formatScheduleMonth(value:string){const date=new Date(`${value}T12:00:00`);return Number.isNaN(date.getTime())?'请选择日期':new Intl.DateTimeFormat('zh-CN',{year:'numeric',month:'long'}).format(date)}
 function formatOfferDate(value:string){const date=new Date(`${value}T00:00:00`);return Number.isNaN(date.getTime())?value:new Intl.DateTimeFormat('zh-CN',{year:'numeric',month:'long',day:'numeric'}).format(date)}
 function formatDateTime(value:string){const date=new Date(value);return Number.isNaN(date.getTime())?'未记录':new Intl.DateTimeFormat('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(date)}
 function remainingTime(expiresAt:string,now:number){const remaining=Math.max(0,Date.parse(expiresAt)-now);const totalMinutes=Math.ceil(remaining/60000);if(totalMinutes<60)return `${totalMinutes} 分钟`;const hours=Math.floor(totalMinutes/60);const minutes=totalMinutes%60;if(hours<24)return `${hours} 小时${minutes?` ${minutes} 分钟`:''}`;const days=Math.floor(hours/24);const restHours=hours%24;return `${days} 天${restHours?` ${restHours} 小时`:''}`}

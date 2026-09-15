@@ -193,6 +193,7 @@ export function matchResumeJob(role: string, rawText: string, jobs: ResumeJob[])
   if (!jobs.length) return null;
   const normalizedRole = normalizeJobTitle(role);
   const normalizedText = normalizeJobTitle(normalizeResumeText(rawText));
+  const explicitRoleFamily = familyFor(role);
   let best: ResumeJobMatch | null = null;
 
   for (const job of jobs) {
@@ -207,7 +208,12 @@ export function matchResumeJob(role: string, rawText: string, jobs: ResumeJob[])
     const keywordHits = keywords.filter(item => includesTerm(rawText, item)).length;
     const keywordScore = keywords.length ? Math.round(keywordHits / keywords.length * 86) : 0;
     const explicitTitle = normalizedText.includes(normalizedTitle) ? 90 : 0;
-    const confidence = Math.max(titleScore, familyScore, keywordScore, explicitTitle);
+    const sameExplicitFamily = Boolean(explicitRoleFamily && family && explicitRoleFamily.role === family.role);
+    const differentExplicitFamily = Boolean(explicitRoleFamily && family && explicitRoleFamily.role !== family.role);
+    const roleFamilyScore = sameExplicitFamily ? 96 : 0;
+    const confidence = differentExplicitFamily
+      ? Math.max(titleScore, explicitTitle)
+      : Math.max(titleScore, familyScore, keywordScore, explicitTitle, roleFamilyScore);
     const reason = titleScore >= 92 ? '应聘职位与岗位名称一致'
       : explicitTitle >= confidence ? '简历全文明确出现该岗位'
         : familyScore >= keywordScore ? '履历与岗位职能方向一致' : '核心技能与岗位要求吻合';
