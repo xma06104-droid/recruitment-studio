@@ -31,8 +31,14 @@ export default function CandidateInterview({ token }:{ token:string }) {
   const speechRestartTimerRef=useRef<number|null>(null);
   const speechWatchdogTimerRef=useRef<number|null>(null);
   const speechPendingTimerRef=useRef<number|null>(null);
+  const cloudRecorderRef=useRef<MediaRecorder|null>(null);
+  const cloudCycleTimerRef=useRef<number|null>(null);
+  const cloudCyclePromiseRef=useRef<Promise<void>|null>(null);
+  const cloudWantedRef=useRef(false);
+  const cloudGenerationRef=useRef(0);
   const speechFailureCountRef=useRef(0);
   const preferLocalSpeechRef=useRef(false);
+  const serverTranscriptionRef=useRef(false);
   const startedAt=useRef(0);
   const [invitation,setInvitation]=useState<Invitation|null>(null);
   const [questions,setQuestions]=useState<Question[]>([]);
@@ -43,7 +49,7 @@ export default function CandidateInterview({ token }:{ token:string }) {
   const [seconds,setSeconds]=useState(120);
   const [listening,setListening]=useState(false);
   const [speechPending,setSpeechPending]=useState(false);
-  const [speechMode,setSpeechMode]=useState<'preparing'|'local'|'online'>('online');
+  const [speechMode,setSpeechMode]=useState<'preparing'|'local'|'online'|'cloud'>('online');
   const [speechNotice,setSpeechNotice]=useState('');
   const [recording,setRecording]=useState(false);
   const [camera,setCamera]=useState<'idle'|'ready'|'blocked'|'denied'>('idle');
@@ -52,8 +58,9 @@ export default function CandidateInterview({ token }:{ token:string }) {
 
   useEffect(()=>{
     void fetch(`/api/interview/${encodeURIComponent(token)}`,{cache:'no-store'}).then(async response=>{
-      const result=await response.json().catch(()=>({})) as {message?:string;invitation?:Invitation;questions?:Question[]};
+      const result=await response.json().catch(()=>({})) as {message?:string;invitation?:Invitation;questions?:Question[];serverTranscription?:boolean};
       if(!response.ok||!result.invitation){setError(result.message||'无法读取面试邀请。');setPhase('error');return}
+      serverTranscriptionRef.current=Boolean(result.serverTranscription);
       setInvitation(result.invitation);setQuestions(result.questions||[]);
       setPhase(result.invitation.status==='已完成'?'complete':'intro');
     }).catch(()=>{setError('网络连接失败，请稍后重试。');setPhase('error')});
@@ -62,7 +69,7 @@ export default function CandidateInterview({ token }:{ token:string }) {
 
   useEffect(()=>{
     if(phase!=='interview'||!question)return;
-    listenWantedRef.current=false;recognitionGenerationRef.current+=1;recognitionRef.current?.abort();
+    listenWantedRef.current=false;recognitionGenerationRef.current+=1;recognitionRef.current?.abort();void stopCloudListening(false);
     if(speechPendingTimerRef.current!==null)window.clearTimeout(speechPendingTimerRef.current);
     setSpeechPending(false);
     setSeconds(question.duration||120);
@@ -84,9 +91,10 @@ export default function CandidateInterview({ token }:{ token:string }) {
     const scope=window as unknown as {SpeechRecognition?:SpeechRecognitionConstructor;webkitSpeechRecognition?:SpeechRecognitionConstructor};
     const Recognition=scope.SpeechRecognition||scope.webkitSpeechRecognition;
     if(typeof MediaRecorder==='undefined'){setError('当前浏览器不支持录音，请使用最新版 Chrome 或 Edge 打开面试地址。');return}
-    if(!Recognition){setError('当前浏览器不支持实时语音识别，请使用最新版 Chrome 或 Edge 打开面试地址。');return}
+    if(!Recognition&&!serverTranscriptionRef.current){setError('当前浏览器不支持实时语音识别，请使用最新版 Chrome 或 Edge 打开面试地址。');return}
     speechFailureCountRef.current=0;setError('');setSpeechNotice('');
     if(Recognition){setSpeechMode('preparing');preferLocalSpeechRef.current=await prepareOnDeviceSpeech(Recognition);setSpeechMode(preferLocalSpeechRef.current?'local':'online')}
+    else setSpeechMode('cloud');
     try{
       const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:1280},height:{ideal:720}},audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
       const videoTrack=stream.getVideoTracks()[0];
@@ -115,7 +123,8 @@ export default function CandidateInterview({ token }:{ token:string }) {
     speechFailureCountRef.current=0;setError('');setSpeechNotice('');
     const scope=window as unknown as {SpeechRecognition?:SpeechRecognitionConstructor;webkitSpeechRecognition?:SpeechRecognitionConstructor};
     const Recognition=scope.SpeechRecognition||scope.webkitSpeechRecognition;
-    if(!Recognition){startListening();return}
+    if(!Recognition){startCloudListening();return}
+    await stopCloudListening(false);
     if(!preferLocalSpeechRef.current){
       setSpeechMode('preparing');
       preferLocalSpeechRef.current=await prepareOnDeviceSpeech(Recognition);
@@ -128,7 +137,7 @@ export default function CandidateInterview({ token }:{ token:string }) {
     const scope=window as unknown as {SpeechRecognition?:SpeechRecognitionConstructor;webkitSpeechRecognition?:SpeechRecognitionConstructor};
     const Recognition=scope.SpeechRecognition||scope.webkitSpeechRecognition;
     if(!Recognition){
-      setError('当前浏览器不支持实时语音识别，无法继续本次面试。');return
+      startCloudListening();return
     }
     if(!question)return;
     if(speechRestartTimerRef.current!==null){window.clearTimeout(speechRestartTimerRef.current);speechRestartTimerRef.current=null}
@@ -185,13 +194,17 @@ export default function CandidateInterview({ token }:{ token:string }) {
       const code=event.error||'';
       schedulePendingRelease();
       if(['not-allowed','audio-capture'].includes(code)){fatalError=true;listenWantedRef.current=false;setError('无法使用麦克风进行语音识别，请检查浏览器权限后重试。')}
-      else if(code==='service-not-allowed'){fatalError=true;listenWantedRef.current=false;setError('当前浏览器无法连接实时语音识别服务，请使用最新版 Chrome 或 Edge 打开后重试。')}
+      else if(code==='service-not-allowed'||code==='network'){
+        fatalError=true;listenWantedRef.current=false;
+        if(serverTranscriptionRef.current)startCloudListening();else setError('当前浏览器无法连接实时语音识别服务，请使用最新版 Chrome 或 Edge 打开后重试。')
+      }
       else if(code==='language-not-supported'&&preferLocalSpeechRef.current){preferLocalSpeechRef.current=false;setSpeechMode('online')}
       else if(code!=='no-speech'&&code!=='aborted'){
         speechFailureCountRef.current+=1;
         if(speechFailureCountRef.current>=3){
           fatalError=true;
-          listenWantedRef.current=false;setListening(false);setError(preferLocalSpeechRef.current?'本机中文语音识别启动失败，请点击“重新识别”。':'当前浏览器无法连接实时语音识别服务。请复制 AI 面试地址，使用最新版 Chrome 或 Edge 打开后重试。')
+          listenWantedRef.current=false;
+          if(serverTranscriptionRef.current)startCloudListening();else{setListening(false);setError(preferLocalSpeechRef.current?'本机中文语音识别启动失败，请点击“重新识别”。':'当前浏览器无法连接实时语音识别服务。请复制 AI 面试地址，使用最新版 Chrome 或 Edge 打开后重试。')}
         }
       }
     };
@@ -199,22 +212,77 @@ export default function CandidateInterview({ token }:{ token:string }) {
       if(speechWatchdogTimerRef.current!==null){window.clearTimeout(speechWatchdogTimerRef.current);speechWatchdogTimerRef.current=null}
       if(latestInterim){committed=contextualizeSpeechTranscript(joinSpeechTranscript(committed,latestInterim),invitation?.jobTitle||'',question);committedTranscriptRef.current[questionId]=committed;transcriptRef.current[questionId]=committed;setAnswers(current=>({...current,[questionId]:committed}))}
       schedulePendingRelease();
-      if(!fatalError&&listenWantedRef.current&&generation===recognitionGenerationRef.current)scheduleRestart();else setListening(false);
+      if(!fatalError&&listenWantedRef.current&&generation===recognitionGenerationRef.current)scheduleRestart();else if(!cloudWantedRef.current)setListening(false);
     };
     recognitionRef.current=recognition;
     try{recognition.start();setListening(true);armWatchdog()}catch{
       speechFailureCountRef.current+=1;
       if(speechFailureCountRef.current>=3){
         fatalError=true;
-        listenWantedRef.current=false;setListening(false);setError('实时语音识别启动失败，请点击“重新识别”。')
+        listenWantedRef.current=false;
+        if(serverTranscriptionRef.current)startCloudListening();else{setListening(false);setError('实时语音识别启动失败，请点击“重新识别”。')}
       }else scheduleRestart(650)
     }
+  }
+
+  function startCloudListening(){
+    if(!serverTranscriptionRef.current||cloudWantedRef.current||!question)return;
+    listenWantedRef.current=false;recognitionGenerationRef.current+=1;recognitionRef.current?.abort();
+    cloudWantedRef.current=true;cloudGenerationRef.current+=1;
+    setSpeechMode('cloud');setListening(true);setError('');setSpeechNotice('浏览器语音服务连接不稳定，已自动切换云端实时识别。');
+    runCloudCycle(cloudGenerationRef.current,question);
+  }
+
+  function runCloudCycle(generation:number,targetQuestion:Question){
+    if(!cloudWantedRef.current||generation!==cloudGenerationRef.current)return;
+    const audioTracks=streamRef.current?.getAudioTracks().filter(track=>track.readyState==='live')||[];
+    if(!audioTracks.length){setListening(false);setError('麦克风连接已断开，请重新允许权限后重试。');return}
+    const mimeType=['audio/mp4','audio/webm;codecs=opus','audio/webm'].find(type=>MediaRecorder.isTypeSupported(type));
+    const recorder=new MediaRecorder(new MediaStream(audioTracks),mimeType?{mimeType}:undefined);const chunks:Blob[]=[];
+    cloudRecorderRef.current=recorder;
+    cloudCyclePromiseRef.current=new Promise(resolve=>{
+      recorder.ondataavailable=event=>{if(event.data.size)chunks.push(event.data)};
+      recorder.onstop=async()=>{
+        if(cloudCycleTimerRef.current!==null){window.clearTimeout(cloudCycleTimerRef.current);cloudCycleTimerRef.current=null}
+        if(cloudRecorderRef.current===recorder)cloudRecorderRef.current=null;
+        const blob=chunks.length?new Blob(chunks,{type:recorder.mimeType||mimeType||'audio/webm'}):null;
+        if(blob&&blob.size>=512)await transcribeCloudChunk(blob,targetQuestion);
+        resolve();
+        if(cloudWantedRef.current&&generation===cloudGenerationRef.current)window.setTimeout(()=>runCloudCycle(generation,targetQuestion),80);
+      };
+    });
+    try{recorder.start();cloudCycleTimerRef.current=window.setTimeout(()=>{if(recorder.state==='recording')recorder.stop()},3500)}catch{setListening(false);setError('云端实时识别启动失败，请点击“重新识别”。')}
+  }
+
+  async function transcribeCloudChunk(audio:Blob,targetQuestion:Question){
+    setSpeechPending(true);
+    try{
+      const form=new FormData();form.set('audio',audio,cloudRecordingName(audio.type));form.set('questionId',targetQuestion.id);
+      const response=await fetch(`/api/interview/${encodeURIComponent(token)}/transcribe`,{method:'POST',body:form});
+      const result=await response.json().catch(()=>({})) as {transcript?:string;message?:string};
+      if(response.ok&&result.transcript){
+        const previous=transcriptRef.current[targetQuestion.id]||'';
+        const transcript=contextualizeSpeechTranscript(joinSpeechTranscript(previous,result.transcript),invitation?.jobTitle||'',targetQuestion);
+        transcriptRef.current[targetQuestion.id]=transcript;committedTranscriptRef.current[targetQuestion.id]=transcript;setAnswers(current=>({...current,[targetQuestion.id]:transcript}));setSpeechNotice('');
+      }else if(response.status!==422)setSpeechNotice(result.message||'云端识别暂时没有返回文字，录音仍在继续保存。');
+    }catch{setSpeechNotice('云端识别网络波动，录音仍在继续保存。')}
+    finally{setSpeechPending(false)}
+  }
+
+  async function stopCloudListening(flush:boolean){
+    if(!cloudWantedRef.current&&!cloudRecorderRef.current)return;
+    cloudWantedRef.current=false;
+    if(cloudCycleTimerRef.current!==null){window.clearTimeout(cloudCycleTimerRef.current);cloudCycleTimerRef.current=null}
+    const recorder=cloudRecorderRef.current;if(recorder?.state==='recording')recorder.stop();
+    if(flush&&cloudCyclePromiseRef.current)await cloudCyclePromiseRef.current;
+    cloudGenerationRef.current+=1;cloudCyclePromiseRef.current=null;
   }
 
   async function nextQuestion(auto=false){
     if(saving)return;
     setSaving(true);
     listenWantedRef.current=false;recognitionGenerationRef.current+=1;recognitionRef.current?.stop();setListening(false);
+    await stopCloudListening(true);
     const freshRecordingBlob=await stopQuestionRecording();
     if(question&&freshRecordingBlob)pendingRecordingsRef.current[question.id]=freshRecordingBlob;
     const recordingBlob=question?pendingRecordingsRef.current[question.id]||null:null;
@@ -271,14 +339,14 @@ export default function CandidateInterview({ token }:{ token:string }) {
     }catch{setError('录音上传失败，请检查网络后重试。');return false}
   }
 
-  function stopDevices(){listenWantedRef.current=false;recognitionGenerationRef.current+=1;if(speechRestartTimerRef.current!==null)window.clearTimeout(speechRestartTimerRef.current);if(speechWatchdogTimerRef.current!==null)window.clearTimeout(speechWatchdogTimerRef.current);if(speechPendingTimerRef.current!==null)window.clearTimeout(speechPendingTimerRef.current);setSpeechPending(false);if(recorderRef.current?.state==='recording')recorderRef.current.stop();setRecording(false);streamRef.current?.getTracks().forEach(track=>track.stop());recognitionRef.current?.abort();if(typeof window!=='undefined'&&'speechSynthesis'in window)window.speechSynthesis.cancel()}
+  function stopDevices(){listenWantedRef.current=false;recognitionGenerationRef.current+=1;void stopCloudListening(false);if(speechRestartTimerRef.current!==null)window.clearTimeout(speechRestartTimerRef.current);if(speechWatchdogTimerRef.current!==null)window.clearTimeout(speechWatchdogTimerRef.current);if(speechPendingTimerRef.current!==null)window.clearTimeout(speechPendingTimerRef.current);setSpeechPending(false);if(recorderRef.current?.state==='recording')recorderRef.current.stop();setRecording(false);streamRef.current?.getTracks().forEach(track=>track.stop());recognitionRef.current?.abort();if(typeof window!=='undefined'&&'speechSynthesis'in window)window.speechSynthesis.cancel()}
 
   if(phase==='loading')return <main className="candidate-interview-shell"><div className="candidate-interview-state"><i>✦</i><h1>正在验证面试邀请</h1><p>请稍候，系统正在读取您的专属面试题。</p></div></main>;
   if(phase==='error')return <main className="candidate-interview-shell"><div className="candidate-interview-state error"><i>!</i><h1>无法进入面试</h1><p>{error}</p></div></main>;
   if(phase==='complete')return <main className="candidate-interview-shell"><div className="candidate-interview-state complete"><i>✓</i><h1>AI 面试已完成</h1><p>感谢您的参与。回答与面试结果已安全提交给招聘团队，您可以关闭此页面。</p></div></main>;
   if(phase==='intro')return <main className="candidate-interview-shell"><section className="candidate-interview-welcome"><span>AI INTERVIEW INVITATION</span><div className="candidate-brand">星鉴人才</div><h1>{invitation?.candidateName}，您好</h1><p>您即将参加 <b>{invitation?.jobTitle}</b> 岗位的 AI 面试。本次共 {questions.length} 道题，建议在安静、网络稳定的环境中完成。</p><div className="candidate-device-list"><div><i>01</i><span><b>使用 Chrome 或 Edge</b><small>请在系统浏览器打开，避免使用应用内置浏览器</small></span></div><div><i>02</i><span><b>开启摄像头，仅录制语音</b><small>语音将在作答过程中实时转为文字，录音同步保存用于招聘评估</small></span></div><div><i>03</i><span><b>一次提交，不可重复作答</b><small>请勿关闭页面或将专属链接转发他人</small></span></div></div>{error&&<div className="candidate-submit-error">{error}</div>}<button disabled={speechMode==='preparing'} onClick={()=>void start()}>{speechMode==='preparing'?'正在准备中文语音识别…':'同意录音并开始面试'} <b>→</b></button><small>点击开始即表示您知悉摄像头将开启、系统仅录制语音。链接有效期至 {invitation?new Intl.DateTimeFormat('zh-CN',{year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(invitation.expiresAt)):''}</small></section></main>;
   const answer=question?answers[question.id]||'':'';const progress=Math.round((index+1)/Math.max(1,questions.length)*100);
-  return <main className="candidate-interview-shell live"><header className="candidate-live-head"><div><span>星鉴人才 · AI 面试</span><h1>{invitation?.jobTitle}</h1></div><div><b>{index+1}</b><span>/ {questions.length}</span></div></header><div className="candidate-live-progress"><i style={{width:`${progress}%`}}/></div><div className="candidate-live-grid"><section className="candidate-video"><video ref={videoRef} autoPlay playsInline muted onPlaying={()=>{setCamera('ready');setError(current=>current.startsWith('摄像头')?'':current)}} onStalled={()=>setCamera('blocked')} onError={()=>setCamera('blocked')}/><div className={`candidate-camera-badge ${camera}`}>{camera==='ready'?'● 摄像头与麦克风已连接':camera==='blocked'?'摄像头已连接，画面等待播放':camera==='denied'?'未获得摄像头权限':'正在加载摄像头画面…'}</div>{camera==='blocked'&&<button type="button" className="candidate-video-retry" onClick={()=>void playVideo()}>重新显示摄像头画面</button>}<footer><b>{invitation?.candidateName}</b><span>{recording?'● 语音录音已同步保存':'正在准备录音'}</span></footer></section><section className="candidate-question"><div className="candidate-question-meta"><span>QUESTION {String(index+1).padStart(2,'0')}</span><time>{String(Math.floor(seconds/60)).padStart(2,'0')}:{String(seconds%60).padStart(2,'0')}</time></div><h2>{question?.title}</h2><p>请直接口述回答。系统会实时识别并显示文字，同时保存语音录音；倒计时结束后自动进入下一题。</p><div className={`candidate-voice-answer ${listening||recording?'listening':''}`}><i>◉</i><span><b>{speechPending?'正在识别当前语音':listening?(speechMode==='local'?'正在本机实时识别':'正在实时识别语音'):'实时语音识别'}</b><p>{answer||(speechMode==='preparing'?'正在准备中文语音识别…':speechPending?'正在将刚才的语音转换为文字…':'请开始口述，识别出的文字会实时显示在这里。')}</p></span></div>{speechNotice&&<div className="candidate-submit-notice" role="status">{speechNotice}</div>}{error&&<div className="candidate-submit-error">{error}</div>}<div className="candidate-question-actions"><span className={listening||recording?'active':''}>{saving?'正在保存本题…':speechPending?'● 正在识别当前语音':listening?(speechMode==='local'?'● 本机实时识别中':'● 在线实时识别中'):'实时语音识别已暂停'}</span>{!listening&&<button className="voice-retry" disabled={saving||speechMode==='preparing'} onClick={()=>void retryListening()}>{speechMode==='preparing'?'正在准备…':'重新识别'}</button>}<button disabled={saving||speechPending} onClick={()=>void nextQuestion()}>{speechPending?'识别中…':saving?'正在保存…':index===questions.length-1?'提交全部回答':'提交并进入下一题'} <b>→</b></button></div></section></div></main>;
+  return <main className="candidate-interview-shell live"><header className="candidate-live-head"><div><span>星鉴人才 · AI 面试</span><h1>{invitation?.jobTitle}</h1></div><div><b>{index+1}</b><span>/ {questions.length}</span></div></header><div className="candidate-live-progress"><i style={{width:`${progress}%`}}/></div><div className="candidate-live-grid"><section className="candidate-video"><video ref={videoRef} autoPlay playsInline muted onPlaying={()=>{setCamera('ready');setError(current=>current.startsWith('摄像头')?'':current)}} onStalled={()=>setCamera('blocked')} onError={()=>setCamera('blocked')}/><div className={`candidate-camera-badge ${camera}`}>{camera==='ready'?'● 摄像头与麦克风已连接':camera==='blocked'?'摄像头已连接，画面等待播放':camera==='denied'?'未获得摄像头权限':'正在加载摄像头画面…'}</div>{camera==='blocked'&&<button type="button" className="candidate-video-retry" onClick={()=>void playVideo()}>重新显示摄像头画面</button>}<footer><b>{invitation?.candidateName}</b><span>{recording?'● 语音录音已同步保存':'正在准备录音'}</span></footer></section><section className="candidate-question"><div className="candidate-question-meta"><span>QUESTION {String(index+1).padStart(2,'0')}</span><time>{String(Math.floor(seconds/60)).padStart(2,'0')}:{String(seconds%60).padStart(2,'0')}</time></div><h2>{question?.title}</h2><p>请直接口述回答。系统会实时识别并显示文字，同时保存语音录音；倒计时结束后自动进入下一题。</p><div className={`candidate-voice-answer ${listening||recording?'listening':''}`}><i>◉</i><span><b>{speechPending?'正在识别当前语音':listening?(speechMode==='local'?'正在本机实时识别':speechMode==='cloud'?'正在云端实时识别':'正在实时识别语音'):'实时语音识别'}</b><p>{answer||(speechMode==='preparing'?'正在准备中文语音识别…':speechPending?'正在将刚才的语音转换为文字…':'请开始口述，识别出的文字会实时显示在这里。')}</p></span></div>{speechNotice&&<div className="candidate-submit-notice" role="status">{speechNotice}</div>}{error&&<div className="candidate-submit-error">{error}</div>}<div className="candidate-question-actions"><span className={listening||recording?'active':''}>{saving?'正在保存本题…':speechPending?'● 正在识别当前语音':listening?(speechMode==='local'?'● 本机实时识别中':speechMode==='cloud'?'● 云端实时识别中':'● 在线实时识别中'):'实时语音识别已暂停'}</span>{!listening&&<button className="voice-retry" disabled={saving||speechMode==='preparing'} onClick={()=>void retryListening()}>{speechMode==='preparing'?'正在准备…':'重新识别'}</button>}<button disabled={saving||speechPending} onClick={()=>void nextQuestion()}>{speechPending?'识别中…':saving?'正在保存…':index===questions.length-1?'提交全部回答':'提交并进入下一题'} <b>→</b></button></div></section></div></main>;
 }
 
 function speechAlternatives(result:SpeechResultLike){return Array.from({length:result.length},(_,index)=>({transcript:String(result[index]?.transcript||''),confidence:result[index]?.confidence}))}
@@ -288,6 +356,7 @@ function applySpeechContext(recognition:SpeechRecognitionLike,jobTitle:string,qu
   try{recognition.phrases=buildSpeechHints(jobTitle,question).map(phrase=>new Phrase(phrase,5))}catch{}
 }
 function joinSpeechTranscript(base:string,next:string){const left=base.trim(),right=next.trim();if(!right)return left;if(!left)return right;if(left.endsWith(right))return left;if(right.startsWith(left))return right;for(let overlap=Math.min(24,left.length,right.length);overlap>=2;overlap-=1){if(left.slice(-overlap)===right.slice(0,overlap))return `${left}${right.slice(overlap)}`}return `${left}${/[。！？!?，,；;：:]$/.test(left)?'':'，'}${right}`}
+function cloudRecordingName(type:string){return type.includes('mp4')?'speech.m4a':type.includes('ogg')?'speech.ogg':'speech.webm'}
 async function prepareOnDeviceSpeech(Recognition:SpeechRecognitionConstructor){
   if(!Recognition.available||!Recognition.install)return false;
   const options:SpeechRecognitionOptionsLike={langs:['zh-CN'],processLocally:true,quality:'dictation'};

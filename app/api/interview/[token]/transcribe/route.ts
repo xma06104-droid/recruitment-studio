@@ -68,7 +68,7 @@ async function transcribeWithTencent(audio:File,secretId:string,secretKey:string
   const host='asr.tencentcloudapi.com',service='asr',action='SentenceRecognition',version='2019-06-14';
   const contentType='application/json; charset=utf-8';
   const payload=JSON.stringify({
-    EngSerViceType:'16k_zh',SourceType:1,VoiceFormat:'wav',
+    EngSerViceType:'16k_zh',SourceType:1,VoiceFormat:tencentVoiceFormat(audio.type),
     Data:arrayBufferToBase64(await audio.arrayBuffer()),DataLen:audio.size,
     FilterDirty:0,FilterModal:0,FilterPunc:0,ConvertNumMode:1,WordInfo:0,
   });
@@ -121,4 +121,5 @@ function parseQuestions(value:string):Question[]{
   try{const parsed=JSON.parse(value);return Array.isArray(parsed)?parsed.map(item=>({id:String(item?.id||''),title:String(item?.title||''),competency:String(item?.competency||''),keywords:String(item?.keywords||'')})).filter(item=>item.id&&item.title):[]}catch{return []}
 }
 function recordingName(type:string){if(type.includes('wav'))return 'answer.wav';if(type.includes('mp4'))return 'answer.m4a';if(type.includes('ogg'))return 'answer.ogg';return 'answer.webm'}
+function tencentVoiceFormat(type:string){if(type.includes('mp4')||type.includes('m4a'))return 'm4a';if(type.includes('ogg'))return 'ogg-opus';if(type.includes('mpeg')||type.includes('mp3'))return 'mp3';return 'wav'}
 function failure(message:string,status:number,code?:string){return NextResponse.json({ok:false,message,code},{status})}

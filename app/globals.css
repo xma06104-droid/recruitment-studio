@@ -1207,6 +1207,10 @@ button:disabled{cursor:wait}
 .ai-library-toolbar input{color:#dfe8f4;background:transparent}.ai-library-toolbar button{border-color:rgba(78,215,235,.2);color:#fff;background:linear-gradient(110deg,#168da8,#347ce4);box-shadow:0 8px 20px rgba(30,127,191,.16)}
 .ai-question-row>div:first-child>i{border-color:rgba(77,215,235,.2);color:#73deeb;background:linear-gradient(145deg,#13243a,#172c47);box-shadow:none}
 .ai-question-row>em,.ai-question-row>em.voice{border:1px solid rgba(162,181,211,.11);color:#b8c8db;background:#17263c}
+.ai-question-row{font-size:13px}
+.ai-question-row>div:first-child b{font-size:14px;line-height:1.55}
+.ai-question-row small{font-size:12px;line-height:1.5}
+.ai-question-row>em,.ai-question-row>em.voice{font-size:11px}
 .ai-summary-shell>aside>button.active{border-color:rgba(75,215,235,.24);color:#eef8ff;background:linear-gradient(90deg,#15263d,#172b45);box-shadow:inset 3px 0 #43cfe7}
 .ai-summary-shell>aside>button>span{color:#6fdbe9;background:linear-gradient(145deg,#14243a,#172c47)}.ai-summary-shell>aside>button.active>span{color:#fff;background:linear-gradient(145deg,#18aec5,#347ce4)}
 .ai-summary-shell>aside>button em{color:#83e0c4;background:#132a29}
