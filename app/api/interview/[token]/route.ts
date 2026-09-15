@@ -3,6 +3,7 @@ import { env } from 'cloudflare:workers';
 import { ensureSchema, getDb, hashToken, invitationIdFromShareToken } from '@/app/server/db';
 import { contextualizeSpeechTranscript } from '@/app/speech-context';
 import { questionMaxScores, weightedQuestionScore } from '@/app/interview-score-weights';
+import { deriveInterviewKeywords } from '@/app/interview-keywords';
 
 type Question = {
   id:string; title:string; duration:number; questionType:string; competency:string;
@@ -118,7 +119,8 @@ function parseQuestions(value:string):Question[] {
 }
 
 function scoreAnswer(answer:string, question:Question, skills:string[]) {
-  const configured = `${question.keywords}，${question.competency}`.split(/[,，、;；/|]/).map(item => item.trim()).filter(item => item.length >= 2);
+  const preciseKeywords=deriveInterviewKeywords(question.title,question.referenceAnswer,question.competency,question.keywords);
+  const configured = `${preciseKeywords}，${question.competency}`.split(/[,，、;；/|]/).map(item => item.trim()).filter(item => item.length >= 2);
   const keywords = [...new Set([...configured, ...skills.slice(0, 3)])].slice(0, 10);
   const normalized = answer.toLowerCase().replace(/\s+/g, '');
   const matched = keywords.filter(keyword => normalized.includes(keyword.toLowerCase().replace(/\s+/g, '')));

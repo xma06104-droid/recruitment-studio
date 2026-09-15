@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { CANDIDATE_STAGES, normalizeCandidateStage } from '@/app/candidate-stages';
 import { env } from 'cloudflare:workers';
-import { accountFromRequest, createInvitationShareToken, ensureSchema, getDb, hashToken } from '@/app/server/db';
+import { accountFromRequest, createInvitationShareToken, ensureSchema, getDb, getResumeBucket, hashToken } from '@/app/server/db';
 import { repairResumeProfiles } from '@/app/server/resume-repair';
 import { questionMaxScores } from '@/app/interview-score-weights';
+import { deriveInterviewKeywords, isGenericInterviewKeywords } from '@/app/interview-keywords';
 
 type DataRow = Record<string, string | number | null>;
 
@@ -63,6 +64,13 @@ export async function GET(request: NextRequest) {
   if (duplicateIds.length) {
     await db.batch(duplicateIds.map(id => db.prepare('DELETE FROM ai_questions WHERE id = ? AND owner_id = ?').bind(id, account.id)));
   }
+  const repairedQuestions = uniqueQuestions.map(row => {
+    const current=String(row.keywords||'');
+    const keywords=deriveInterviewKeywords(String(row.title||''),String(row.reference_answer||''),String(row.competency||''),current);
+    return isGenericInterviewKeywords(current)&&keywords!==current?{...row,keywords}:row;
+  });
+  const keywordRepairs=repairedQuestions.filter((row,index)=>row.keywords!==uniqueQuestions[index]?.keywords&&row.owner_id===account.id);
+  if(keywordRepairs.length)await db.batch(keywordRepairs.map(row=>db.prepare('UPDATE ai_questions SET keywords = ?, updated_at = ? WHERE id = ? AND owner_id = ?').bind(row.keywords,now,row.id,account.id)));
   const requestOrigin = validHttpOrigin(new URL(request.url).origin);
   const configuredOrigin = validHttpOrigin((env as unknown as { INTERVIEW_PUBLIC_ORIGIN?:string }).INTERVIEW_PUBLIC_ORIGIN);
   const mappedInvitations = await Promise.all(aiInvitations.results.map(row => mapAiInvitation(row, configuredOrigin || requestOrigin)));
@@ -72,7 +80,7 @@ export async function GET(request: NextRequest) {
     candidates: candidates.results.map(mapCandidate),
     interviews: interviews.results.map(mapInterview),
     offers: offers.results.map(mapOffer),
-    aiQuestions: uniqueQuestions.map(mapAiQuestion),
+    aiQuestions: repairedQuestions.map(mapAiQuestion),
     aiInterviews: aiInterviews.results.map(mapAiInterview),
     aiInvitations: mappedInvitations,
     manualAssessments: manualAssessments.results.map(mapManualAssessment),
@@ -236,8 +244,8 @@ export async function POST(request: NextRequest) {
     const questionType = text(payload.questionType, 40) || '语音提问';
     const duration = integer(payload.duration, 30, 900, 120);
     const competency = text(payload.competency, 80) || '综合能力';
-    const keywords = text(payload.keywords, 500) || competency;
     const referenceAnswer = text(payload.referenceAnswer, 3000);
+    const keywords = deriveInterviewKeywords(title, referenceAnswer, competency, text(payload.keywords, 500));
     const followUp = payload.followUp ? 1 : 0;
     const maxScore = integer(payload.maxScore, 1, 100, -1);
     if (maxScore < 1) return invalid('请设置 1–100 分的题目最高分。');
@@ -274,7 +282,7 @@ export async function POST(request: NextRequest) {
     const questions = selectedQuestions.map(row => ({
       id:String(row.id), title:String(row.title), duration:Number(row.duration) || 120,
       questionType:String(row.question_type || '语音提问'), competency:String(row.competency || ''),
-      keywords:String(row.keywords || row.competency || ''), referenceAnswer:String(row.reference_answer || ''),
+      keywords:deriveInterviewKeywords(String(row.title||''),String(row.reference_answer||''),String(row.competency||''),String(row.keywords||'')), referenceAnswer:String(row.reference_answer || ''),
       maxScore:Number(row.max_score) || 0,
     }));
     const requestUrl = new URL(request.url);
@@ -384,8 +392,8 @@ export async function PATCH(request: NextRequest) {
     const questionType = text(payload.questionType, 40) || '语音提问';
     const duration = integer(payload.duration, 30, 900, 120);
     const competency = text(payload.competency, 80) || '综合能力';
-    const keywords = text(payload.keywords, 500) || competency;
     const referenceAnswer = text(payload.referenceAnswer, 3000);
+    const keywords = deriveInterviewKeywords(title, referenceAnswer, competency, text(payload.keywords, 500));
     const followUp = payload.followUp ? 1 : 0;
     const maxScore = integer(payload.maxScore, 1, 100, -1);
     if (maxScore < 1) return invalid('请设置 1–100 分的题目最高分。');
@@ -569,6 +577,36 @@ export async function DELETE(request: NextRequest) {
   if (account.role !== 'super_admin') return forbidden();
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   const resource = text(body?.resource, 40);
+  if(resource==='businessDataReset'){
+    if(!account.id.startsWith('test-account-'))return forbidden();
+    if(text(body?.confirmation,80)!=='CLEAR_TEST_ACCOUNT_DATA')return invalid('清空确认信息无效。');
+    const db=getDb();
+    const [resumeFiles,recordingFiles]=await Promise.all([
+      db.prepare('SELECT file_key FROM resume_profiles WHERE owner_id = ? AND file_key IS NOT NULL').bind(account.id).all<{file_key:string}>(),
+      db.prepare('SELECT object_key FROM ai_interview_recordings WHERE owner_id = ?').bind(account.id).all<{object_key:string}>(),
+    ]);
+    await db.batch([
+      db.prepare('DELETE FROM ai_interview_recordings WHERE owner_id = ?').bind(account.id),
+      db.prepare('DELETE FROM ai_interviews WHERE owner_id = ?').bind(account.id),
+      db.prepare('DELETE FROM ai_interview_invitations WHERE owner_id = ?').bind(account.id),
+      db.prepare('DELETE FROM manual_assessments WHERE owner_id = ?').bind(account.id),
+      db.prepare('DELETE FROM interviews WHERE owner_id = ?').bind(account.id),
+      db.prepare('DELETE FROM offers WHERE owner_id = ?').bind(account.id),
+      db.prepare('DELETE FROM screening_reviews WHERE owner_id = ?').bind(account.id),
+      db.prepare('DELETE FROM screening_logs WHERE owner_id = ?').bind(account.id),
+      db.prepare('DELETE FROM resume_applications WHERE owner_id = ?').bind(account.id),
+      db.prepare('DELETE FROM resume_profiles WHERE owner_id = ?').bind(account.id),
+      db.prepare('DELETE FROM candidate_assignments WHERE owner_id = ?').bind(account.id),
+      db.prepare('DELETE FROM candidates WHERE owner_id = ?').bind(account.id),
+      db.prepare('DELETE FROM ai_questions WHERE owner_id = ?').bind(account.id),
+      db.prepare('DELETE FROM screening_rules WHERE owner_id = ?').bind(account.id),
+      db.prepare('DELETE FROM screening_templates WHERE owner_id = ?').bind(account.id),
+      db.prepare('DELETE FROM jobs WHERE owner_id = ?').bind(account.id),
+    ]);
+    const keys=[...resumeFiles.results.map(row=>row.file_key),...recordingFiles.results.map(row=>row.object_key)].filter(Boolean);
+    if(keys.length)await getResumeBucket().delete(keys);
+    return NextResponse.json({ok:true,cleared:true});
+  }
   const id = text(body?.id, 80);
   if (!id) return invalid('缺少需要删除的记录。');
   const db = getDb();
@@ -665,24 +703,24 @@ async function mapAiInvitation(row: DataRow, origin:string) {
 function generateInterviewQuestions(jobTitle:string,department:string){
   const role=`${jobTitle} ${department}`;
   const common=[
-    {category:'岗位认知',title:`请结合过往经历，说明你对${jobTitle}岗位核心职责的理解。`,competency:'岗位理解',keywords:'核心职责，业务目标，协作对象，结果',referenceAnswer:`能够结合真实经历说明${jobTitle}的核心职责、主要协作对象、目标和衡量结果。`},
-    {category:'项目经历',title:`请介绍一个最能体现你胜任${jobTitle}岗位的项目。`,competency:'项目能力',keywords:'背景，职责，行动，结果，复盘',referenceAnswer:'使用结构化方式说明项目背景、个人职责、关键行动、量化结果及复盘改进。'},
-    {category:'问题解决',title:'遇到目标紧迫、资源不足或跨团队分歧时，你会如何推进？',competency:'问题解决',keywords:'优先级，沟通协作，风险，行动，结果',referenceAnswer:'先明确目标和优先级，识别风险与依赖，推动相关方达成共识，并持续跟踪结果。'},
-    {category:'数据意识',title:`你会使用哪些指标判断${jobTitle}工作的质量和成效？`,competency:'数据分析',keywords:'指标，数据分析，目标，复盘，优化',referenceAnswer:'给出与岗位相关的核心指标、数据来源、分析方法，并说明如何据此优化工作。'},
-    {category:'成长潜力',title:'请介绍一次工作失误或未达预期的经历，你如何复盘并改进？',competency:'复盘成长',keywords:'问题，原因，行动，结果，复盘',referenceAnswer:'坦诚说明问题和个人责任，分析根因，采取改进动作，并体现后续结果。'},
+    {category:'岗位认知',title:`请结合过往经历，说明你对${jobTitle}岗位核心职责的理解。`,competency:'岗位理解',keywords:'核心职责，业务目标，协作对象，结果',referenceAnswer:`建议回答包含：1. 结合具体业务场景说明${jobTitle}的核心职责和工作边界；2. 说明主要服务对象、上下游协作方及沟通机制；3. 列出关键业务目标、日常任务和风险控制点；4. 给出质量、效率或业务结果的衡量指标；5. 用一段真实经历证明自己的理解和胜任能力。`},
+    {category:'项目经历',title:`请介绍一个最能体现你胜任${jobTitle}岗位的项目。`,competency:'项目能力',keywords:'背景，职责，行动，结果，复盘',referenceAnswer:'建议使用 STAR 结构回答：1. 交代项目背景、业务目标、周期与约束；2. 明确个人职责、决策权限和协作对象；3. 说明关键行动、难点、资源协调与风险处理；4. 提供可核验的量化结果及个人贡献；5. 总结复盘、经验沉淀和后续改进。'},
+    {category:'问题解决',title:'遇到目标紧迫、资源不足或跨团队分歧时，你会如何推进？',competency:'问题解决',keywords:'优先级，沟通协作，风险，行动，结果',referenceAnswer:'建议回答包含：1. 澄清业务目标、交付标准和时间边界；2. 按价值、紧急度与依赖关系确定优先级；3. 识别资源缺口、关键风险和备选方案；4. 与相关方对齐分工、里程碑和升级机制；5. 持续跟踪数据与结果，出现偏差及时调整并复盘。'},
+    {category:'数据意识',title:`你会使用哪些指标判断${jobTitle}工作的质量和成效？`,competency:'数据分析',keywords:'指标，数据分析，目标，复盘，优化',referenceAnswer:`建议回答包含：1. 从业务目标拆解${jobTitle}的结果指标、过程指标和质量指标；2. 说明指标口径、数据来源、统计周期和基准值；3. 结合趋势、分层或对比分析定位问题；4. 给出预警阈值与改进动作；5. 说明如何验证优化效果并形成持续复盘机制。`},
+    {category:'成长潜力',title:'请介绍一次工作失误或未达预期的经历，你如何复盘并改进？',competency:'复盘成长',keywords:'问题，原因，行动，结果，复盘',referenceAnswer:'建议回答包含：1. 如实说明事件背景、预期目标和实际偏差；2. 明确个人责任，不回避关键失误；3. 从流程、判断、沟通和资源等方面分析根因；4. 说明补救动作、风险控制及最终结果；5. 给出制度、工具或工作习惯上的长期改进，并说明后续验证效果。'},
   ];
   const specialized = /产品|运营/.test(role) ? [
-    {category:'专业能力',title:'你如何判断一个需求是否值得做，并确定需求优先级？',competency:'需求分析',keywords:'用户价值，业务价值，紧急程度，成本，风险，优先级',referenceAnswer:'综合用户价值、业务价值、紧急程度、实现成本与风险判断，并说明清晰的优先级框架。'},
-    {category:'专业能力',title:'请介绍一次你通过数据或用户反馈推动产品迭代的经历。',competency:'产品迭代',keywords:'用户反馈，数据分析，假设，验证，迭代结果',referenceAnswer:'说明问题来源、数据与反馈证据、方案假设、验证过程及量化结果。'},
+    {category:'专业能力',title:'你如何判断一个需求是否值得做，并确定需求优先级？',competency:'需求分析',keywords:'用户价值，业务价值，紧急程度，成本，风险，优先级',referenceAnswer:'建议回答包含：1. 明确目标用户、使用场景和核心痛点；2. 用数据、访谈或反馈验证需求真实性；3. 评估用户价值、业务价值、战略匹配度和紧急程度；4. 估算研发成本、机会成本、依赖和风险；5. 使用可解释的优先级框架排序，并说明上线后的验证指标。'},
+    {category:'专业能力',title:'请介绍一次你通过数据或用户反馈推动产品迭代的经历。',competency:'产品迭代',keywords:'用户反馈，数据分析，假设，验证，迭代结果',referenceAnswer:'建议回答包含：1. 说明问题来源及目标用户；2. 展示用户反馈、行为数据和业务数据证据；3. 提出可验证的产品假设与成功标准；4. 说明方案取舍、协作推进、灰度或实验过程；5. 提供迭代前后数据、业务结果和复盘结论。'},
   ] : /开发|工程师|技术|测试/.test(role) ? [
-    {category:'专业能力',title:`请设计一个与你应聘${jobTitle}相关的核心系统，并说明关键技术取舍。`,competency:'系统设计',keywords:'架构，性能，稳定性，可扩展性，取舍',referenceAnswer:'从业务约束出发说明架构设计、数据流、性能和稳定性方案，并解释关键取舍。'},
-    {category:'专业能力',title:'请介绍一次复杂故障或技术难题的定位与解决过程。',competency:'技术攻坚',keywords:'现象，定位，根因，解决方案，复盘',referenceAnswer:'说明问题现象、排查路径、根因、解决方案、验证结果和预防措施。'},
+    {category:'专业能力',title:`请设计一个与你应聘${jobTitle}相关的核心系统，并说明关键技术取舍。`,competency:'系统设计',keywords:'架构，性能，稳定性，可扩展性，取舍',referenceAnswer:'建议回答包含：1. 明确业务目标、用户规模、数据量和一致性要求；2. 划分核心模块、接口、数据模型和完整数据流；3. 说明性能、容量、缓存、并发与扩展方案；4. 设计容错、监控、安全、降级和灾备机制；5. 比较备选架构并解释成本、复杂度与交付周期之间的取舍。'},
+    {category:'专业能力',title:'请介绍一次复杂故障或技术难题的定位与解决过程。',competency:'技术攻坚',keywords:'现象，定位，根因，解决方案，复盘',referenceAnswer:'建议回答包含：1. 描述故障现象、影响范围和时间线；2. 说明止损、隔离与信息同步措施；3. 展示日志、指标、链路和实验验证的排查过程；4. 定位根因并说明修复方案、验证结果和回滚预案；5. 总结监控、测试、流程或架构层面的预防措施。'},
   ] : /会计|财务|审计|出纳/.test(role) ? [
-    {category:'专业能力',title:'请介绍你负责月结、对账或财务报表的完整流程。',competency:'财务专业',keywords:'月结，对账，凭证，报表，准确性，时效',referenceAnswer:'完整说明月结或对账流程、关键控制点、异常处理方式以及准确性和时效保障。'},
-    {category:'风险控制',title:'发现账实不符、凭证异常或税务风险时，你会如何处理？',competency:'风险控制',keywords:'核查，证据，合规，沟通，整改，留痕',referenceAnswer:'先核查事实和证据，评估影响与合规风险，及时沟通升级，完成整改并保留记录。'},
+    {category:'专业能力',title:'请介绍你负责月结、对账或财务报表的完整流程。',competency:'财务专业',keywords:'月结，对账，凭证，报表，准确性，时效',referenceAnswer:'建议回答包含：1. 制定月结时间表、责任分工和资料清单；2. 完成收入、成本、费用、税金、资产及往来核对；3. 审核原始凭证、会计科目、期间归属和审批链；4. 处理差异、暂估、计提、摊销与内部交易抵销；5. 试算平衡并编制资产负债表、利润表和现金流量表；6. 执行勾稽校验、异常复核和管理层审批；7. 按时归档底稿，并复盘关账效率与准确性。'},
+    {category:'风险控制',title:'发现账实不符、凭证异常或税务风险时，你会如何处理？',competency:'风险控制',keywords:'核查，证据，合规，沟通，整改，留痕',referenceAnswer:'建议回答包含：1. 暂停相关入账或付款并保护原始资料；2. 核对合同、发票、审批、银行流水和业务证据；3. 判断差异原因、影响金额、涉及期间及税务合规风险；4. 与业务、财务负责人和必要的法务或税务人员沟通升级；5. 按权限完成更正、补充审批、纳税调整或追责；6. 保留完整处理记录和审计轨迹；7. 修订控制点并跟踪整改效果。'},
   ] : /设计/.test(role) ? [
-    {category:'专业能力',title:'请介绍一个代表性设计项目，以及你如何平衡用户体验与业务目标。',competency:'设计能力',keywords:'用户需求，业务目标，方案，验证，结果',referenceAnswer:'说明需求洞察、设计目标、方案推导、验证方法和最终业务或体验结果。'},
-    {category:'协作能力',title:'面对需求频繁变化或多方审美分歧时，你如何推动设计决策？',competency:'设计协作',keywords:'目标，证据，沟通，取舍，推进',referenceAnswer:'围绕共同目标，使用用户证据和设计原则沟通取舍，形成可执行决策。'},
+    {category:'专业能力',title:'请介绍一个代表性设计项目，以及你如何平衡用户体验与业务目标。',competency:'设计能力',keywords:'用户需求，业务目标，方案，验证，结果',referenceAnswer:'建议回答包含：1. 说明目标用户、业务背景、核心问题和成功指标；2. 展示调研洞察、信息架构和关键设计原则；3. 说明方案探索、原型迭代及重要取舍；4. 描述与产品、研发和业务方的协作方式；5. 提供可用性验证、上线数据及业务或体验结果；6. 总结复盘和后续优化。'},
+    {category:'协作能力',title:'面对需求频繁变化或多方审美分歧时，你如何推动设计决策？',competency:'设计协作',keywords:'目标，证据，沟通，取舍，推进',referenceAnswer:'建议回答包含：1. 重新对齐用户问题、业务目标和决策边界；2. 区分事实、偏好与约束，整理争议点；3. 使用用户研究、数据、设计原则和原型验证提供证据；4. 明确方案取舍、影响范围和优先级；5. 形成可追踪的决策记录、交付标准和后续验证计划。'},
   ] : [];
   return [...specialized,...common];
 }

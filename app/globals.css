@@ -1810,6 +1810,8 @@ input[type="date"]::-webkit-calendar-picker-indicator,input[type="datetime-local
 :is(button,a,[role="button"]):focus-visible{outline:2px solid var(--control-accent)!important;outline-offset:2px;box-shadow:0 0 0 4px rgba(69,211,229,.13)!important}
 input[type="checkbox"],input[type="radio"]{accent-color:var(--control-accent-strong)}
 .talent-tabs button.active,.tab-set button.active,.flow-stage-tabs button.active,.rs-tabs button.active,.ai-studio-tabs button.active,.ai-library-filter button.active,.interviewer-status-grid button.active,.interviewer-position-filter button.active{border-color:rgba(69,211,229,.42)!important;color:#f5feff!important;background:linear-gradient(110deg,#149cb7,#337fdc)!important;box-shadow:0 9px 22px rgba(28,156,188,.22)!important}
+.ai-studio-tabs button.active{border-color:rgba(202,185,238,.56)!important;color:#2f2943!important;background:linear-gradient(135deg,#f1ecf8,#ddd6eb)!important;box-shadow:0 12px 28px rgba(68,52,100,.18)!important}
+.ai-studio-tabs button.active>i{border-color:rgba(111,89,151,.18)!important;color:#4b3c69!important;background:rgba(255,255,255,.62)!important;box-shadow:none!important}.ai-studio-tabs button.active small{color:#746b83!important}
 .talent-tabs button.active b,.rs-tabs button.active b{color:#073047!important;background:#82e9f1!important}
 
 .ai-question-score-note{margin:-4px 0 8px;padding:11px 13px;border:1px solid rgba(69,211,229,.18);border-radius:10px;color:#91a9bd;background:rgba(10,31,48,.52);font-size:12px;line-height:1.65}

@@ -11,6 +11,7 @@ import RoleManagement from '@/app/components/role-management';
 import { CANDIDATE_STAGES, candidateStageIndex, normalizeCandidateStage } from '@/app/candidate-stages';
 import { CHINA_CITIES, CHINA_CITY_GROUPS } from '@/app/china-cities';
 import { weightedQuestionScore } from '@/app/interview-score-weights';
+import { deriveInterviewKeywords } from '@/app/interview-keywords';
 import { displayCandidateStage } from '@/app/candidate-stages';
 
 type Account = { id:string; contact:string; phone:string; email:string; role:'super_admin'|'hr'; createdAt:string };
@@ -840,10 +841,7 @@ function parseQuestionCopy(value:string){
     referenceAnswer=referenceAnswer||lines.filter(line=>line!==questionLine).join('\n');
   }
   if(!keywords){
-    const source=`${title} ${referenceAnswer}`;
-    const library=['沟通协作','项目推进','需求分析','问题解决','数据分析','领导力','团队管理','客户沟通','成本控制','供应商管理','风险管理','执行力','创新能力','复盘'];
-    const matched=library.filter(item=>source.includes(item));
-    keywords=(matched.length?matched:['职责','行动','结果','复盘']).join('，');
+    keywords=deriveInterviewKeywords(title,referenceAnswer);
   }
   return {title,keywords,referenceAnswer};
 }
