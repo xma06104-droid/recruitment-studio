@@ -14,6 +14,8 @@ export async function GET(request: NextRequest) {
   await ensureSchema();
   await repairResumeProfiles(account.id);
   const db = getDb();
+  const resetOnLoad=(env as unknown as {RESET_TEST_ACCOUNT_ON_NEXT_LOAD?:string}).RESET_TEST_ACCOUNT_ON_NEXT_LOAD||'';
+  if(resetOnLoad===account.id&&account.id.startsWith('test-account-'))await clearBusinessData(account.id);
   const now = new Date().toISOString();
   await db.prepare(`UPDATE ai_interview_invitations SET status = '已超时', updated_at = ?
     WHERE owner_id = ? AND expires_at <= ? AND status IN ('待发送', '已发送', '进行中')`).bind(now, account.id, now).run();
@@ -589,31 +591,7 @@ export async function DELETE(request: NextRequest) {
   if(resource==='businessDataReset'){
     if(!account.id.startsWith('test-account-'))return forbidden();
     if(text(body?.confirmation,80)!=='CLEAR_TEST_ACCOUNT_DATA')return invalid('清空确认信息无效。');
-    const db=getDb();
-    const [resumeFiles,recordingFiles]=await Promise.all([
-      db.prepare('SELECT file_key FROM resume_profiles WHERE owner_id = ? AND file_key IS NOT NULL').bind(account.id).all<{file_key:string}>(),
-      db.prepare('SELECT object_key FROM ai_interview_recordings WHERE owner_id = ?').bind(account.id).all<{object_key:string}>(),
-    ]);
-    await db.batch([
-      db.prepare('DELETE FROM ai_interview_recordings WHERE owner_id = ?').bind(account.id),
-      db.prepare('DELETE FROM ai_interviews WHERE owner_id = ?').bind(account.id),
-      db.prepare('DELETE FROM ai_interview_invitations WHERE owner_id = ?').bind(account.id),
-      db.prepare('DELETE FROM manual_assessments WHERE owner_id = ?').bind(account.id),
-      db.prepare('DELETE FROM interviews WHERE owner_id = ?').bind(account.id),
-      db.prepare('DELETE FROM offers WHERE owner_id = ?').bind(account.id),
-      db.prepare('DELETE FROM screening_reviews WHERE owner_id = ?').bind(account.id),
-      db.prepare('DELETE FROM screening_logs WHERE owner_id = ?').bind(account.id),
-      db.prepare('DELETE FROM resume_applications WHERE owner_id = ?').bind(account.id),
-      db.prepare('DELETE FROM resume_profiles WHERE owner_id = ?').bind(account.id),
-      db.prepare('DELETE FROM candidate_assignments WHERE owner_id = ?').bind(account.id),
-      db.prepare('DELETE FROM candidates WHERE owner_id = ?').bind(account.id),
-      db.prepare('DELETE FROM ai_questions WHERE owner_id = ?').bind(account.id),
-      db.prepare('DELETE FROM screening_rules WHERE owner_id = ?').bind(account.id),
-      db.prepare('DELETE FROM screening_templates WHERE owner_id = ?').bind(account.id),
-      db.prepare('DELETE FROM jobs WHERE owner_id = ?').bind(account.id),
-    ]);
-    const keys=[...resumeFiles.results.map(row=>row.file_key),...recordingFiles.results.map(row=>row.object_key)].filter(Boolean);
-    if(keys.length)await getResumeBucket().delete(keys);
+    await clearBusinessData(account.id);
     return NextResponse.json({ok:true,cleared:true});
   }
   const id = text(body?.id, 80);
@@ -642,6 +620,26 @@ async function accessibleCandidate(id: string, accountId: string) {
   return getDb().prepare(`SELECT id, owner_id, job_id, stage, name, role, email FROM candidates WHERE id = ? AND (
     owner_id = ? OR id IN (SELECT candidate_id FROM candidate_assignments WHERE hr_account_id = ?)
   ) LIMIT 1`).bind(id, accountId, accountId).first<{id:string;owner_id:string;job_id:string|null;stage:string;name:string;role:string;email:string}>();
+}
+
+async function clearBusinessData(ownerId:string){
+  const db=getDb();
+  const [resumeFiles,recordingFiles]=await Promise.all([
+    db.prepare('SELECT file_key FROM resume_profiles WHERE owner_id = ? AND file_key IS NOT NULL').bind(ownerId).all<{file_key:string}>(),
+    db.prepare('SELECT object_key FROM ai_interview_recordings WHERE owner_id = ?').bind(ownerId).all<{object_key:string}>(),
+  ]);
+  await db.batch([
+    db.prepare('DELETE FROM ai_interview_recordings WHERE owner_id = ?').bind(ownerId),db.prepare('DELETE FROM ai_interviews WHERE owner_id = ?').bind(ownerId),
+    db.prepare('DELETE FROM ai_interview_invitations WHERE owner_id = ?').bind(ownerId),db.prepare('DELETE FROM manual_assessments WHERE owner_id = ?').bind(ownerId),
+    db.prepare('DELETE FROM interviews WHERE owner_id = ?').bind(ownerId),db.prepare('DELETE FROM offers WHERE owner_id = ?').bind(ownerId),
+    db.prepare('DELETE FROM screening_reviews WHERE owner_id = ?').bind(ownerId),db.prepare('DELETE FROM screening_logs WHERE owner_id = ?').bind(ownerId),
+    db.prepare('DELETE FROM resume_applications WHERE owner_id = ?').bind(ownerId),db.prepare('DELETE FROM resume_profiles WHERE owner_id = ?').bind(ownerId),
+    db.prepare('DELETE FROM candidate_assignments WHERE owner_id = ?').bind(ownerId),db.prepare('DELETE FROM candidates WHERE owner_id = ?').bind(ownerId),
+    db.prepare('DELETE FROM ai_questions WHERE owner_id = ?').bind(ownerId),db.prepare('DELETE FROM screening_rules WHERE owner_id = ?').bind(ownerId),
+    db.prepare('DELETE FROM screening_templates WHERE owner_id = ?').bind(ownerId),db.prepare('DELETE FROM jobs WHERE owner_id = ?').bind(ownerId),
+  ]);
+  const keys=[...resumeFiles.results.map(row=>row.file_key),...recordingFiles.results.map(row=>row.object_key)].filter(Boolean);
+  if(keys.length)await getResumeBucket().delete(keys);
 }
 
 function mapJob(row: DataRow) {
