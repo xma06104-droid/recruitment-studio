@@ -634,24 +634,30 @@ function AiSummary({report,person}:{report:AiInterview;person?:Candidate}){
 
 function Interviews({items,people,onNew,onPick,updateStatus}:{items:Interview[];people:Candidate[];onNew:()=>void;onPick:(id:string)=>void;updateStatus:(id:string,value:string)=>void}){
   const today=useMemo(()=>new Date(),[]);
-  const calendarDays=useMemo(()=>{
-    const currentWeek=weekDays(today);
-    const firstVisible=items.reduce((earliest,item)=>{
-      const date=new Date(item.scheduledAt);
-      date.setHours(0,0,0,0);
-      return date<earliest?date:earliest;
-    },currentWeek[0]);
-    const days:Date[]=[];
-    for(const cursor=new Date(firstVisible);cursor<=currentWeek[6];cursor.setDate(cursor.getDate()+1))days.push(new Date(cursor));
-    return days;
-  },[items,today]);
   const [selectedDate,setSelectedDate]=useState(today);
-  const calendarRef=useRef<HTMLDivElement>(null);
-  useEffect(()=>{calendarRef.current?.querySelector<HTMLButtonElement>('.active')?.scrollIntoView({block:'nearest',inline:'center'})},[calendarDays,selectedDate]);
+  const [calendarMonth,setCalendarMonth]=useState(()=>new Date(today.getFullYear(),today.getMonth(),1));
+  const [historyOpen,setHistoryOpen]=useState(false);
+  const monthCells=useMemo(()=>{
+    const year=calendarMonth.getFullYear();
+    const month=calendarMonth.getMonth();
+    const leading=(new Date(year,month,1).getDay()+6)%7;
+    const count=new Date(year,month+1,0).getDate();
+    return [...Array<Date|null>(leading).fill(null),...Array.from({length:count},(_,index)=>new Date(year,month,index+1))];
+  },[calendarMonth]);
+  const historyMonths=useMemo(()=>{
+    const months=new Map<string,Date>();
+    for(const item of items){
+      const date=new Date(item.scheduledAt);
+      const month=new Date(date.getFullYear(),date.getMonth(),1);
+      months.set(`${month.getFullYear()}-${month.getMonth()}`,month);
+    }
+    const current=new Date(today.getFullYear(),today.getMonth(),1);
+    months.set(`${current.getFullYear()}-${current.getMonth()}`,current);
+    return [...months.values()].sort((a,b)=>b.getTime()-a.getTime());
+  },[items,today]);
   const dayItems=items.filter(item=>sameDay(new Date(item.scheduledAt),selectedDate));
   return <section>
     <Head path="面试管理" title="面试管理" sub="日程来自实际保存的面试安排" action="安排面试" click={onNew}/>
-    <div className="week-strip history-strip" ref={calendarRef}>{calendarDays.map(date=><button type="button" aria-pressed={sameDay(date,selectedDate)} className={sameDay(date,selectedDate)?'active':''} key={date.toISOString()} onClick={()=>setSelectedDate(date)}><span>{date.getMonth()+1}月 · {weekLabel(date)}</span><b>{date.getDate()}</b>{items.some(item=>sameDay(new Date(item.scheduledAt),date))&&<i/>}</button>)}</div>
     <div className="interview-layout">
       <div className="interview-list">
         <div className="list-title"><h3>面试日程</h3><span>{dayItems.length} 场当天面试</span></div>
@@ -659,7 +665,14 @@ function Interviews({items,people,onNew,onPick,updateStatus}:{items:Interview[];
           ?<Empty icon="◴" title="当天暂无面试" text="请选择其他日期，或为候选人安排新的面试。" action="安排面试" click={onNew}/>
           :dayItems.map(item=><article className="interview-card clickable" role="button" tabIndex={0} key={item.id} onClick={()=>onPick(item.id)} onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();onPick(item.id)}}}><time><b>{formatTime(item.scheduledAt)}</b><small>{formatMonthDay(item.scheduledAt)}</small></time><i className="interview-color"/><div><h3>{candidateName(item.candidateId,people)} · {item.round}</h3><p>{people.find(person=>person.id===item.candidateId)?.role||'职位未关联'}</p><span>{item.mode}　面试官：{item.interviewer}</span></div><select value={item.status} onClick={event=>event.stopPropagation()} onChange={event=>updateStatus(item.id,event.target.value)}>{interviewStatuses.map(status=><option key={status}>{status}</option>)}</select></article>)}
       </div>
-      <aside className="interview-side"><h3>面试协同提醒</h3><div><b>{items.filter(item=>new Date(item.scheduledAt)<new Date()&&item.status!=='已完成'&&item.status!=='已取消').length}</b><span>待补充面试结果<small>基于已过期且未完成的真实日程</small></span></div><div><b>{items.filter(item=>item.status==='待确认').length}</b><span>候选人待确认<small>来自当前实际安排</small></span></div></aside>
+      <aside className="interview-calendar-side">
+        <header><h3>面试日历</h3><button type="button" className={historyOpen?'active':''} onClick={()=>setHistoryOpen(value=>!value)}>历史日历</button></header>
+        {historyOpen&&<div className="interview-history-months">{historyMonths.map(month=><button type="button" className={month.getFullYear()===calendarMonth.getFullYear()&&month.getMonth()===calendarMonth.getMonth()?'active':''} key={month.toISOString()} onClick={()=>{setCalendarMonth(month);setHistoryOpen(false)}}>{month.getFullYear()}年{month.getMonth()+1}月</button>)}</div>}
+        <div className="interview-calendar-month"><button type="button" aria-label="上个月" onClick={()=>setCalendarMonth(value=>new Date(value.getFullYear(),value.getMonth()-1,1))}>‹</button><b>{calendarMonth.getFullYear()}年 {calendarMonth.getMonth()+1}月</b><button type="button" aria-label="下个月" onClick={()=>setCalendarMonth(value=>new Date(value.getFullYear(),value.getMonth()+1,1))}>›</button></div>
+        <div className="interview-calendar-weekdays">{['一','二','三','四','五','六','日'].map(day=><span key={day}>{day}</span>)}</div>
+        <div className="interview-calendar-days">{monthCells.map((date,index)=>date?<button type="button" key={date.toISOString()} aria-pressed={sameDay(date,selectedDate)} className={[sameDay(date,selectedDate)?'active':'',sameDay(date,today)?'today':'',items.some(item=>sameDay(new Date(item.scheduledAt),date))?'has-interview':''].filter(Boolean).join(' ')} onClick={()=>setSelectedDate(date)}><b>{date.getDate()}</b></button>:<span key={`blank-${index}`}/>)}</div>
+        <footer><span>当前查看</span><b>{selectedDate.getFullYear()}年{selectedDate.getMonth()+1}月{selectedDate.getDate()}日</b><small>{dayItems.length} 场已创建面试</small></footer>
+      </aside>
     </div>
   </section>
 }
