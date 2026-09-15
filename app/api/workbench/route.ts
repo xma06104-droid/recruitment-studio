@@ -9,13 +9,16 @@ import { deriveInterviewKeywords, isGenericInterviewKeywords } from '@/app/inter
 type DataRow = Record<string, string | number | null>;
 
 export async function GET(request: NextRequest) {
+  const resetOnLoad=(env as unknown as {RESET_TEST_ACCOUNT_ON_NEXT_LOAD?:string}).RESET_TEST_ACCOUNT_ON_NEXT_LOAD||'';
+  if(resetOnLoad.startsWith('test-account-')){
+    await ensureSchema();
+    await clearBusinessData(resetOnLoad);
+  }
   const account = await accountFromRequest(request);
   if (!account) return unauthorized();
   await ensureSchema();
   await repairResumeProfiles(account.id);
   const db = getDb();
-  const resetOnLoad=(env as unknown as {RESET_TEST_ACCOUNT_ON_NEXT_LOAD?:string}).RESET_TEST_ACCOUNT_ON_NEXT_LOAD||'';
-  if(resetOnLoad===account.id&&account.id.startsWith('test-account-'))await clearBusinessData(account.id);
   const now = new Date().toISOString();
   await db.prepare(`UPDATE ai_interview_invitations SET status = '已超时', updated_at = ?
     WHERE owner_id = ? AND expires_at <= ? AND status IN ('待发送', '已发送', '进行中')`).bind(now, account.id, now).run();
