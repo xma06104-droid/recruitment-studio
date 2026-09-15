@@ -634,12 +634,24 @@ function AiSummary({report,person}:{report:AiInterview;person?:Candidate}){
 
 function Interviews({items,people,onNew,onPick,updateStatus}:{items:Interview[];people:Candidate[];onNew:()=>void;onPick:(id:string)=>void;updateStatus:(id:string,value:string)=>void}){
   const today=useMemo(()=>new Date(),[]);
-  const week=useMemo(()=>weekDays(today),[today]);
+  const calendarDays=useMemo(()=>{
+    const currentWeek=weekDays(today);
+    const firstVisible=items.reduce((earliest,item)=>{
+      const date=new Date(item.scheduledAt);
+      date.setHours(0,0,0,0);
+      return date<earliest?date:earliest;
+    },currentWeek[0]);
+    const days:Date[]=[];
+    for(const cursor=new Date(firstVisible);cursor<=currentWeek[6];cursor.setDate(cursor.getDate()+1))days.push(new Date(cursor));
+    return days;
+  },[items,today]);
   const [selectedDate,setSelectedDate]=useState(today);
+  const calendarRef=useRef<HTMLDivElement>(null);
+  useEffect(()=>{calendarRef.current?.querySelector<HTMLButtonElement>('.active')?.scrollIntoView({block:'nearest',inline:'center'})},[calendarDays,selectedDate]);
   const dayItems=items.filter(item=>sameDay(new Date(item.scheduledAt),selectedDate));
   return <section>
     <Head path="面试管理" title="面试管理" sub="日程来自实际保存的面试安排" action="安排面试" click={onNew}/>
-    <div className="week-strip">{week.map(date=><button type="button" aria-pressed={sameDay(date,selectedDate)} className={sameDay(date,selectedDate)?'active':''} key={date.toISOString()} onClick={()=>setSelectedDate(date)}><span>{weekLabel(date)}</span><b>{date.getDate()}</b>{items.some(item=>sameDay(new Date(item.scheduledAt),date))&&<i/>}</button>)}</div>
+    <div className="week-strip history-strip" ref={calendarRef}>{calendarDays.map(date=><button type="button" aria-pressed={sameDay(date,selectedDate)} className={sameDay(date,selectedDate)?'active':''} key={date.toISOString()} onClick={()=>setSelectedDate(date)}><span>{date.getMonth()+1}月 · {weekLabel(date)}</span><b>{date.getDate()}</b>{items.some(item=>sameDay(new Date(item.scheduledAt),date))&&<i/>}</button>)}</div>
     <div className="interview-layout">
       <div className="interview-list">
         <div className="list-title"><h3>面试日程</h3><span>{dayItems.length} 场当天面试</span></div>
