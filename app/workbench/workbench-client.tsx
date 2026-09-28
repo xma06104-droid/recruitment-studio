@@ -143,7 +143,7 @@ export default function WorkbenchClient() {
       const result=await response.json().catch(()=>({})) as {message?:string;count?:number};
       if(response.status===401){window.location.assign('/');return}
       if(!response.ok){flash(result.message||'面试题生成失败，请稍后重试。');return}
-      setModal(null);announceWorkbenchChange();await loadData();flash(result.count?`已生成并保存 ${result.count} 道岗位面试题`:'该岗位的推荐题目已经存在');
+      setModal(null);announceWorkbenchChange();await loadData();flash(result.count?`已生成并保存 ${result.count} 道面试题`:'该题库的推荐题目已经存在');
     }catch{flash('面试题生成失败，请检查网络后重试。')}finally{saveInFlight.current=false;setModalSaving(false)}
   }
 
@@ -408,7 +408,7 @@ function AiStudio({data,openQuestion,openGenerator,deleteQuestion,openResult,sen
     const job=data.jobs.find(item=>item.id===person.jobId)||data.jobs.find(item=>item.title.trim().toLowerCase()===person.role.trim().toLowerCase());
     const specific=job?questions.filter(question=>question.jobId===job.id):[];
     const general=questions.filter(question=>!question.jobId);
-    const interviewQuestions=specific.length?specific:general;
+    const interviewQuestions=[...general,...specific];
     if(!interviewQuestions.length){setJobFilter(job?.id||'general');setTab('library');flash(job?`请先为“${job.title}”配置面试题`:'请先创建通用 AI 面试题');return}
     if(!validEmail(person.email)){flash('请补充有效邮箱');return}
     setValidityHours(24);setInterviewUrl('');setInviteTarget(person);
@@ -444,9 +444,9 @@ function AiStudio({data,openQuestion,openGenerator,deleteQuestion,openResult,sen
         return <div className="flow-person-row" key={person.id}><span/><div className="flow-person-profile"><span>{person.name.slice(0,1)}</span><div><h3>{person.name}<small>{person.role}</small></h3><p>{person.company||'公司未填写'}</p><small>{person.email||'邮箱未填写'}</small></div></div><div className="flow-person-owner"><span>{statusLabel}</span><b className={timedOut?'timeout':report?'completed':''}>{statusText}</b><small>{statusTime}</small></div><div className="flow-person-status"><span>综合总分</span><b className={report?'completed':''}>{report?`${reportTotal?.score??report.score??0} / 100`:'—'}</b></div><div className="ai-invite-row-actions">{report?<button className="flow-more" onClick={()=>{setCurrent(report.id);setTab('summary')}}>查看总结</button>:reportGenerating?<button className="invite-waiting" disabled>报告生成中</button>:timedOut?<button className="flow-more timeout-action" disabled={sendingId===person.id} onClick={()=>prepareInvitation(person)}>{sendingId===person.id?'正在生成邮件…':'重新邀请'}</button>:invitation?<><button className="invite-waiting" disabled>待确认</button><small>剩余 {remainingTime(invitation.expiresAt,clock)}</small>{invitation.interviewUrl&&<button className="flow-more copy-link" onClick={()=>void copyInterviewUrl(invitation.interviewUrl)}>复制链接</button>}<button className="flow-more resend-link" disabled={sendingId===person.id} onClick={()=>prepareInvitation(person)}>{sendingId===person.id?'正在生成邮件…':'重新发送链接'}</button></>:<button className="flow-more" disabled={sendingId===person.id} onClick={()=>prepareInvitation(person)}>发送面试邀请</button>}</div></div>
       })}</div>}
     </div>}
-    {tab==='library'&&<div className="ai-generator-bar"><div><b>岗位面试题智能生成</b><span>根据岗位名称与部门生成问题、评分关键词和参考回答</span></div><button type="button" disabled={!data.jobs.length} onClick={openGenerator}>✦ AI 生成面试题</button></div>}
+    {tab==='library'&&<div className="ai-generator-bar"><div><b>面试题智能生成</b><span>可生成通用综合面试题或指定岗位专业题，并在正式面试中混合提问</span></div><button type="button" onClick={openGenerator}>✦ AI 生成面试题</button></div>}
     {tab==='library'&&<div className="ai-library-shell">
-      <aside className="ai-library-filter"><h3>岗位题库</h3><p>按适用岗位展示已保存题目</p><button className={jobFilter==='all'?'active':''} onClick={()=>setJobFilter('all')}>全部题目<b>{questions.length}</b></button><button className={jobFilter==='general'?'active':''} onClick={()=>setJobFilter('general')}>通用题目<b>{questions.filter(question=>!question.jobId).length}</b></button>{data.jobs.map(job=><button className={jobFilter===job.id?'active':''} onClick={()=>setJobFilter(job.id)} key={job.id}>{job.title}<b>{questions.filter(question=>question.jobId===job.id).length}</b></button>)}<div className="ai-library-tip"><i>✦</i><b>岗位自动匹配</b><p>发起面试时优先使用候选人应聘岗位的题目；未配置时使用通用题目。</p></div></aside>
+      <aside className="ai-library-filter"><h3>面试题库</h3><p>按通用面试或适用岗位展示已保存题目</p><button className={jobFilter==='all'?'active':''} onClick={()=>setJobFilter('all')}>全部题目<b>{questions.length}</b></button><button className={jobFilter==='general'?'active':''} onClick={()=>setJobFilter('general')}>通用面试<b>{questions.filter(question=>!question.jobId).length}</b></button>{data.jobs.map(job=><button className={jobFilter===job.id?'active':''} onClick={()=>setJobFilter(job.id)} key={job.id}>{job.title}<b>{questions.filter(question=>question.jobId===job.id).length}</b></button>)}<div className="ai-library-tip"><i>✦</i><b>自动混合提问</b><p>发起面试时会合并通用综合题与候选人应聘岗位的专业题，并将总分统一折算为 100 分。</p></div></aside>
       <section className="ai-library-main">
         <div className="ai-library-toolbar"><label>⌕<input value={jobFilter==='all'?'全部岗位':jobFilter==='general'?'通用题目':data.jobs.find(job=>job.id===jobFilter)?.title||'岗位题目'} readOnly/></label><div><button onClick={()=>openQuestion()}>＋ 新建题目</button><span>共 {visibleQuestions.length} 道</span></div></div>
         <div className="ai-question-head"><span>题目内容</span><span>提问方式</span><span>时长</span><span>追问</span><span>操作</span></div>
@@ -885,7 +885,7 @@ function QuestionModal({question,jobs,questions,close,submit,submitting}:{questi
   }
   return <FormModal close={close} submit={submit} submitting={submitting} scrollable kicker="QUESTION BANK" title={question?'修改面试题':'新建面试题'} description="题目会按岗位匹配；参考回答和评分关键词仅供后台核验与自动评分使用。" submitLabel={question?'保存题目修改':'保存真实记录'}>
     <section className="ai-question-copy"><div><b>粘贴文案自动识别</b><small>支持“题目、评分关键词、参考回答”等常见格式</small></div><textarea value={copy} onChange={event=>{setCopy(event.target.value);setRecognitionNote('')}} onPaste={event=>{const value=event.clipboardData.getData('text');if(value){event.preventDefault();setCopy(value);recognize(value)}}} placeholder={'示例：\n题目：请介绍一次项目推进经历\n评分关键词：目标，行动，协作，结果\n参考回答：说明背景、职责、过程和最终结果'}/><button type="button" onClick={()=>recognize()}>⌕ 智能识别并填充</button>{recognitionNote&&<p role="status">{recognitionNote}</p>}</section>
-    <label>适用岗位<select name="jobId" value={jobId} onChange={event=>{const next=event.target.value;const total=questions.filter(item=>item.id!==question?.id&&(item.jobId||'')===next).reduce((sum,item)=>sum+item.maxScore,0);setJobId(next);setMaxScore(value=>Math.min(value,Math.max(1,100-total)))}}><option value="">通用题目（所有岗位无专属题目时使用）</option>{jobs.map(job=><option key={job.id} value={job.id}>{job.title} · {job.department}</option>)}</select></label>
+    <label>适用岗位<select name="jobId" value={jobId} onChange={event=>{const next=event.target.value;const total=questions.filter(item=>item.id!==question?.id&&(item.jobId||'')===next).reduce((sum,item)=>sum+item.maxScore,0);setJobId(next);setMaxScore(value=>Math.min(value,Math.max(1,100-total)))}}><option value="">通用面试（可与指定岗位题混合提问）</option>{jobs.map(job=><option key={job.id} value={job.id}>{job.title} · {job.department}</option>)}</select></label>
     <label>面试问题<textarea required name="title" value={title} onChange={event=>setTitle(event.target.value)} placeholder="请输入实际需要使用的面试问题"/></label>
     <input type="hidden" name="competency" value={question?.competency||'综合能力'}/>
     <label>评分关键词<input required name="keywords" value={keywords} onChange={event=>setKeywords(event.target.value)} placeholder="多个关键词请用逗号分隔，例如：职责，行动，结果，复盘"/></label>
@@ -897,10 +897,12 @@ function QuestionModal({question,jobs,questions,close,submit,submitting}:{questi
   </FormModal>
 }
 function QuestionGeneratorModal({jobs,close,submit,submitting}:{jobs:Job[];close:()=>void;submit:(data:FormData)=>void;submitting:boolean}){
-  return <FormModal close={close} submit={submit} submitting={submitting} kicker="AI QUESTION GENERATOR" title="按岗位生成面试题" description="系统会结合岗位名称与所属部门生成题目，并自动把该题库剩余分值分配给新题；同一套题的最高分合计为 100 分。" submitLabel="生成并保存题目">
-    <label>适用岗位<select required name="jobId" defaultValue=""><option value="" disabled>请选择需要生成题目的岗位</option>{jobs.map(job=><option key={job.id} value={job.id}>{job.title} · {job.department}</option>)}</select></label>
+  const [target,setTarget]=useState('');
+  const general=target==='__general__';
+  return <FormModal close={close} submit={submit} submitting={submitting} kicker="AI QUESTION GENERATOR" title="生成面试题" description="可创建通用综合面试题，也可按岗位生成专业题；两类题目可在正式面试中混合提问。" submitLabel="生成并保存题目">
+    <label>题库类型<select required name="jobId" value={target} onChange={event=>setTarget(event.target.value)}><option value="" disabled>请选择需要生成题目的题库</option><option value="__general__">通用面试 · 综合能力</option>{jobs.map(job=><option key={job.id} value={job.id}>{job.title} · {job.department}</option>)}</select></label>
     <label>生成数量<select name="count" defaultValue="5"><option value="3">3 道</option><option value="5">5 道</option><option value="7">7 道</option></select></label>
-    <div className="ai-generator-note"><span>✦</span><div><b>生成内容</b><p>岗位认知、专业能力、问题解决、数据意识和复盘成长等维度；正式面试仍按题目创建顺序提问。</p></div></div>
+    <div className="ai-generator-note"><span>✦</span><div><b>{general?'通用综合面试':'生成内容'}</b><p>{general?'包含自我介绍、代表经历、问题解决、协作沟通、执行、学习与复盘等综合维度；可与指定岗位题混合提问。':'包含岗位认知、专业能力、问题解决、数据意识和复盘成长等维度；会与已有通用综合题混合提问。'}</p></div></div>
   </FormModal>
 }
 function AiResultModal({people,close,submit,submitting}:{people:Candidate[];close:()=>void;submit:(data:FormData)=>void;submitting:boolean}){return <FormModal close={close} submit={submit} submitting={submitting} kicker="COMPLETED INTERVIEW" title="录入已完成面试" description="只填写实际完成的面试结果；系统不会自动生成未发生的答题证据。"><label>候选人<select required name="candidateId" defaultValue=""><option value="" disabled>请选择真实候选人</option>{people.map(person=><option key={person.id} value={person.id}>{person.name} · {person.role}</option>)}</select></label><div className="form-grid"><label>面试得分<input required name="score" type="number" min="0" max="100"/></label><label>实际用时（分钟）<input required name="durationMinutes" type="number" min="1" max="600"/></label></div><label>岗位名称<input name="jobTitle" placeholder="留空则使用应聘职位"/></label><label>面试总结<textarea required name="summary" placeholder="请输入真实面试结论、优势、风险和后续建议"/></label></FormModal>}

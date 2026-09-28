@@ -231,12 +231,15 @@ export async function POST(request: NextRequest) {
       db.prepare("UPDATE resume_applications SET status = '录用' WHERE candidate_id = ? AND owner_id = ?").bind(candidateId, account.id),
     ]);
   } else if (resource === 'generateAiQuestions') {
-    const jobId = text(payload.jobId, 80);
-    const job = jobId ? await db.prepare('SELECT id, title, department FROM jobs WHERE id = ? AND owner_id = ?').bind(jobId, account.id).first<{id:string;title:string;department:string}>() : null;
-    if (!job) return invalid('请选择需要生成面试题的岗位。');
+    const selectedJobId = text(payload.jobId, 80);
+    const isGeneral = selectedJobId === '__general__';
+    const job = !isGeneral && selectedJobId ? await db.prepare('SELECT id, title, department FROM jobs WHERE id = ? AND owner_id = ?').bind(selectedJobId, account.id).first<{id:string;title:string;department:string}>() : null;
+    if (!isGeneral && !job) return invalid('请选择需要生成面试题的岗位或通用面试。');
+    const libraryJobId = job?.id || null;
     const requestedCount = integer(payload.count, 3, 8, 5);
-    const generated = generateInterviewQuestions(job.title, job.department).slice(0, requestedCount);
-    const existing = await db.prepare('SELECT title, max_score FROM ai_questions WHERE owner_id = ? AND job_id = ?').bind(account.id, job.id).all<{title:string;max_score:number}>();
+    const generated = (isGeneral ? generateGeneralInterviewQuestions() : generateInterviewQuestions(job!.title, job!.department)).slice(0, requestedCount);
+    const existing = await db.prepare(`SELECT title, max_score FROM ai_questions WHERE owner_id = ?
+      AND COALESCE(job_id, '') = ?`).bind(account.id, libraryJobId || '').all<{title:string;max_score:number}>();
     const existingTitles = new Set(existing.results.map(item => item.title.trim().toLowerCase()));
     const questions = generated.filter(item => !existingTitles.has(item.title.trim().toLowerCase()));
     const allocated = existing.results.reduce((sum, item) => sum + Math.max(0, Number(item.max_score) || 0), 0);
@@ -248,10 +251,10 @@ export async function POST(request: NextRequest) {
         const createdAt = new Date(Date.parse(now) + index).toISOString();
         return db.prepare(`INSERT INTO ai_questions (id, owner_id, job_id, title, category, question_type, duration, competency, keywords, reference_answer, follow_up, max_score, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, '语音提问', 120, ?, ?, ?, 1, ?, ?, ?)`
-        ).bind(crypto.randomUUID(), account.id, job.id, question.title, question.category, question.competency, question.keywords, question.referenceAnswer, generatedMaxScores[index], createdAt, createdAt);
+        ).bind(crypto.randomUUID(), account.id, libraryJobId, question.title, question.category, question.competency, question.keywords, question.referenceAnswer, generatedMaxScores[index], createdAt, createdAt);
       }));
     }
-    return NextResponse.json({ ok:true, count:questions.length, jobTitle:job.title }, { status:201 });
+    return NextResponse.json({ ok:true, count:questions.length, jobTitle:job?.title || '通用面试' }, { status:201 });
   } else if (resource === 'aiQuestion') {
     const title = text(payload.title, 500);
     if (!title) return invalid('请输入面试问题。');
@@ -288,20 +291,24 @@ export async function POST(request: NextRequest) {
     const questionRows = await db.prepare(`SELECT * FROM ai_questions WHERE owner_id = ?
       AND (job_id = ? OR job_id IS NULL) ORDER BY created_at ASC`).bind(account.id, candidate.job_id || '').all<DataRow>();
     const specific = questionRows.results.filter(row => candidate.job_id && row.job_id === candidate.job_id);
-    const selectedQuestions = specific.length ? specific : questionRows.results.filter(row => !row.job_id);
-    if (!selectedQuestions.length) return invalid('该岗位尚未配置面试题，请先生成或新建面试题。');
-    const maxScoreTotal = selectedQuestions.reduce((sum, row) => sum + Math.max(0, Number(row.max_score) || 0), 0);
-    if (maxScoreTotal !== 100) return invalid(`当前面试题最高分合计为 ${maxScoreTotal} 分，请调整为 100 分后再发送邀请。`);
+    const general = questionRows.results.filter(row => !row.job_id);
+    const selectedQuestions = [...general, ...specific];
+    if (!selectedQuestions.length) return invalid('尚未配置通用面试题或该岗位面试题，请先生成或新建面试题。');
+    const generalScoreTotal = general.reduce((sum, row) => sum + Math.max(0, Number(row.max_score) || 0), 0);
+    const specificScoreTotal = specific.reduce((sum, row) => sum + Math.max(0, Number(row.max_score) || 0), 0);
+    if (general.length && generalScoreTotal !== 100) return invalid(`通用面试题最高分合计为 ${generalScoreTotal} 分，请调整为 100 分后再发送邀请。`);
+    if (specific.length && specificScoreTotal !== 100) return invalid(`岗位面试题最高分合计为 ${specificScoreTotal} 分，请调整为 100 分后再发送邀请。`);
+    const invitationScores = combinedQuestionScores(general, specific);
     const token = randomToken();
     const invitationId = crypto.randomUUID();
     const requestedHours = Number(payload.validityHours);
     const validityHours = [12, 24, 72].includes(requestedHours) ? requestedHours : 24;
     const expiresAt = new Date(Date.parse(now) + validityHours * 60 * 60 * 1000).toISOString();
-    const questions = selectedQuestions.map(row => ({
+    const questions = selectedQuestions.map((row, index) => ({
       id:String(row.id), title:String(row.title), duration:Number(row.duration) || 120,
       questionType:String(row.question_type || '语音提问'), competency:String(row.competency || ''),
       keywords:deriveInterviewKeywords(String(row.title||''),String(row.reference_answer||''),String(row.competency||''),String(row.keywords||'')), referenceAnswer:String(row.reference_answer || ''),
-      maxScore:Number(row.max_score) || 0,
+      maxScore:invitationScores[index] || 0,
     }));
     const requestUrl = new URL(request.url);
     const runtime = env as unknown as { INTERVIEW_PUBLIC_ORIGIN?:string; APP_ENV?:string };
@@ -749,6 +756,38 @@ function generateInterviewQuestions(jobTitle:string,department:string){
     {category:'协作能力',title:'面对需求频繁变化或多方审美分歧时，你如何推动设计决策？',competency:'设计协作',keywords:'目标，证据，沟通，取舍，推进',referenceAnswer:'建议回答包含：1. 重新对齐用户问题、业务目标和决策边界；2. 区分事实、偏好与约束，整理争议点；3. 使用用户研究、数据、设计原则和原型验证提供证据；4. 明确方案取舍、影响范围和优先级；5. 形成可追踪的决策记录、交付标准和后续验证计划。'},
   ] : [];
   return [...specialized,...common];
+}
+
+function generateGeneralInterviewQuestions(){
+  return [
+    {category:'自我认知',title:'请做一个简要的自我介绍，并重点说明与你应聘机会最相关的经历和优势。',competency:'自我认知',keywords:'经历概览，核心优势，岗位关联，表达重点',referenceAnswer:'建议回答包含：1. 用简洁结构概括教育与职业经历；2. 提炼两至三项与目标机会相关的核心能力；3. 用具体项目、职责或结果证明优势；4. 说明个人定位与下一阶段职业目标；5. 控制信息重点，避免简单复述简历。'},
+    {category:'经历核验',title:'请介绍一段最能代表你工作能力的经历，并说明你个人承担了什么。',competency:'经历真实性',keywords:'背景，个人职责，关键行动，量化结果，复盘',referenceAnswer:'建议使用 STAR 结构回答：说明背景和目标，明确个人职责与决策边界，描述关键行动、协作和难点处理，提供可核验的结果，最后总结经验与改进。'},
+    {category:'问题解决',title:'请介绍一次你遇到复杂问题或突发情况的经历，你是如何分析并解决的？',competency:'问题解决',keywords:'问题拆解，信息收集，判断依据，解决方案，结果',referenceAnswer:'建议回答包含：1. 描述问题现象、影响和约束；2. 说明信息收集与问题拆解方法；3. 展示关键判断依据和备选方案；4. 说明执行、风险控制与沟通过程；5. 提供结果及后续预防措施。'},
+    {category:'协作沟通',title:'当你与同事或跨部门伙伴意见不一致时，通常如何推动事情继续向前？',competency:'协作沟通',keywords:'共同目标，倾听，证据，方案取舍，达成共识',referenceAnswer:'建议回答包含：1. 先对齐共同目标和决策边界；2. 主动理解各方诉求与约束；3. 用事实、数据或验证结果讨论分歧；4. 给出可执行的折中或分阶段方案；5. 明确责任、时间和后续复盘。'},
+    {category:'执行能力',title:'面对多项并行任务和紧迫期限时，你如何安排优先级并保证交付？',competency:'计划执行',keywords:'目标，优先级，计划，风险，交付质量',referenceAnswer:'建议回答包含：1. 澄清目标、截止时间和质量标准；2. 按价值、紧急度、依赖关系和风险排序；3. 拆解里程碑并配置资源；4. 持续同步进度和风险；5. 通过检查、复盘和调整保证最终交付。'},
+    {category:'学习成长',title:'请介绍一次你快速学习新知识或新技能，并将其应用到工作中的经历。',competency:'学习能力',keywords:'学习目标，学习方法，实践应用，成果，沉淀',referenceAnswer:'建议回答包含：1. 说明学习背景和实际目标；2. 展示资料选择、练习和反馈方法；3. 说明如何在真实任务中验证与应用；4. 提供效率、质量或业务结果；5. 总结形成的方法、工具或知识沉淀。'},
+    {category:'复盘成长',title:'请介绍一次未达预期或犯错的经历，你如何处理并避免再次发生？',competency:'责任与复盘',keywords:'责任意识，原因分析，补救行动，机制改进，验证结果',referenceAnswer:'建议回答包含：1. 如实说明预期和偏差；2. 明确个人责任；3. 分析直接原因和系统性根因；4. 描述补救、沟通与风险控制；5. 给出流程、工具或习惯上的长期改进及验证结果。'},
+    {category:'职业动机',title:'你选择下一份工作的主要考虑是什么？你希望在新的环境中取得怎样的成长？',competency:'职业动机',keywords:'选择标准，职业目标，成长方向，现实预期，稳定性',referenceAnswer:'建议回答包含：1. 说明真实、清晰的职业选择标准；2. 将个人能力和发展方向与机会联系起来；3. 描述希望承担的责任和取得的成果；4. 体现对工作环境、协作方式和成长节奏的合理预期；5. 避免空泛表态。'},
+  ];
+}
+
+function combinedQuestionScores(general:DataRow[],specific:DataRow[]){
+  if (!general.length) return normalizeQuestionScores(specific, 100);
+  if (!specific.length) return normalizeQuestionScores(general, 100);
+  return [...normalizeQuestionScores(general, 50), ...normalizeQuestionScores(specific, 50)];
+}
+
+function normalizeQuestionScores(rows:DataRow[],target:number){
+  if (!rows.length) return [];
+  const weights = rows.map(row => Math.max(1, Number(row.max_score) || 1));
+  const total = weights.reduce((sum, value) => sum + value, 0);
+  const distributable = Math.max(0, target - rows.length);
+  const raw = weights.map(value => value / total * distributable);
+  const scores = raw.map(value => 1 + Math.floor(value));
+  let remainder = target - scores.reduce((sum, value) => sum + value, 0);
+  const order = raw.map((value, index) => ({index, fraction:value - Math.floor(value)})).sort((a,b) => b.fraction - a.fraction || a.index - b.index);
+  for (let index = 0; index < remainder; index += 1) scores[order[index % order.length].index] += 1;
+  return scores;
 }
 
 function text(value: unknown, maxLength: number) {
