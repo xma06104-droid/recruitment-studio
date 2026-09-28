@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
     db.prepare(`SELECT * FROM ai_interview_invitations WHERE owner_id = ? OR ${relatedCandidateSql} ORDER BY created_at DESC`).bind(account.id, account.id, account.id).all<DataRow>(),
     db.prepare(`SELECT * FROM manual_assessments WHERE owner_id = ? OR ${relatedCandidateSql} ORDER BY updated_at DESC`).bind(account.id, account.id, account.id).all<DataRow>(),
     account.role === 'super_admin'
-      ? db.prepare("SELECT id, contact, phone, email, role FROM accounts WHERE role = 'hr' ORDER BY contact ASC, created_at ASC").all<DataRow>()
+      ? db.prepare("SELECT id, contact, phone, email, role FROM accounts ORDER BY contact ASC, created_at ASC").all<DataRow>()
       : Promise.resolve({ results: [] as DataRow[] }),
   ]);
   const { unique: uniqueQuestions, duplicateIds } = deduplicateAiQuestions(aiQuestions.results);

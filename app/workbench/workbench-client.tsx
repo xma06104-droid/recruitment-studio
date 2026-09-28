@@ -27,7 +27,7 @@ type AiQuestion = { id:string; jobId:string|null; title:string; category:string;
 type AiInterview = { id:string; candidateId:string; jobTitle:string; status:string; score:number|null; durationSeconds:number|null; summary:string; completedAt:string|null; createdAt:string; updatedAt:string };
 type AiInvitation = { id:string; candidateId:string; recipientEmail:string; jobTitle:string; status:string; sentAt:string; openedAt:string|null; completedAt:string|null; expiresAt:string; interviewUrl:string; createdAt:string; updatedAt:string };
 type ManualAssessment = { candidateId:string; total:number; professional:number; communication:number; culture:number; comment:string; reviewer:string; updatedAt:string };
-type RecipientAccount = { id:string; contact:string; phone:string; email:string; role:'super_admin'|'hr' };
+type RecipientAccount = { id:string; contact:string; phone:string; email:string; role:string };
 type CandidateFactType = 'gender'|'age'|'work'|'education'|'phone'|'email';
 type AnswerScore = { score:number; keywords:string[]; matched:string[] };
 type SpeechAlternativeLike = { transcript:string;confidence?:number };
@@ -1009,7 +1009,7 @@ function CandidateAssignmentDialog({candidate,accounts,busy,close,submit}:{candi
     <button type="button" className="flow-overlay-close" disabled={busy} onClick={close}>×</button>
     <span className="eyebrow purple">HIRING DEPARTMENT REVIEW</span><h2 id="candidate-assignment-title">选择接收人</h2>
     <p>将 <b>{candidate.name}</b> 推送至指定账号。确认后进入“用人部门筛选”，接收人可在自己的系统中立即查看该简历。</p>
-    {accounts.length?<><label className="candidate-assignment-select">接收账号<select autoFocus value={selectedId} disabled={busy} onChange={event=>setSelectedId(event.target.value)}><option value="">请选择 HR 接收账号</option>{accounts.map(account=><option key={account.id} value={account.id}>{account.contact} · HR</option>)}</select></label>{selected&&<div className="candidate-assignment-recipient"><span>{selected.contact.slice(0,1)}</span><div><b>{selected.contact}</b><small>{selected.email||selected.phone||'未填写联系方式'}</small></div><em>HR</em></div>}</>:<div className="rs-assignment-empty"><b>暂无可选接收人</b><p>请先在“角色管理”中新增 HR 账号。</p></div>}
+    {accounts.length?<><label className="candidate-assignment-select">接收账号<select autoFocus value={selectedId} disabled={busy} onChange={event=>setSelectedId(event.target.value)}><option value="">请选择接收账号</option>{accounts.map(account=><option key={account.id} value={account.id}>{account.contact} · {accountRoleLabel(account.role)}</option>)}</select></label>{selected&&<div className="candidate-assignment-recipient"><span>{selected.contact.slice(0,1)}</span><div><b>{selected.contact}</b><small>{selected.email||selected.phone||'未填写联系方式'}</small></div><em>{accountRoleLabel(selected.role)}</em></div>}</>:<div className="rs-assignment-empty"><b>暂无可选接收人</b><p>请先在“角色管理”中新增账号。</p></div>}
     <button type="button" className="primary-button" disabled={busy||!selectedId} onClick={()=>submit(selectedId)}>{busy?'正在推送并同步…':'确认推送'} <span>→</span></button>
   </section></div>;
 }
@@ -1023,6 +1023,7 @@ function candidateName(id:string,people:Candidate[]){return people.find(item=>it
 function visibleCity(city:string){return city&&city!=='待设置'?city:''}
 function jobMeta(job:Job,withHeadcount=false){return [job.department,visibleCity(job.city),withHeadcount?`招聘 ${job.headcount} 人`:''].filter(Boolean).join(' · ')}
 function maskPhone(value:string){return /^\d{11}$/.test(value)?`${value.slice(0,3)} ***** ${value.slice(-3)}`:value||'未绑定'}
+function accountRoleLabel(role:string){return role==='super_admin'?'超级管理员':role==='hr'?'HR':role||'普通账号'}
 function stageIndex(stage:string){return candidateStageIndex(stage)}
 function sameDay(a:Date,b:Date){return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate()}
 function formatDate(value:string){const date=new Date(value);return Number.isNaN(date.getTime())?'未记录':new Intl.DateTimeFormat('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit'}).format(date)}
