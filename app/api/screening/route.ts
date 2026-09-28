@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { env } from 'cloudflare:workers';
 import { accountFromRequest, ensureSchema, getDb, getResumeBucket } from '@/app/server/db';
 import { repairResumeProfiles } from '@/app/server/resume-repair';
 import { getResumeJobs } from '@/app/server/resume-jobs';
@@ -96,7 +97,9 @@ export async function POST(request: NextRequest) {
     if (accountRows.results.length !== hrAccountIds.length) return invalid('部分所选人员不是有效账号。');
     const hrAccounts = hrAccountIds.map(id => accountRows.results.find(item => item.id === id)).filter(Boolean) as {id:string;contact:string;email:string;role:string}[];
     const placeholders = candidateIds.map(() => '?').join(',');
-    const owned = await db.prepare(`SELECT id, job_id, name, stage FROM candidates WHERE owner_id = ? AND id IN (${placeholders})`).bind(account.id, ...candidateIds).all<DataRow>();
+    const owned = await db.prepare(`SELECT c.id, c.job_id, c.name, c.role, c.stage, j.title AS job_title
+      FROM candidates c LEFT JOIN jobs j ON j.id = c.job_id
+      WHERE c.owner_id = ? AND c.id IN (${placeholders})`).bind(account.id, ...candidateIds).all<DataRow>();
     if (owned.results.length !== candidateIds.length) return invalid('部分候选人不存在或无权推荐。');
     if (owned.results.some(row => String(row.stage || '') !== '简历筛选')) return invalid('只有处于简历筛选阶段的候选人可以推送给用人部门。');
     const statements: D1PreparedStatement[] = [];
@@ -114,7 +117,17 @@ export async function POST(request: NextRequest) {
         VALUES (?, ?, ?, ?, ?, '用人部门推荐', ?, ?)`).bind(crypto.randomUUID(), account.id, row.id, row.job_id, account.contact, `已将${row.name}推送给${hrAccounts.map(item => item.contact).join('、')}`, now));
     }
     await executeBatches(db, statements);
-    return NextResponse.json({ ok: true, count: owned.results.length, recipientAccounts: hrAccounts });
+    const publicOrigin = assignmentPublicOrigin(request);
+    const deliveries = await Promise.all(hrAccounts.map(recipient => deliverAssignmentEmail({
+      to:recipient.email,
+      recipientName:recipient.contact,
+      senderName:account.contact,
+      candidates:owned.results.map(row => ({
+        id:String(row.id), name:String(row.name), role:String(row.job_title || row.role || '未关联职位'),
+      })),
+      publicOrigin,
+    })));
+    return NextResponse.json({ ok: true, count: owned.results.length, recipientAccounts: hrAccounts, emailSent:deliveries.filter(Boolean).length });
   }
 
   if (action === 'saveRule') {
@@ -522,6 +535,44 @@ async function ensureCandidateJob(ownerId: string, ownerName: string, row: DataR
 
 async function executeBatches(db: D1Database, statements: D1PreparedStatement[]) {
   for (let index = 0; index < statements.length; index += 80) await db.batch(statements.slice(index, index + 80));
+}
+
+function assignmentPublicOrigin(request:NextRequest) {
+  const requestUrl = new URL(request.url);
+  if (requestUrl.hostname.endsWith('.chatgpt.site')) return requestUrl.origin;
+  const configured = (env as unknown as { APP_PUBLIC_ORIGIN?:string; INTERVIEW_PUBLIC_ORIGIN?:string }).APP_PUBLIC_ORIGIN
+    || (env as unknown as { INTERVIEW_PUBLIC_ORIGIN?:string }).INTERVIEW_PUBLIC_ORIGIN;
+  try {
+    const url = new URL(String(configured || ''));
+    if (['http:', 'https:'].includes(url.protocol)) return url.origin;
+  } catch {}
+  return requestUrl.origin;
+}
+
+async function deliverAssignmentEmail({to,recipientName,senderName,candidates,publicOrigin}:{
+  to:string;recipientName:string;senderName:string;candidates:{id:string;name:string;role:string}[];publicOrigin:string;
+}) {
+  const bindings = env as unknown as { RESEND_API_KEY?:string; INTERVIEW_EMAIL_FROM?:string };
+  if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to) || !bindings.RESEND_API_KEY || !bindings.INTERVIEW_EMAIL_FROM) return false;
+  const rows = candidates.map(candidate => {
+    const url = `${publicOrigin}/interviewer-candidate?candidateId=${encodeURIComponent(candidate.id)}`;
+    return `<tr><td style="padding:12px;border-bottom:1px solid #e8edf3">${escapeHtml(candidate.role)}</td><td style="padding:12px;border-bottom:1px solid #e8edf3">${escapeHtml(candidate.name)}</td><td style="padding:12px;border-bottom:1px solid #e8edf3"><a href="${escapeHtml(url)}" style="color:#1687ff;font-weight:700">查看候选人</a></td></tr>`;
+  }).join('');
+  const html = `<div style="font-family:Arial,'Microsoft YaHei',sans-serif;color:#172033;line-height:1.65"><h2>${escapeHtml(recipientName)}，您好！</h2><p>${escapeHtml(senderName)} 给您推荐了候选人，请登录星鉴人才查看并提供反馈。</p><table style="width:100%;border-collapse:collapse"><thead><tr style="background:#f2f6fa"><th style="padding:12px;text-align:left">职位</th><th style="padding:12px;text-align:left">候选人</th><th style="padding:12px;text-align:left">操作</th></tr></thead><tbody>${rows}</tbody></table><p style="margin-top:22px;color:#667085">链接将打开正式候选人工作台，仅被指定的接收账号登录后可查看对应候选人。请勿转发邮件。</p></div>`;
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method:'POST',
+      headers:{ Authorization:`Bearer ${bindings.RESEND_API_KEY}`, 'Content-Type':'application/json' },
+      body:JSON.stringify({ from:bindings.INTERVIEW_EMAIL_FROM, to:[to], subject:`${senderName}给您推荐了${candidates.length}位候选人`, html }),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+function escapeHtml(value:string) {
+  return value.replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character] || character));
 }
 
 async function ownedJob(id: string, ownerId: string) {

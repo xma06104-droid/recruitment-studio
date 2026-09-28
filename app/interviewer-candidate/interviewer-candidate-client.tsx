@@ -66,6 +66,12 @@ export default function InterviewerCandidateClient() {
     if(cachedScreening){setProfiles(cachedScreening.profiles||[]);setReviews(cachedScreening.reviews||[])}
     void load().catch(()=>{if(!cached)setError('候选人数据加载失败，请稍后刷新。')});
   },[]);
+  useEffect(()=>{
+    if(!data)return;
+    const candidateId=new URLSearchParams(window.location.search).get('candidateId')||'';
+    const candidate=data.candidates.find(item=>item.id===candidateId);
+    if(candidate){setStatus(candidateReviewStatus(candidate.stage));setDetailId(candidate.id)}
+  },[data]);
   useWorkbenchSync(()=>load().catch(()=>undefined));
 
   const jobs=useMemo(()=>data?.jobs.filter(job=>!jobKeyword||`${job.title}${job.department}${job.city}`.toLowerCase().includes(jobKeyword.toLowerCase()))||[],[data,jobKeyword]);
