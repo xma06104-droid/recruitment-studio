@@ -9,6 +9,7 @@ import { deriveInterviewKeywords, isGenericInterviewKeywords } from '@/app/inter
 type DataRow = Record<string, string | number | null>;
 
 export async function GET(request: NextRequest) {
+  const departmentReviewScope = new URL(request.url).searchParams.get('scope') === 'department-review';
   const resetOnLoad=(env as unknown as {RESET_TEST_ACCOUNT_ON_NEXT_LOAD?:string}).RESET_TEST_ACCOUNT_ON_NEXT_LOAD||'';
   if(resetOnLoad.startsWith('test-account-')){
     await ensureSchema();
@@ -65,7 +66,7 @@ export async function GET(request: NextRequest) {
     db.prepare(`SELECT * FROM ai_interview_invitations WHERE owner_id = ? OR ${relatedCandidateSql} ORDER BY created_at DESC`).bind(account.id, account.id, account.id).all<DataRow>(),
     db.prepare(`SELECT * FROM manual_assessments WHERE owner_id = ? OR ${relatedCandidateSql} ORDER BY updated_at DESC`).bind(account.id, account.id, account.id).all<DataRow>(),
     account.role === 'super_admin'
-      ? db.prepare("SELECT id, contact, phone, email, role FROM accounts WHERE role IN ('super_admin', 'hr') ORDER BY contact ASC, created_at ASC").all<DataRow>()
+      ? db.prepare("SELECT id, contact, phone, email, role FROM accounts WHERE role = 'hr' ORDER BY contact ASC, created_at ASC").all<DataRow>()
       : Promise.resolve({ results: [] as DataRow[] }),
   ]);
   const { unique: uniqueQuestions, duplicateIds } = deduplicateAiQuestions(aiQuestions.results);
@@ -82,17 +83,25 @@ export async function GET(request: NextRequest) {
   const requestOrigin = validHttpOrigin(new URL(request.url).origin);
   const configuredOrigin = validHttpOrigin((env as unknown as { INTERVIEW_PUBLIC_ORIGIN?:string }).INTERVIEW_PUBLIC_ORIGIN);
   const mappedInvitations = await Promise.all(aiInvitations.results.map(row => mapAiInvitation(row, configuredOrigin || requestOrigin)));
+  const scopedCandidates = departmentReviewScope
+    ? candidates.results.filter(row => normalizeCandidateStage(String(row.stage || '')) === '用人部门筛选' && String(row.hr_account_id || '') === account.id)
+    : candidates.results;
+  const scopedCandidateIds = new Set(scopedCandidates.map(row => String(row.id)));
+  const scopedJobIds = new Set(scopedCandidates.map(row => String(row.job_id || '')).filter(Boolean));
+  const scopedRows = <T extends DataRow>(rows:T[], candidateField='candidate_id') => departmentReviewScope
+    ? rows.filter(row => scopedCandidateIds.has(String(row[candidateField] || '')))
+    : rows;
   return NextResponse.json({
     account,
-    jobs: jobs.results.map(mapJob),
-    candidates: candidates.results.map(mapCandidate),
-    interviews: interviews.results.map(mapInterview),
-    offers: offers.results.map(mapOffer),
-    aiQuestions: repairedQuestions.map(mapAiQuestion),
-    aiInterviews: aiInterviews.results.map(mapAiInterview),
-    aiInvitations: mappedInvitations,
-    manualAssessments: manualAssessments.results.map(mapManualAssessment),
-    recipientAccounts: recipientAccounts.results.map(row => ({ id: row.id, contact: row.contact, phone: row.phone, email: row.email, role: row.role })),
+    jobs: (departmentReviewScope ? jobs.results.filter(row => scopedJobIds.has(String(row.id))) : jobs.results).map(mapJob),
+    candidates: scopedCandidates.map(mapCandidate),
+    interviews: scopedRows(interviews.results).map(mapInterview),
+    offers: scopedRows(offers.results).map(mapOffer),
+    aiQuestions: (departmentReviewScope ? repairedQuestions.filter(row => !row.job_id || scopedJobIds.has(String(row.job_id))) : repairedQuestions).map(mapAiQuestion),
+    aiInterviews: scopedRows(aiInterviews.results).map(mapAiInterview),
+    aiInvitations: departmentReviewScope ? mappedInvitations.filter(row => scopedCandidateIds.has(row.candidateId)) : mappedInvitations,
+    manualAssessments: scopedRows(manualAssessments.results).map(mapManualAssessment),
+    recipientAccounts: departmentReviewScope ? [] : recipientAccounts.results.map(row => ({ id: row.id, contact: row.contact, phone: row.phone, email: row.email, role: row.role })),
   }, { headers: { 'Cache-Control': 'private, no-store' } });
 }
 

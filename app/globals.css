@@ -1824,6 +1824,8 @@ input[type="checkbox"],input[type="radio"]{accent-color:var(--control-accent-str
 .interviewer-filter-row select:last-child{margin-left:0!important}
 .interviewer-candidate-list{height:calc(100% - 234px)!important}
 .interviewer-candidate-row{grid-template-columns:20px minmax(250px,1.1fr) minmax(190px,.8fr) minmax(180px,.65fr) 92px!important;align-items:center!important}
+.interviewer-candidate-profile h3 .interviewer-match-score{width:auto;min-width:0;height:24px;padding:0 9px;border:1px solid rgba(69,211,229,.24);border-radius:8px;color:#78e2ee;background:rgba(25,123,153,.2);font-size:11px;white-space:nowrap}
+.interviewer-candidate-profile h3 .interviewer-match-score.unrated{border-color:rgba(162,181,211,.16);color:#8d9db1;background:rgba(108,125,151,.12)}
 .interviewer-view-detail{align-self:center;height:38px;padding:0 15px;border:1px solid rgba(69,211,229,.28);border-radius:10px;color:#6ae0eb;background:rgba(23,91,126,.25);font-weight:750;cursor:pointer}
 .interviewer-view-detail:hover{color:#fff;background:linear-gradient(110deg,#149cb7,#337fdc)}
 .hr-resume-name-line>em small{font-size:13px!important;font-weight:750;letter-spacing:.02em}

@@ -43,8 +43,8 @@ export default function InterviewerCandidateClient() {
 
   async function load(){
     const [workbenchResponse,screeningResponse]=await Promise.all([
-      fetch('/api/workbench',{cache:'no-store'}),
-      fetch('/api/screening',{cache:'no-store'}),
+      fetch('/api/workbench?scope=department-review',{cache:'no-store'}),
+      fetch('/api/screening?scope=department-review',{cache:'no-store'}),
     ]);
     if(workbenchResponse.status===401||screeningResponse.status===401){window.location.assign('/');return}
     if(!workbenchResponse.ok)throw new Error('load');
@@ -179,9 +179,9 @@ export default function InterviewerCandidateClient() {
           <div className="interviewer-filter-row"><select defaultValue=""><option value="">沟通状态</option><option>未沟通</option><option>已沟通</option></select><select defaultValue=""><option value="">推荐筛选状态</option><option>未推荐</option><option>已推荐</option></select><select defaultValue="time"><option value="time">状态变更时间　⇅</option></select></div>
           <div className="interviewer-batch-row"><label><input type="checkbox" checked={allSelected} onChange={toggleAll}/> 全选</label><button type="button" onClick={downloadBatchResumes}><span>下载简历</span></button></div>
           <div className="interviewer-candidate-list">
-            {candidates.length?candidates.map(candidate=>{const job=data.jobs.find(item=>item.id===candidate.jobId);return <article className="interviewer-candidate-row" key={candidate.id} role="button" tabIndex={0} onClick={()=>setDetailId(candidate.id)} onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();setDetailId(candidate.id)}}}>
+            {candidates.length?candidates.map(candidate=>{const job=data.jobs.find(item=>item.id===candidate.jobId);const profile=profiles.find(item=>item.candidateId===candidate.id);const matchScore=profile?.matchScore??candidate.score;return <article className="interviewer-candidate-row" key={candidate.id} role="button" tabIndex={0} onClick={()=>setDetailId(candidate.id)} onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();setDetailId(candidate.id)}}}>
               <label onClick={event=>event.stopPropagation()}><input type="checkbox" checked={selected.includes(candidate.id)} onChange={()=>setSelected(selected.includes(candidate.id)?selected.filter(id=>id!==candidate.id):[...selected,candidate.id])}/></label>
-              <div className="interviewer-candidate-profile"><p>{job?.title||candidate.role||'未关联职位'}　{formatDate(candidate.createdAt)}申请</p><h3>{candidate.name}<b>{candidate.score===null?'—':Math.max(1,Math.round(candidate.score/20))}</b><span>{candidate.city||'城市未填写'}</span>{candidate.years&&<span>{candidate.years}工作经验</span>}</h3><p>◼ {candidate.company||'最近公司未填写'}　{candidate.role||'职位未填写'}　{candidate.skills.slice(0,2).join('｜')||'暂无技能标签'}</p></div>
+              <div className="interviewer-candidate-profile"><p>{job?.title||candidate.role||'未关联职位'}　{formatDate(candidate.createdAt)}申请</p><h3>{candidate.name}<b className={`interviewer-match-score ${matchScore===null?'unrated':''}`} title="候选人与应聘岗位的简历匹配度">{matchScore===null?'匹配度未评估':`匹配度 ${matchScore}%`}</b><span>{candidate.city||'城市未填写'}</span>{candidate.years&&<span>{candidate.years}工作经验</span>}</h3><p>◼ {candidate.company||'最近公司未填写'}　{candidate.role||'职位未填写'}　{candidate.skills.slice(0,2).join('｜')||'暂无技能标签'}</p></div>
               <div className="interviewer-candidate-owner"><p>接收 HR： <b>{candidate.assignedHrName||data.account.contact}</b></p><p>当前状态： <span>◢ {candidateDisplayStatus(candidate.stage)}</span></p></div>
               <div className="interviewer-candidate-note"><p>推荐时间：{formatDate(candidate.assignedAt||candidate.updatedAt)}</p><p>最近备注： {reviews.find(review=>review.candidateId===candidate.id)?.comment||'-'}</p></div>
               <button type="button" className="interviewer-view-detail" onClick={event=>{event.stopPropagation();setDetailId(candidate.id)}}>查看详情</button>
@@ -269,15 +269,20 @@ function groupProjectHistory(items:string[]){
       const detail=item.detail.replace(/^[-—·•\s]+/,'').trim();
       if(!detail)continue;
       const explicit=explicitProjectTitle(detail);
-      const title=explicit||projectTitle(detail);
+      const split=splitProjectTitleAndDescription(explicit||detail);
+      if(explicit&&split.title){
+        groups.push({label:split.title,details:split.description?[split.description]:[]});
+        continue;
+      }
+      const title=split.title||projectTitle(detail);
       const titleOnly=Boolean(title&&title===detail.replace(/[：:]$/,''));
       const startsAfterResponsibilities=Boolean(title&&groups.length&&groups[groups.length-1].details.some(value=>/项目职责|工作职责|主要职责|负责/.test(value)));
       if(explicit||titleOnly||startsAfterResponsibilities){
-        groups.push({label:title||`项目 ${String(groups.length+1).padStart(2,'0')}`,details:titleOnly||explicit?[]:[detail]});
+        groups.push({label:title||`项目 ${String(groups.length+1).padStart(2,'0')}`,details:titleOnly?[]:[split.description||detail]});
       }else if(groups.length){
         groups[groups.length-1].details.push(detail);
       }else{
-        groups.push({label:title||'项目 01',details:[detail]});
+        groups.push({label:title||'项目 01',details:[split.description||detail]});
       }
     }
     return finishProjectGroups(groups);
@@ -301,6 +306,18 @@ function groupProjectHistory(items:string[]){
 
 function explicitProjectTitle(value:string){
   return value.match(/^(?:项目(?:名称|名)?|项目[一二三四五六七八九十\d]+)\s*[:：]\s*(.+)$/)?.[1]?.trim()||'';
+}
+
+function splitProjectTitleAndDescription(value:string){
+  const cleaned=value.trim();
+  const duplicate=cleaned.match(/^([\u4e00-\u9fa5A-Za-z0-9_-]{2,24})\1(?=是|为|用于|提供|负责|参与|实现)/);
+  if(duplicate){
+    const title=duplicate[1];
+    return {title,description:`${title}${cleaned.slice(duplicate[0].length)}`};
+  }
+  const sentence=cleaned.match(/^([\u4e00-\u9fa5A-Za-z0-9_-]{2,30}?)(?=是用于|用于|是一个|是一款|为一|主要用于|负责|提供)/);
+  if(sentence)return {title:sentence[1],description:cleaned};
+  return {title:'',description:cleaned};
 }
 
 function finishProjectGroups(groups:{label:string;details:string[]}[]){

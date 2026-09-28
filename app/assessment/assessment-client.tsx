@@ -33,7 +33,7 @@ export default function AssessmentClient() {
   const [saving,setSaving]=useState(false);
 
   async function load(){
-    await fetch('/api/workbench',{cache:'no-store'}).then(async response=>{
+    await fetch('/api/workbench?scope=department-review',{cache:'no-store'}).then(async response=>{
       if(response.status===401){window.location.assign('/');return}
       if(!response.ok)throw new Error('load');
       const result=await response.json() as Dataset;
@@ -118,11 +118,10 @@ export default function AssessmentClient() {
               const job=data.jobs.find(item=>item.id===candidate.jobId);
               const manual=assessments[candidate.id];
               const aiInterview=data.aiInterviews.find(item=>item.candidateId===candidate.id);
-              const score=displayScore(candidate,assessments);
               return <article key={candidate.id} className="assessment-row">
                 <div className="assessment-profile"><p>{job?.title||candidate.role||'未关联职位'} · {formatDate(candidate.createdAt)} 进入流程</p><h3>{candidate.name}<span>{candidate.city||'城市未填写'}</span><span>{candidate.years||'经验未填写'}</span></h3><small>{candidate.company||'最近公司未填写'} · {candidate.role||'职位未填写'} · {candidate.skills.slice(0,3).join(' / ')||'暂无技能标签'}</small></div>
                 <div className="assessment-metrics"><p>人工评估 <b className={manual?'done':''}>{manual?`${manual.total} 分`:'待评估'}</b></p><p>AI 面试评分 <b>{displayAiInterview(aiInterview,candidate.stage)}</b></p><p>流程阶段 <b>{candidate.stage}</b></p></div>
-                <div className="assessment-stars"><span>综合匹配度</span><b>{score?stars(score):'☆☆☆☆☆'}</b><small>{manual?.comment||'尚未填写人工评语'}</small></div>
+                <div className="assessment-stars"><span>综合匹配度</span><b>{manual?stars(manual.total):'☆☆☆☆☆'}</b><small>{manual?.comment||'尚未填写人工评语'}</small></div>
                 <button type="button" className="assessment-action" onClick={()=>setEditing(candidate)}>{manual?'查看 / 修改评估':'开始评估'}</button>
               </article>;
             }):<div className="interviewer-empty"><span>▤</span><b>暂无符合条件的候选人</b><p>调整左侧筛选条件后再试</p></div>}

@@ -33,6 +33,7 @@ const educationRanks: Record<string, number> = { '高中': 1, '中专': 1, '大�
 export async function GET(request: NextRequest) {
   const account = await accountFromRequest(request);
   if (!account) return unauthorized();
+  const departmentReviewScope = new URL(request.url).searchParams.get('scope') === 'department-review';
   await ensureSchema();
   await repairResumeProfiles(account.id);
   const db = getDb();
@@ -49,21 +50,30 @@ export async function GET(request: NextRequest) {
     db.prepare(`SELECT * FROM screening_reviews WHERE owner_id = ? OR candidate_id IN (${assignedCandidateSql}) ORDER BY updated_at DESC`).bind(account.id, account.id).all<DataRow>(),
     db.prepare(`SELECT * FROM screening_logs WHERE owner_id = ? OR candidate_id IN (${assignedCandidateSql}) ORDER BY created_at DESC LIMIT 300`).bind(account.id, account.id).all<DataRow>(),
     account.role === 'super_admin'
-      ? db.prepare("SELECT id, contact, phone, email, role FROM accounts WHERE role IN ('super_admin', 'hr') ORDER BY contact ASC, created_at ASC").all<DataRow>()
+      ? db.prepare("SELECT id, contact, phone, email, role FROM accounts WHERE role = 'hr' ORDER BY contact ASC, created_at ASC").all<DataRow>()
       : Promise.resolve({ results: [] as DataRow[] }),
     db.prepare(`SELECT ca.*, a.contact AS hr_name, a.email AS hr_email FROM candidate_assignments ca JOIN accounts a ON a.id = ca.hr_account_id
       WHERE ca.owner_id = ? OR ca.hr_account_id = ? ORDER BY ca.assigned_at DESC`).bind(account.id, account.id).all<DataRow>(),
   ]);
 
+  const departmentCandidates = departmentReviewScope
+    ? await db.prepare(`SELECT c.id FROM candidates c JOIN candidate_assignments ca ON ca.candidate_id = c.id
+        WHERE ca.hr_account_id = ? AND c.stage = '用人部门筛选'`).bind(account.id).all<{id:string}>()
+    : { results: [] as {id:string}[] };
+  const scopedCandidateIds = new Set(departmentCandidates.results.map(row => row.id));
+  const scoped = <T extends DataRow>(rows:T[], field='candidate_id') => departmentReviewScope
+    ? rows.filter(row => scopedCandidateIds.has(String(row[field] || '')))
+    : rows;
+
   return NextResponse.json({
-    profiles: profiles.results.map(mapProfile),
-    applications: applications.results.map(mapApplication),
-    rules: rules.results.map(mapRule),
-    templates: templates.results.map(mapTemplate),
-    reviews: reviews.results.map(mapReview),
-    logs: logs.results.map(mapLog),
-    hrAccounts: hrAccounts.results.map(row => ({ id: row.id, contact: row.contact, phone: row.phone, email: row.email, role: row.role })),
-    assignments: assignments.results.map(row => ({ candidateId: row.candidate_id, hrAccountId: row.hr_account_id, hrName: row.hr_name, hrEmail: row.hr_email, assignedBy: row.assigned_by, assignedAt: row.assigned_at })),
+    profiles: scoped(profiles.results).map(mapProfile),
+    applications: scoped(applications.results).map(mapApplication),
+    rules: departmentReviewScope ? [] : rules.results.map(mapRule),
+    templates: departmentReviewScope ? [] : templates.results.map(mapTemplate),
+    reviews: scoped(reviews.results).map(mapReview),
+    logs: scoped(logs.results).map(mapLog),
+    hrAccounts: departmentReviewScope ? [] : hrAccounts.results.map(row => ({ id: row.id, contact: row.contact, phone: row.phone, email: row.email, role: row.role })),
+    assignments: scoped(assignments.results).filter(row => String(row.hr_account_id) === account.id).map(row => ({ candidateId: row.candidate_id, hrAccountId: row.hr_account_id, hrName: row.hr_name, hrEmail: row.hr_email, assignedBy: row.assigned_by, assignedAt: row.assigned_at })),
   }, { headers: { 'Cache-Control': 'private, no-store' } });
 }
 
@@ -82,8 +92,8 @@ export async function POST(request: NextRequest) {
     if (!candidateIds.length || !hrAccountIds.length) return invalid('请选择候选人和接收账号。');
     const hrPlaceholders = hrAccountIds.map(() => '?').join(',');
     const accountRows = await db.prepare(`SELECT id, contact, email, role FROM accounts
-      WHERE id IN (${hrPlaceholders}) AND role IN ('super_admin', 'hr')`).bind(...hrAccountIds).all<{id:string;contact:string;email:string;role:string}>();
-    if (accountRows.results.length !== hrAccountIds.length) return invalid('部分所选人员不是有效的超级管理员或 HR 用户。');
+      WHERE id IN (${hrPlaceholders}) AND role = 'hr'`).bind(...hrAccountIds).all<{id:string;contact:string;email:string;role:string}>();
+    if (accountRows.results.length !== hrAccountIds.length) return invalid('部分所选人员不是有效的 HR 用户。');
     const hrAccounts = hrAccountIds.map(id => accountRows.results.find(item => item.id === id)).filter(Boolean) as {id:string;contact:string;email:string;role:string}[];
     const placeholders = candidateIds.map(() => '?').join(',');
     const owned = await db.prepare(`SELECT id, job_id, name, stage FROM candidates WHERE owner_id = ? AND id IN (${placeholders})`).bind(account.id, ...candidateIds).all<DataRow>();

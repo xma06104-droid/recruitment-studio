@@ -415,9 +415,33 @@ function inferMajor(lines: string[], text: string) {
 
 function inferRecentCompany(lines: string[]) {
   const workStart = lines.findIndex(line => /^(?:工作经历|工作经验|职业经历)/.test(line));
-  if (workStart < 0) return '';
-  const candidate = lines.slice(workStart + 1, workStart + 7).find(line => /(?:公司|集团|科技|网络|信息|智能|实业|银行|事务所)/.test(line) && line.length <= 80);
-  return candidate?.split(/[|｜/]/)[0].trim() || '';
+  const nextSection = workStart < 0 ? -1 : lines.findIndex((line, index) => index > workStart && /^(?:项目经验|项目经历|教育经历|教育背景|专业技能|技能清单|自我评价)/.test(line));
+  const workLines = workStart < 0 ? [] : lines.slice(workStart + 1, nextSection > workStart ? nextSection : workStart + 36);
+  const scopes = workLines.length ? [workLines, lines] : [lines];
+  const legalSuffix = /(?:有限责任公司|股份有限公司|有限公司|公司|集团|科技|网络|信息技术|智能|实业|银行|事务所)/;
+  const candidates: { value: string; score: number; index: number }[] = [];
+
+  for (const scope of scopes) {
+    scope.forEach((line, index) => {
+      if (line.length > 140 || /^(?:工作内容|工作职责|职责描述|项目描述|项目职责|主要业绩|离职原因|证明人)/.test(line)) return;
+      const normalized = line
+        .replace(/^(?:(?:19|20)\d{2}[年./-]\d{1,2}(?:月)?\s*(?:[-—–~至到]+\s*(?:(?:19|20)\d{2}[年./-]\d{1,2}(?:月)?|至今|现在))?\s*)+/, '')
+        .replace(/^(?:最近公司|当前公司|现公司|公司名称|任职公司)\s*[：:|｜-]?\s*/, '')
+        .trim();
+      const match = normalized.match(new RegExp(`([\\u4e00-\\u9fa5A-Za-z0-9（）()·&]{2,60}${legalSuffix.source})`));
+      const value = match?.[1]?.replace(/^(?:就职于|任职于|公司为|所在单位)\s*/, '').trim() || '';
+      if (!value || /^(?:负责|参与|协助|完成|推动|支持|公司业务|公司产品)/.test(value)) return;
+      const score = (scope === workLines ? 20 : 0)
+        + (index < 8 ? 8 : 0)
+        + (/^(?:(?:19|20)\d{2})/.test(line) ? 6 : 0)
+        + (/(?:工程师|经理|主管|总监|专员|设计师|分析师|会计|测试|开发)/.test(line) ? 4 : 0)
+        + (/(?:有限责任公司|股份有限公司|有限公司|公司|集团)/.test(value) ? 4 : 0);
+      candidates.push({ value, score, index });
+    });
+    if (candidates.length) break;
+  }
+  candidates.sort((first, second) => second.score - first.score || first.index - second.index);
+  return candidates[0]?.value || '';
 }
 
 function inferCity(lines: string[]) {
