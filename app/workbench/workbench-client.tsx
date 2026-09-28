@@ -3,7 +3,7 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import ScreeningWorkspace, { preloadScreeningData } from './screening-workspace';
 import { buildSpeechHints, contextualizeSpeechTranscript, selectContextualSpeechTranscript } from '@/app/speech-context';
-import { createInterviewUtterance } from '@/app/interview-voice';
+import { cancelInterviewSpeech, speakInterviewText } from '@/app/interview-voice';
 import { announceWorkbenchChange, useWorkbenchSync } from '@/app/workbench-sync';
 import { AiInterviewResultPanel, aiInterviewQuestionTotal } from '@/app/components/ai-interview-result';
 import AiInterviewRecordings from '@/app/components/ai-interview-recordings';
@@ -501,7 +501,7 @@ function AiInterviewSession({candidate,questions,flash,close,complete}:{candidat
       if(speechWatchdogTimerRef.current!==null)window.clearTimeout(speechWatchdogTimerRef.current);
       streamRef.current?.getTracks().forEach(track=>track.stop());
       recognitionRef.current?.abort();
-      if('speechSynthesis'in window)window.speechSynthesis.cancel();
+      cancelInterviewSpeech();
     };
   },[]);
 
@@ -526,11 +526,7 @@ function AiInterviewSession({candidate,questions,flash,close,complete}:{candidat
   },[secondsLeft,question.id,saving]);
 
   function speakQuestion(text:string,after?:()=>void){
-    if(!('speechSynthesis'in window)){after?.();return}
-    window.speechSynthesis.cancel();
-    const utterance=createInterviewUtterance(text);
-    if(after)utterance.onend=after;
-    window.speechSynthesis.speak(utterance);
+    void speakInterviewText(text,after);
   }
 
   function startListening(){beginListening(false)}
@@ -1095,4 +1091,4 @@ function scoreInterviewAnswer(answer:string,question:AiQuestion,candidate:Candid
   return{score:Math.min(100,Math.round(coverage*85+detail)),keywords,matched};
 }
 function formatCountdown(seconds:number){const minutes=Math.floor(seconds/60);return `${String(minutes).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`}
-function speak(text:string,flash:(text:string)=>void){if(!('speechSynthesis'in window)){flash('当前浏览器不支持语音播放');return}window.speechSynthesis.cancel();window.speechSynthesis.speak(createInterviewUtterance(text));flash('正在播放真实题目')}
+function speak(text:string,flash:(text:string)=>void){if(!('speechSynthesis'in window)){flash('当前浏览器不支持语音播放');return}void speakInterviewText(text);flash('正在使用统一女声播放真实题目')}

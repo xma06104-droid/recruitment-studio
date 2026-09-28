@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { buildSpeechHints, contextualizeSpeechTranscript, selectContextualSpeechTranscript } from '@/app/speech-context';
-import { createInterviewUtterance } from '@/app/interview-voice';
+import { cancelInterviewSpeech, speakInterviewText } from '@/app/interview-voice';
 
 type Question = { id:string; title:string; duration:number; questionType:string; competency?:string };
 type Invitation = { id:string; candidateName:string; jobTitle:string; status:string; expiresAt:string };
@@ -115,7 +115,7 @@ export default function CandidateInterview({ token }:{ token:string }) {
   }
 
   function speakAndListen(text:string){
-    if('speechSynthesis'in window){window.speechSynthesis.cancel();const speech=createInterviewUtterance(text);speech.onend=startListening;window.speechSynthesis.speak(speech)}else startListening();
+    if('speechSynthesis'in window)void speakInterviewText(text,startListening);else startListening();
   }
 
   function startListening(){startQuestionRecording();beginListening(false)}
@@ -340,7 +340,7 @@ export default function CandidateInterview({ token }:{ token:string }) {
     }catch{setError('录音上传失败，请检查网络后重试。');return false}
   }
 
-  function stopDevices(){listenWantedRef.current=false;recognitionGenerationRef.current+=1;void stopCloudListening(false);if(speechRestartTimerRef.current!==null)window.clearTimeout(speechRestartTimerRef.current);if(speechWatchdogTimerRef.current!==null)window.clearTimeout(speechWatchdogTimerRef.current);if(speechPendingTimerRef.current!==null)window.clearTimeout(speechPendingTimerRef.current);setSpeechPending(false);if(recorderRef.current?.state==='recording')recorderRef.current.stop();setRecording(false);streamRef.current?.getTracks().forEach(track=>track.stop());recognitionRef.current?.abort();if(typeof window!=='undefined'&&'speechSynthesis'in window)window.speechSynthesis.cancel()}
+  function stopDevices(){listenWantedRef.current=false;recognitionGenerationRef.current+=1;void stopCloudListening(false);if(speechRestartTimerRef.current!==null)window.clearTimeout(speechRestartTimerRef.current);if(speechWatchdogTimerRef.current!==null)window.clearTimeout(speechWatchdogTimerRef.current);if(speechPendingTimerRef.current!==null)window.clearTimeout(speechPendingTimerRef.current);setSpeechPending(false);if(recorderRef.current?.state==='recording')recorderRef.current.stop();setRecording(false);streamRef.current?.getTracks().forEach(track=>track.stop());recognitionRef.current?.abort();cancelInterviewSpeech()}
 
   if(phase==='loading')return <main className="candidate-interview-shell"><div className="candidate-interview-state"><i>✦</i><h1>正在验证面试邀请</h1><p>请稍候，系统正在读取您的专属面试题。</p></div></main>;
   if(phase==='error')return <main className="candidate-interview-shell"><div className="candidate-interview-state error"><i>!</i><h1>无法进入面试</h1><p>{error}</p></div></main>;
