@@ -648,6 +648,7 @@ function AiSummary({report,person}:{report:AiInterview;person?:Candidate}){
   return <article className="ai-summary-report">
     <header><div><span>{person?.name.slice(0,1)||'候'}</span><div><h2>{person?.name||'候选人'} · AI 面试总结</h2><p>{report.jobTitle} · 用时 {durationText(report.durationSeconds)} · {report.completedAt?formatDate(report.completedAt):'时间未记录'}</p></div></div></header>
     <AiInterviewResultPanel summary={report.summary} fallbackScore={report.score} durationSeconds={report.durationSeconds} completedAt={report.completedAt}/>
+    {person&&<AiInterviewRecordings candidateId={person.id}/>}
   </article>
 }
 
