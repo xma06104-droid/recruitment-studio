@@ -565,7 +565,7 @@ export async function PATCH(request: NextRequest) {
       if (!acceptedOffer) return invalid('候选人接受 Offer 后，才能进入待入职阶段。');
     }
     if (value === '已入职' && currentStage !== '待入职') return invalid('请先进入待入职阶段。');
-    if (value === '待定' || value === '已淘汰') {
+    if (value === '待定' || (value === '已淘汰' && currentStage !== '待入职')) {
       const assignedRecipient = await db.prepare('SELECT candidate_id FROM candidate_assignments WHERE candidate_id = ? AND hr_account_id = ? LIMIT 1').bind(id, account.id).first<{candidate_id:string}>();
       if (account.role === 'hr' && (!['用人部门筛选', '待定'].includes(currentStage) || !assignedRecipient)) return invalid('仅接收该简历的 HR 可以提交筛选结果。');
     }
