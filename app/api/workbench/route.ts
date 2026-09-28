@@ -181,7 +181,7 @@ export async function POST(request: NextRequest) {
     const interviewer = text(payload.interviewer, 80) || account.contact;
     const location = text(payload.location, 300);
     if (!interviewer || !location) return invalid('请选择面试人员并填写面试场地或会议地址。');
-    const assistant = text(payload.assistant, 80);
+    const assistant = text(payload.assistant, 500);
     const contactName = text(payload.contactName, 80) || account.contact;
     const contactMethod = text(payload.contactMethod, 120) || account.phone || account.email;
     const feedbackEmail = text(payload.feedbackEmail, 120) || account.email;
@@ -289,7 +289,8 @@ export async function POST(request: NextRequest) {
     if (normalizeCandidateStage(String(candidate.stage)) !== 'AI面试') return invalid('用人部门筛选通过后，才能发送 AI 面试邀请。');
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate.email)) return invalid('该候选人尚未填写有效邮箱，请先补充邮箱。');
     const questionRows = await db.prepare(`SELECT * FROM ai_questions WHERE owner_id = ?
-      AND (job_id = ? OR job_id IS NULL) ORDER BY created_at ASC`).bind(account.id, candidate.job_id || '').all<DataRow>();
+      AND (job_id = ? OR job_id IS NULL)
+      ORDER BY CASE WHEN job_id IS NULL THEN 0 ELSE 1 END, created_at ASC`).bind(account.id, candidate.job_id || '').all<DataRow>();
     const specific = questionRows.results.filter(row => candidate.job_id && row.job_id === candidate.job_id);
     const general = questionRows.results.filter(row => !row.job_id);
     const selectedQuestions = [...general, ...specific];
@@ -477,7 +478,7 @@ export async function PATCH(request: NextRequest) {
     const interviewer = text(payload.interviewer, 80) || account.contact;
     const location = text(payload.location, 300);
     if (!interviewer || !location) return invalid('请选择面试人员并填写面试场地或会议地址。');
-    const assistant = text(payload.assistant, 80);
+    const assistant = text(payload.assistant, 500);
     const contactName = text(payload.contactName, 80) || account.contact;
     const contactMethod = text(payload.contactMethod, 120) || account.phone || account.email;
     const feedbackEmail = text(payload.feedbackEmail, 120) || account.email;
