@@ -150,8 +150,8 @@ export function parseResumeText(value: string): ParsedResume {
   const durations = employmentDurations(text);
   const detectedWorkHistory = datedHistoryEntries(text, 'work');
   const detectedProjectHistory = datedHistoryEntries(text, 'project');
-  const sectionWorkHistory = sectionLines(text, ['工作经历', '工作经验', '职业经历'], ['项目经验', '项目经历', '教育经历', '教育背景', '专业技能', '技能', '证书']);
-  const sectionProjectHistory = mergeWrappedProjectLines(sectionLines(text, ['项目经验', '项目经历'], ['教育经历', '教育背景', '专业技能', '技能', '证书', '自我评价']));
+  const sectionWorkHistory = sectionLines(text, ['工作经历', '工作经验', '职业经历'], ['项目经验', '项目经历', '教育经历', '教育背景', '专业技能', '技能', '证书'], 8_000, 100);
+  const sectionProjectHistory = mergeWrappedProjectLines(sectionLines(text, ['项目经验', '项目经历'], ['教育经历', '教育背景', '专业技能', '技能', '证书', '自我评价'], 16_000, 160));
 
   return {
     phone,
@@ -513,8 +513,8 @@ function sectionText(text: string, starts: string[], ends: string[], maxLength: 
   return text.match(new RegExp(`(?:^|\\n)\\s*(?:${startPattern})\\s*[：:]?\\s*\\n?([\\s\\S]{0,${maxLength}}?)(?=\\n\\s*(?:${endPattern})\\s*[：:]?|$)`, 'i'))?.[1]?.trim() || '';
 }
 
-function sectionLines(text: string, starts: string[], ends: string[]) {
-  return sectionText(text, starts, ends, 2400).split(/\n+/).map(item => cleanField(item)).filter(isReadableHistoryLine).slice(0, 20);
+function sectionLines(text: string, starts: string[], ends: string[], maxLength = 6_000, maxItems = 80) {
+  return sectionText(text, starts, ends, maxLength).split(/\n+/).map(item => cleanField(item)).filter(isReadableHistoryLine).slice(0, maxItems);
 }
 
 export function mergeWrappedProjectLines(items: string[]) {
@@ -601,7 +601,7 @@ function collapseExactDuplicate(value: string) {
 }
 
 function uniqueHistory(items: string[]) {
-  return [...new Set(items.map(cleanField).filter(isReadableHistoryLine))].slice(0, 20);
+  return [...new Set(items.map(cleanField).filter(isReadableHistoryLine))].slice(0, 160);
 }
 
 function isReadableHistoryLine(item: string) {
