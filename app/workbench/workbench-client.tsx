@@ -363,6 +363,7 @@ export default function WorkbenchClient() {
       offerAccepted={data.offers.some(item=>item.candidateId===selectedCandidate.id&&item.status==='已接受')}
       canApproveDepartment={selectedCandidate.assignedHrId===data.account.id}
       close={()=>setDrawer(null)}
+      openInterviews={()=>{setDrawer(null);setActive('面试管理')}}
       saveFact={(field,value)=>updateCandidateFact(selectedCandidate.id,field,value)}
       advance={value=>update('candidateStage',selectedCandidate.id,value,'候选人阶段已更新')}
       requestAssignment={()=>setAssignmentTarget(selectedCandidate)}
@@ -913,7 +914,7 @@ function CandidateInterviewAssessment({report}:{report?:AiInterview}){
   return <AiInterviewResultPanel summary={report.summary} fallbackScore={report.score} durationSeconds={report.durationSeconds} completedAt={report.completedAt} compact/>;
 }
 
-function CandidateStageStepper({stage,assignedName,aiCompleted,interviewCompleted,offerAccepted,canApproveDepartment,advance,requestAssignment}:{stage:string;assignedName?:string;aiCompleted:boolean;interviewCompleted:boolean;offerAccepted:boolean;canApproveDepartment:boolean;advance:(value:string)=>Promise<boolean>;requestAssignment:()=>void}){
+function CandidateStageStepper({stage,assignedName,aiCompleted,interviewCompleted,offerAccepted,canApproveDepartment,advance,requestAssignment,openInterviews}:{stage:string;assignedName?:string;aiCompleted:boolean;interviewCompleted:boolean;offerAccepted:boolean;canApproveDepartment:boolean;advance:(value:string)=>Promise<boolean>;requestAssignment:()=>void;openInterviews:()=>void}){
   const [saving,setSaving]=useState('');
   const flowStage=stage==='待定'?'用人部门筛选':stage;
   const currentIndex=stages.indexOf(flowStage);
@@ -925,11 +926,12 @@ function CandidateStageStepper({stage,assignedName,aiCompleted,interviewComplete
     if(saving||terminal||index!==currentIndex+1)return;
     if(nextStage==='用人部门筛选'){requestAssignment();return}
     setSaving(nextStage);
-    try{await advance(nextStage)}finally{setSaving('')}
+    try{const moved=await advance(nextStage);if(moved&&nextStage==='安排面试')openInterviews()}finally{setSaving('')}
   }
   return <section className={`candidate-stage-stepper ${terminal?'terminal-only':''}`} aria-label="候选人招聘阶段">
     <header><div><span>候选人流程</span><small>仅显示当前所处阶段</small></div><b className={terminal?'terminal':''}>当前：{displayCandidateStage(stage)}</b></header>
     {canAdvance&&nextStage&&<button type="button" className="candidate-next-stage-button" disabled={Boolean(saving)} onClick={()=>void moveNext(nextStage,currentIndex+1)}><span>下一阶段</span><b>{nextStage}</b><em>{saving?`正在进入${nextStage}…`:'点击进入'}</em></button>}
+    {!terminal&&flowStage==='安排面试'&&!interviewCompleted&&<button type="button" className="candidate-next-stage-button" onClick={openInterviews}><span>当前流程</span><b>安排面试</b><em>进入面试管理 →</em></button>}
     {!terminal&&flowStage==='AI面试'&&!aiCompleted&&<p className="candidate-stage-waiting" role="status">候选人未答题</p>}
     {!terminal&&flowStage==='用人部门筛选'&&assignedName&&<small className="candidate-current-assignee">已推送：{assignedName}</small>}
   </section>;
@@ -952,7 +954,7 @@ function AssessmentComment({text}:{text:string}){
   return <div className="candidate-assessment-comment"><span>评估意见</span>{items.length?<div>{items.map(item=><article key={item.label}><small>{item.label}</small><b>{item.result}</b><em>{item.rating}</em></article>)}</div>:<p>{text||'未填写'}</p>}</div>;
 }
 
-function CandidateDrawer({person,aiInterview,assessment,aiCompleted,interviewCompleted,offerAccepted,canApproveDepartment,close,saveFact,advance,requestAssignment}:{person:Candidate;aiInterview?:AiInterview;assessment?:ManualAssessment;aiCompleted:boolean;interviewCompleted:boolean;offerAccepted:boolean;canApproveDepartment:boolean;close:()=>void;saveFact:(field:CandidateFactType,value:string)=>Promise<boolean>;advance:(value:string)=>Promise<boolean>;requestAssignment:()=>void}){
+function CandidateDrawer({person,aiInterview,assessment,aiCompleted,interviewCompleted,offerAccepted,canApproveDepartment,close,openInterviews,saveFact,advance,requestAssignment}:{person:Candidate;aiInterview?:AiInterview;assessment?:ManualAssessment;aiCompleted:boolean;interviewCompleted:boolean;offerAccepted:boolean;canApproveDepartment:boolean;close:()=>void;openInterviews:()=>void;saveFact:(field:CandidateFactType,value:string)=>Promise<boolean>;advance:(value:string)=>Promise<boolean>;requestAssignment:()=>void}){
   const [editingFact,setEditingFact]=useState<CandidateFactType|null>(null);
   const [factValue,setFactValue]=useState('');
   const [factError,setFactError]=useState('');
@@ -995,7 +997,7 @@ function CandidateDrawer({person,aiInterview,assessment,aiCompleted,interviewCom
   return <div className="drawer-backdrop candidate-drawer-backdrop" onMouseDown={close}><aside className="detail-drawer candidate-drawer" role="dialog" aria-modal="true" aria-label={`${person.name}候选人详情`} onMouseDown={event=>event.stopPropagation()}>
     <button className="drawer-close" onClick={close}>×</button>
     <div className="candidate-profile"><span>{person.name.slice(0,1)}</span><div><div className="candidate-title-row"><h2>{person.name}</h2><span>{person.role||'应聘职位未填写'}</span></div><div className="candidate-profile-summary">{facts.map(fact=>editingFact===fact.type?<form key={fact.type} className="candidate-fact-editor" onSubmit={event=>void submitFact(event)}><CandidateFactIcon type={fact.type}/>{factInput(fact.type)}<button disabled={factSaving}>{factSaving?'保存中':'保存'}</button><button type="button" onClick={cancelFactEdit}>取消</button>{factError&&<small>{factError}</small>}</form>:<button key={fact.type} type="button" className="candidate-fact-edit" title={`点击修改${fact.label}`} aria-label={`${fact.label} ${fact.value}，点击修改`} onClick={()=>beginFactEdit(fact)}><CandidateFactIcon type={fact.type}/><b>{fact.value}</b><small>修改</small></button>)}</div></div><em><b>{displayedScore??'—'}</b><small>{displayedLabel}</small></em></div>
-    <CandidateStageStepper stage={person.stage} assignedName={person.assignedHrName} aiCompleted={aiCompleted} interviewCompleted={interviewCompleted} offerAccepted={offerAccepted} canApproveDepartment={canApproveDepartment} advance={advance} requestAssignment={requestAssignment}/>
+    <CandidateStageStepper stage={person.stage} assignedName={person.assignedHrName} aiCompleted={aiCompleted} interviewCompleted={interviewCompleted} offerAccepted={offerAccepted} canApproveDepartment={canApproveDepartment} advance={advance} requestAssignment={requestAssignment} openInterviews={openInterviews}/>
     {assessment&&<section><h3>HR 人工评估</h3><div className="profile-info"><p><span>综合得分</span>{assessment.total} 分</p><p><span>专业能力</span>{assessment.professional} 分</p><p><span>沟通表达</span>{assessment.communication} 分</p><p><span>文化匹配</span>{assessment.culture} 分</p><p><span>评估人</span>{assessment.reviewer}</p></div><AssessmentComment text={assessment.comment}/></section>}
     <section><div className="candidate-section-title"><h3>AI 面试记录</h3>{person.resumeFileName&&<button type="button" title={person.resumeFileName} onClick={()=>setResumeOpen(true)}>查看简历 ↗</button>}</div><CandidateInterviewAssessment report={aiInterview}/><AiInterviewRecordings candidateId={person.id}/></section>
     <section><h3>核心技能</h3><div className="channel-tags">{person.skills.length?person.skills.map(skill=><span key={skill}>{skill}</span>):<span>未填写</span>}</div></section>
