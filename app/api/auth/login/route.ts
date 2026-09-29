@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { env } from 'cloudflare:workers';
 import { isValidIdentifier, normalizeIdentifier } from '@/app/auth-rules';
 import {
   createSessionToken,
@@ -20,15 +19,12 @@ export async function POST(request: NextRequest) {
   const password = String(body?.password ?? '');
   const remember = body?.remember === true;
   const requestedRole = body?.loginRole === 'hr' ? 'hr' : 'super_admin';
-  const requestUrl = new URL(request.url);
-  const runtime = env as unknown as { APP_ENV?: string };
-  const testEnvironment = ['localhost', '127.0.0.1', '::1'].includes(requestUrl.hostname) || ['test', 'development'].includes(runtime.APP_ENV || '');
-  const validIdentifier = testEnvironment ? /^\d{11}$/.test(identifier) : isValidIdentifier(identifier);
-  if (!validIdentifier || (!testEnvironment && !password)) return failure();
+  if (!isValidIdentifier(identifier) || !password) return failure();
 
   await ensureSchema();
   const account = await getDb().prepare('SELECT id, password_hash, role FROM accounts WHERE phone = ? OR email = ? LIMIT 1').bind(identifier, identifier).first<LoginRow>();
-  if (!account || !(await verifyPassword(password, account.password_hash))) return failure();
+  if (!account) return failure('请先注册。', 404);
+  if (!(await verifyPassword(password, account.password_hash))) return failure();
   if (account.role === 'none') return failure('账号尚未分配系统角色，请联系超级管理员。', 403);
   if (requestedRole === 'super_admin' && account.role !== 'super_admin') {
     return failure('该账号没有超级管理员权限，请切换至 HR 入口登录。', 403);
