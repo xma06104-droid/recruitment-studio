@@ -67,7 +67,10 @@ function storageConfig() {
   if (!authorizationKey) {
     throw new Error('Supabase Storage 还需要 JWT 格式的 SUPABASE_SERVICE_ROLE_KEY。');
   }
-  return { url, apiKey: secretKey, authorizationKey };
+  // Storage derives its Postgres role from the API key as well as the bearer
+  // token. Use the same legacy service_role JWT for both headers so requests
+  // consistently receive the service_role identity and bypass Storage RLS.
+  return { url, apiKey: authorizationKey, authorizationKey };
 }
 
 function bucketName() {
