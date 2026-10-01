@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { accountFromRequest, ensureSchema, getDb, getResumeBucket } from '@/app/server/db';
+import { accountFromRequest, ensureSchema, getDb } from '@/app/server/db';
+import { putStoredObject } from '@/app/server/object-storage';
 import { extractResumeFileText, ResumeFileExtraction } from '@/app/server/resume-file-text';
 import { getResumeJobs } from '@/app/server/resume-jobs';
 import { buildSystemResumeJob, matchResumeJob, mergeWrappedProjectLines, parseResumeFileName, parseResumeText, ParsedResume, ResumeJob, scoreResumeForJob } from '@/app/server/resume-parser';
@@ -88,10 +89,7 @@ export async function POST(request: NextRequest) {
   const parsingStatus = manualOnly ? '结构化完成' : file && extraction?.status !== 'extracted' && !rawText ? '解析待复核' : '结构化完成';
 
   if (file && fileKey) {
-    await getResumeBucket().put(fileKey, await file.arrayBuffer(), {
-      httpMetadata: { contentType: file.type || 'application/octet-stream' },
-      customMetadata: { ownerId: account.id, candidateId, originalName: file.name },
-    });
+    await putStoredObject(fileKey, await file.arrayBuffer(), file.type || 'application/octet-stream');
   }
 
   if (!existing) {

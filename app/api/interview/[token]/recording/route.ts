@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ensureSchema, getDb, getResumeBucket, hashToken, invitationIdFromShareToken } from '@/app/server/db';
+import { ensureSchema, getDb, hashToken, invitationIdFromShareToken } from '@/app/server/db';
+import { deleteStoredObject, putStoredObject } from '@/app/server/object-storage';
 
 type InvitationRow = {
   id:string; owner_id:string; candidate_id:string; questions_json:string; status:string; expires_at:string;
 };
 
-const MAX_RECORDING_BYTES = 80 * 1024 * 1024;
+const MAX_RECORDING_BYTES = 50 * 1024 * 1024;
 
 export async function POST(request:NextRequest, context:{ params:Promise<{token:string}> }) {
   await ensureSchema();
@@ -32,11 +33,7 @@ export async function POST(request:NextRequest, context:{ params:Promise<{token:
   const existing = await db.prepare('SELECT id, object_key FROM ai_interview_recordings WHERE invitation_id = ? AND question_id = ? LIMIT 1')
     .bind(invitation.id, questionId).first<{id:string;object_key:string}>();
   const recordingId = existing?.id || crypto.randomUUID();
-  const bucket = getResumeBucket();
-  await bucket.put(objectKey, recording.stream(), {
-    httpMetadata:{ contentType:recording.type },
-    customMetadata:{ invitationId:invitation.id, candidateId:invitation.candidate_id, questionId },
-  });
+  await putStoredObject(objectKey, recording.stream(), recording.type);
   await db.prepare(`INSERT INTO ai_interview_recordings (
       id, invitation_id, owner_id, candidate_id, question_id, question_title, object_key,
       content_type, size_bytes, duration_seconds, created_at, updated_at
@@ -51,7 +48,7 @@ export async function POST(request:NextRequest, context:{ params:Promise<{token:
       recordingId, invitation.id, invitation.owner_id, invitation.candidate_id, questionId, question.title,
       objectKey, recording.type, recording.size, durationSeconds, now, now,
     ).run();
-  if(existing?.object_key&&existing.object_key!==objectKey)await bucket.delete(existing.object_key).catch(()=>undefined);
+  if(existing?.object_key&&existing.object_key!==objectKey)await deleteStoredObject(existing.object_key).catch(()=>undefined);
   return NextResponse.json({ ok:true, recordingId });
 }
 

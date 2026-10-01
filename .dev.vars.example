@@ -5,3 +5,8 @@ TENCENT_SECRET_KEY=
 
 # Optional fallback provider.
 OPENAI_API_KEY=
+
+# Supabase private Storage (server only; never commit real values).
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SECRET_KEY=
+SUPABASE_STORAGE_BUCKET=recruitment-files

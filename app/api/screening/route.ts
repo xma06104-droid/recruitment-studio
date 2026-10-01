@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { env } from 'cloudflare:workers';
-import { accountFromRequest, ensureSchema, getDb, getResumeBucket } from '@/app/server/db';
+import { accountFromRequest, ensureSchema, getDb } from '@/app/server/db';
+import { deleteStoredObject, deleteStoredObjects } from '@/app/server/object-storage';
 import { repairResumeProfiles } from '@/app/server/resume-repair';
 import { getResumeJobs } from '@/app/server/resume-jobs';
 import { buildSystemResumeJob, matchResumeJob, parseResumeText, ResumeJob } from '@/app/server/resume-parser';
@@ -352,13 +353,13 @@ export async function POST(request: NextRequest) {
 
     if (resume.file_key) {
       try {
-        await getResumeBucket().delete(resume.file_key);
+        await deleteStoredObject(resume.file_key);
       } catch (error) {
         console.error('Failed to remove deleted resume object', { candidateId, error });
       }
     }
     if(recordingObjects.results.length){
-      try{await Promise.all(recordingObjects.results.map(item=>getResumeBucket().delete(item.object_key)))}
+      try{await deleteStoredObjects(recordingObjects.results.map(item=>item.object_key))}
       catch(error){console.error('Failed to remove deleted interview recordings',{candidateId,error})}
     }
     return NextResponse.json({ ok: true, candidateId, candidateName: resume.name });

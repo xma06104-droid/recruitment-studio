@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { CANDIDATE_STAGES, normalizeCandidateStage } from '@/app/candidate-stages';
 import { env } from 'cloudflare:workers';
-import { accountFromRequest, createInvitationShareToken, ensureSchema, getDb, getResumeBucket, hashToken } from '@/app/server/db';
+import { accountFromRequest, createInvitationShareToken, ensureSchema, getDb, hashToken } from '@/app/server/db';
+import { deleteStoredObjects } from '@/app/server/object-storage';
 import { repairResumeProfiles } from '@/app/server/resume-repair';
 import { questionMaxScores } from '@/app/interview-score-weights';
 import { deriveInterviewKeywords, isGenericInterviewKeywords } from '@/app/interview-keywords';
@@ -666,7 +667,7 @@ async function clearBusinessData(ownerId:string){
     db.prepare('DELETE FROM screening_templates WHERE owner_id = ?').bind(ownerId),db.prepare('DELETE FROM jobs WHERE owner_id = ?').bind(ownerId),
   ]);
   const keys=[...resumeFiles.results.map(row=>row.file_key),...recordingFiles.results.map(row=>row.object_key)].filter(Boolean);
-  if(keys.length)await getResumeBucket().delete(keys);
+  if(keys.length)await deleteStoredObjects(keys);
 }
 
 function mapJob(row: DataRow) {
@@ -785,7 +786,7 @@ function normalizeQuestionScores(rows:DataRow[],target:number){
   const distributable = Math.max(0, target - rows.length);
   const raw = weights.map(value => value / total * distributable);
   const scores = raw.map(value => 1 + Math.floor(value));
-  let remainder = target - scores.reduce((sum, value) => sum + value, 0);
+  const remainder = target - scores.reduce((sum, value) => sum + value, 0);
   const order = raw.map((value, index) => ({index, fraction:value - Math.floor(value)})).sort((a,b) => b.fraction - a.fraction || a.index - b.index);
   for (let index = 0; index < remainder; index += 1) scores[order[index % order.length].index] += 1;
   return scores;

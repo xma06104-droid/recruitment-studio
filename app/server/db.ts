@@ -31,10 +31,6 @@ export function getDb(): D1Database {
   return (env as unknown as { DB: D1Database }).DB;
 }
 
-export function getResumeBucket(): R2Bucket {
-  return (env as unknown as { RESUMES: R2Bucket }).RESUMES;
-}
-
 export async function ensureSchema() {
   if (!schemaReady) {
     const db = getDb();

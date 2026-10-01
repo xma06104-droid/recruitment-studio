@@ -1,0 +1,31 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "recruitment-studio",
+  "main": "dist/server/index.js",
+  "compatibility_date": "2026-05-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "no_bundle": true,
+  "rules": [
+    {
+      "type": "ESModule",
+      "globs": ["**/*.js", "**/*.mjs"]
+    }
+  ],
+  "assets": {
+    "directory": "dist/client"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "recruitment-studio-db",
+      "database_id": "83545ee3-1d6a-4963-b39b-d56a24aeba30"
+    }
+  ],
+  "vars": {
+    "SUPABASE_URL": "https://udcxudtykzgjqnqxvpwt.supabase.co",
+    "SUPABASE_STORAGE_BUCKET": "recruitment-files"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

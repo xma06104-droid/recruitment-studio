@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { accountFromRequest, ensureSchema, getDb, getResumeBucket } from '@/app/server/db';
+import { accountFromRequest, ensureSchema, getDb } from '@/app/server/db';
+import { getStoredObject } from '@/app/server/object-storage';
 
 export async function GET(request: NextRequest) {
   const account = await accountFromRequest(request);
@@ -11,12 +12,11 @@ export async function GET(request: NextRequest) {
       p.owner_id = ? OR p.candidate_id IN (SELECT candidate_id FROM candidate_assignments WHERE hr_account_id = ?)
     )`).bind(candidateId, account.id, account.id).first<{ file_key: string | null; file_name: string; file_type: string }>();
   if (!row?.file_key) return NextResponse.json({ message: '该候选人没有原始简历附件。' }, { status: 404 });
-  const object = await getResumeBucket().get(row.file_key);
+  const object = await getStoredObject(row.file_key);
   if (!object) return NextResponse.json({ message: '原始简历附件不存在。' }, { status: 404 });
-  const headers = new Headers();
-  object.writeHttpMetadata(headers);
+  const headers = new Headers(object.headers);
   headers.set('Content-Type', row.file_type || headers.get('Content-Type') || 'application/octet-stream');
   headers.set('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(row.file_name || 'resume')}`);
   headers.set('Cache-Control', 'private, no-store');
-  return new Response(object.body, { headers });
+  return new Response(object.body, { status: object.status, headers });
 }
