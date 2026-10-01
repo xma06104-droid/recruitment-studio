@@ -50,7 +50,12 @@ function storageRequest(path: string, init: RequestInit) {
   const { url, secretKey } = storageConfig();
   const headers = new Headers(init.headers);
   headers.set('apikey', secretKey);
-  headers.set('Authorization', `Bearer ${secretKey}`);
+  // Supabase's new sb_secret_* keys are API keys, not JWTs. Sending one as a
+  // bearer token makes Storage reject it with "Invalid Compact JWS". Keep the
+  // bearer header only for the legacy JWT-shaped service_role key.
+  if (!secretKey.startsWith('sb_')) {
+    headers.set('Authorization', `Bearer ${secretKey}`);
+  }
   return fetch(`${url}/storage/v1${path}`, { ...init, headers });
 }
 

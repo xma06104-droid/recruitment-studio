@@ -9,6 +9,15 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const allowedExtensions = ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'webp', 'txt', 'html', 'htm'];
 
 export async function POST(request: NextRequest) {
+  try {
+    return await importResume(request);
+  } catch (error) {
+    console.error('Resume import failed', error);
+    return NextResponse.json({ message: importFailureMessage(error) }, { status: 502 });
+  }
+}
+
+async function importResume(request: NextRequest) {
   const account = await accountFromRequest(request);
   if (!account) return NextResponse.json({ message: '请先登录。' }, { status: 401 });
   await ensureSchema();
@@ -164,6 +173,18 @@ export async function POST(request: NextRequest) {
     ok: true, candidateId, duplicate: Boolean(existing), parsingStatus, createdJob,
     matchedJob: matchedJob || (job ? { ...job, confidence: 100, reason: '已选择关联岗位' } : null), match,
   }, { status: 201 });
+}
+
+function importFailureMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || '');
+  if (message.includes('尚未配置')) return '文件存储尚未配置，请联系管理员检查 Supabase 环境变量。';
+  if (message.includes('上传文件失败（401）') || message.includes('上传文件失败（403）')) {
+    return 'Supabase Storage 密钥无效，请重新复制完整的 sb_secret_ 密钥并部署。';
+  }
+  if (message.includes('上传文件失败（404）')) return '未找到 recruitment-files 存储桶，请检查 Supabase 项目与桶名称。';
+  if (message.includes('上传文件失败（413）')) return '简历附件超过 Supabase Storage 的文件大小限制。';
+  if (message.includes('上传文件失败')) return `文件上传失败：${message.slice(0, 240)}`;
+  return '简历数据保存失败，请联系管理员检查 Cloudflare D1 运行日志。';
 }
 
 async function ensureSystemJob(ownerId: string, ownerName: string, title: string, city: string, now: string) {
