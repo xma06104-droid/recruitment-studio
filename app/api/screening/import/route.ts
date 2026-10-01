@@ -94,7 +94,9 @@ async function importResume(request: NextRequest) {
     city, company, industry, expectedSalary, skills, certificates, workHistory, projectHistory,
   };
   const match = job && !manualOnly ? scoreResumeForJob(scoredResume, rawText, job) : null;
-  const fileKey = file ? `${account.id}/${candidateId}/${crypto.randomUUID()}-${safeFileName(file.name)}` : null;
+  // Keep the original filename in D1 for display, but use an ASCII-only object
+  // key because Supabase Storage rejects some Unicode/special-character keys.
+  const fileKey = file ? `${account.id}/${candidateId}/${crypto.randomUUID()}.${extension(file.name) || 'bin'}` : null;
   const parsingStatus = manualOnly ? '结构化完成' : file && extraction?.status !== 'extracted' && !rawText ? '解析待复核' : '结构化完成';
 
   if (file && fileKey) {
@@ -231,5 +233,4 @@ function splitList(value: string) { return value.split(/[,，、;；\n]/).map(it
 function splitLines(value: string) { return value.split(/\n+/).map(item => item.trim()).filter(Boolean).slice(0, 50); }
 function mergeLists(a: string[], b: string[]) { return [...new Set([...a, ...b])]; }
 function extension(name: string) { return name.split('.').pop()?.toLowerCase() || ''; }
-function safeFileName(name: string) { return name.replace(/[^\w.\-\u4e00-\u9fa5]/g, '_').slice(-120); }
 function invalid(message: string) { return NextResponse.json({ ok: false, message }, { status: 400 }); }
