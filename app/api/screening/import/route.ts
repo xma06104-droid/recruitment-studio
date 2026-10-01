@@ -177,6 +177,9 @@ async function importResume(request: NextRequest) {
 
 function importFailureMessage(error: unknown) {
   const message = error instanceof Error ? error.message : String(error || '');
+  if (message.includes('SUPABASE_SERVICE_ROLE_KEY')) {
+    return '文件存储缺少 SUPABASE_SERVICE_ROLE_KEY，请在 Cloudflare 中添加 Supabase Legacy service_role 密钥。';
+  }
   if (message.includes('尚未配置')) return '文件存储尚未配置，请联系管理员检查 Supabase 环境变量。';
   if (message.includes('上传文件失败（401）') || message.includes('上传文件失败（403）')) {
     return 'Supabase Storage 密钥无效，请重新复制完整的 sb_secret_ 密钥并部署。';

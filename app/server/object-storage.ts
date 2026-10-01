@@ -5,6 +5,7 @@ const DEFAULT_BUCKET = 'recruitment-files';
 type StorageEnvironment = {
   SUPABASE_URL?: string;
   SUPABASE_SECRET_KEY?: string;
+  SUPABASE_SERVICE_ROLE_KEY?: string;
   SUPABASE_STORAGE_BUCKET?: string;
 };
 
@@ -47,15 +48,10 @@ export async function deleteStoredObjects(keys: string[]) {
 }
 
 function storageRequest(path: string, init: RequestInit) {
-  const { url, secretKey } = storageConfig();
+  const { url, apiKey, authorizationKey } = storageConfig();
   const headers = new Headers(init.headers);
-  headers.set('apikey', secretKey);
-  // Supabase's new sb_secret_* keys are API keys, not JWTs. Sending one as a
-  // bearer token makes Storage reject it with "Invalid Compact JWS". Keep the
-  // bearer header only for the legacy JWT-shaped service_role key.
-  if (!secretKey.startsWith('sb_')) {
-    headers.set('Authorization', `Bearer ${secretKey}`);
-  }
+  headers.set('apikey', apiKey);
+  headers.set('Authorization', `Bearer ${authorizationKey}`);
   return fetch(`${url}/storage/v1${path}`, { ...init, headers });
 }
 
@@ -63,10 +59,15 @@ function storageConfig() {
   const values = env as unknown as StorageEnvironment;
   const url = String(values.SUPABASE_URL || '').trim().replace(/\/$/, '');
   const secretKey = String(values.SUPABASE_SECRET_KEY || '').trim();
+  const serviceRoleKey = String(values.SUPABASE_SERVICE_ROLE_KEY || '').trim();
   if (!url || !secretKey) {
     throw new Error('Supabase Storage 尚未配置，请设置 SUPABASE_URL 和 SUPABASE_SECRET_KEY。');
   }
-  return { url, secretKey };
+  const authorizationKey = serviceRoleKey || (!secretKey.startsWith('sb_') ? secretKey : '');
+  if (!authorizationKey) {
+    throw new Error('Supabase Storage 还需要 JWT 格式的 SUPABASE_SERVICE_ROLE_KEY。');
+  }
+  return { url, apiKey: secretKey, authorizationKey };
 }
 
 function bucketName() {
