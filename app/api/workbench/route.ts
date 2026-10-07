@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
   const configuredOrigin = validHttpOrigin((env as unknown as { INTERVIEW_PUBLIC_ORIGIN?:string }).INTERVIEW_PUBLIC_ORIGIN);
   const mappedInvitations = await Promise.all(aiInvitations.results.map(row => mapAiInvitation(row, configuredOrigin || requestOrigin)));
   const scopedCandidates = departmentReviewScope
-    ? candidates.results.filter(row => normalizeCandidateStage(String(row.stage || '')) === '用人部门筛选' && String(row.hr_account_id || '') === account.id)
+    ? candidates.results.filter(row => String(row.hr_account_id || '') === account.id)
     : candidates.results;
   const scopedCandidateIds = new Set(scopedCandidates.map(row => String(row.id)));
   const scopedJobIds = new Set(scopedCandidates.map(row => String(row.job_id || '')).filter(Boolean));

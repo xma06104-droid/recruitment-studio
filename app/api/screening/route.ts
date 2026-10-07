@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
 
   const departmentCandidates = departmentReviewScope
     ? await db.prepare(`SELECT c.id FROM candidates c JOIN candidate_assignments ca ON ca.candidate_id = c.id
-        WHERE ca.hr_account_id = ? AND c.stage = '用人部门筛选'`).bind(account.id).all<{id:string}>()
+        WHERE ca.hr_account_id = ?`).bind(account.id).all<{id:string}>()
     : { results: [] as {id:string}[] };
   const scopedCandidateIds = new Set(departmentCandidates.results.map(row => row.id));
   const scoped = <T extends DataRow>(rows:T[], field='candidate_id') => departmentReviewScope
