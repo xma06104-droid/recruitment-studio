@@ -12,7 +12,10 @@ type StorageEnvironment = {
 export async function putStoredObject(key: string, body: BodyInit, contentType = 'application/octet-stream') {
   const response = await storageRequest(`/object/${bucketName()}/${objectPath(key)}`, {
     method: 'POST',
-    headers: { 'Content-Type': contentType, 'x-upsert': 'true' },
+    // Every object path is unique, so overwrite semantics are unnecessary.
+    // Supabase Storage currently misreports uploads with x-upsert=true as RLS
+    // violations even when the service-role credentials and policies are valid.
+    headers: { 'Content-Type': contentType },
     body,
   });
   if (!response.ok) throw await storageError('上传文件失败', response);
