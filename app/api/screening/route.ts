@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
     db.prepare(`SELECT * FROM screening_reviews WHERE owner_id = ? OR candidate_id IN (${assignedCandidateSql}) ORDER BY updated_at DESC`).bind(account.id, account.id).all<DataRow>(),
     db.prepare(`SELECT * FROM screening_logs WHERE owner_id = ? OR candidate_id IN (${assignedCandidateSql}) ORDER BY created_at DESC LIMIT 300`).bind(account.id, account.id).all<DataRow>(),
     account.role === 'super_admin'
-      ? db.prepare("SELECT id, contact, phone, email, role FROM accounts ORDER BY contact ASC, created_at ASC").all<DataRow>()
+      ? db.prepare("SELECT id, contact, phone, email, role FROM accounts WHERE organization_id = ? ORDER BY contact ASC, created_at ASC").bind(account.organizationId).all<DataRow>()
       : Promise.resolve({ results: [] as DataRow[] }),
     db.prepare(`SELECT ca.*, a.contact AS hr_name, a.email AS hr_email FROM candidate_assignments ca JOIN accounts a ON a.id = ca.hr_account_id
       WHERE ca.owner_id = ? OR ca.hr_account_id = ? ORDER BY ca.assigned_at DESC`).bind(account.id, account.id).all<DataRow>(),
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
     if (!candidateIds.length || !hrAccountIds.length) return invalid('请选择候选人和接收账号。');
     const hrPlaceholders = hrAccountIds.map(() => '?').join(',');
     const accountRows = await db.prepare(`SELECT id, contact, email, role FROM accounts
-      WHERE id IN (${hrPlaceholders})`).bind(...hrAccountIds).all<{id:string;contact:string;email:string;role:string}>();
+      WHERE organization_id = ? AND id IN (${hrPlaceholders})`).bind(account.organizationId,...hrAccountIds).all<{id:string;contact:string;email:string;role:string}>();
     if (accountRows.results.length !== hrAccountIds.length) return invalid('部分所选人员不是有效账号。');
     const hrAccounts = hrAccountIds.map(id => accountRows.results.find(item => item.id === id)).filter(Boolean) as {id:string;contact:string;email:string;role:string}[];
     const placeholders = candidateIds.map(() => '?').join(',');

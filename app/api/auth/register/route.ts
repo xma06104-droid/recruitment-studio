@@ -32,8 +32,15 @@ export async function POST(request: NextRequest) {
   if (existing) return failure('该手机号或邮箱已注册，请直接登录。', 409);
 
   const now = new Date().toISOString();
-  await getDb().prepare(`INSERT INTO accounts (id, contact, phone, email, password_hash, role, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), contact, phone, storedEmail, await createPasswordHash(password), role, now).run();
+  const accountId=crypto.randomUUID();
+  const organizationId=accountId;
+  const db=getDb();
+  await db.batch([
+    db.prepare(`INSERT INTO accounts (id, contact, phone, email, password_hash, role, organization_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).bind(accountId, contact, phone, storedEmail, await createPasswordHash(password), role, organizationId, now),
+    db.prepare(`INSERT INTO organizations (id, name, owner_account_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?)`).bind(organizationId, `${contact||'新注册账号'}的企业`, accountId, now, now),
+  ]);
   return NextResponse.json({ ok: true, identifier: testEnvironment ? phone : email, role }, { status: 201 });
 }
 

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { CANDIDATE_STAGES, normalizeCandidateStage } from '@/app/candidate-stages';
 import { env } from 'cloudflare:workers';
 import { accountFromRequest, createInvitationShareToken, ensureSchema, getDb, hashToken } from '@/app/server/db';
-import { deleteStoredObjects } from '@/app/server/object-storage';
 import { repairResumeProfiles } from '@/app/server/resume-repair';
 import { questionMaxScores } from '@/app/interview-score-weights';
 import { deriveInterviewKeywords, isGenericInterviewKeywords } from '@/app/interview-keywords';
@@ -11,11 +10,6 @@ type DataRow = Record<string, string | number | null>;
 
 export async function GET(request: NextRequest) {
   const departmentReviewScope = new URL(request.url).searchParams.get('scope') === 'department-review';
-  const resetOnLoad=(env as unknown as {RESET_TEST_ACCOUNT_ON_NEXT_LOAD?:string}).RESET_TEST_ACCOUNT_ON_NEXT_LOAD||'';
-  if(resetOnLoad.startsWith('test-account-')){
-    await ensureSchema();
-    await clearBusinessData(resetOnLoad);
-  }
   const account = await accountFromRequest(request);
   if (!account) return unauthorized();
   await ensureSchema();
@@ -67,7 +61,7 @@ export async function GET(request: NextRequest) {
     db.prepare(`SELECT * FROM ai_interview_invitations WHERE owner_id = ? OR ${relatedCandidateSql} ORDER BY created_at DESC`).bind(account.id, account.id, account.id).all<DataRow>(),
     db.prepare(`SELECT * FROM manual_assessments WHERE owner_id = ? OR ${relatedCandidateSql} ORDER BY updated_at DESC`).bind(account.id, account.id, account.id).all<DataRow>(),
     account.role === 'super_admin'
-      ? db.prepare("SELECT id, contact, phone, email, role FROM accounts ORDER BY contact ASC, created_at ASC").all<DataRow>()
+      ? db.prepare("SELECT id, contact, phone, email, role FROM accounts WHERE organization_id = ? ORDER BY contact ASC, created_at ASC").bind(account.organizationId).all<DataRow>()
       : Promise.resolve({ results: [] as DataRow[] }),
   ]);
   const { unique: uniqueQuestions, duplicateIds } = deduplicateAiQuestions(aiQuestions.results);
@@ -541,6 +535,7 @@ export async function PATCH(request: NextRequest) {
     if (!candidate) return invalid('候选人不存在或无权操作。');
     const currentStage = normalizeCandidateStage(candidate.stage);
     if (currentStage === value) return NextResponse.json({ ok: true });
+    if (currentStage === '已淘汰') return invalid('该候选人已被拒绝，招聘流程已终止。');
     if (value === 'AI面试') {
       if (!['用人部门筛选', '待定'].includes(currentStage)) return invalid('请先推送给用人部门筛选。');
       const assignedRecipient = await db.prepare('SELECT candidate_id FROM candidate_assignments WHERE candidate_id = ? AND hr_account_id = ? LIMIT 1').bind(id, account.id).first<{candidate_id:string}>();
@@ -604,24 +599,9 @@ export async function PATCH(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   const resource = text(body?.resource, 40);
-  let account = await accountFromRequest(request);
-  const resetKey=(env as unknown as {RESET_DATA_KEY?:string}).RESET_DATA_KEY||'';
-  const maintenanceAuthorized=resource==='businessDataReset'&&Boolean(resetKey)&&request.headers.get('x-reset-data-key')===resetKey;
-  if(!account&&maintenanceAuthorized){
-    const targetId=text(body?.targetAccountId,80);
-    if(!targetId.startsWith('test-account-'))return forbidden();
-    await ensureSchema();
-    const row=await getDb().prepare("SELECT id, contact, phone, email, role, created_at FROM accounts WHERE id = ? AND role = 'super_admin' LIMIT 1").bind(targetId).first<{id:string;contact:string;phone:string;email:string;role:'super_admin';created_at:string}>();
-    if(row)account={id:row.id,contact:row.contact,phone:row.phone,email:row.email,role:row.role,createdAt:row.created_at};
-  }
+  const account = await accountFromRequest(request);
   if (!account) return unauthorized();
   if (account.role !== 'super_admin') return forbidden();
-  if(resource==='businessDataReset'){
-    if(!account.id.startsWith('test-account-'))return forbidden();
-    if(text(body?.confirmation,80)!=='CLEAR_TEST_ACCOUNT_DATA')return invalid('清空确认信息无效。');
-    await clearBusinessData(account.id);
-    return NextResponse.json({ok:true,cleared:true});
-  }
   const id = text(body?.id, 80);
   if (!id) return invalid('缺少需要删除的记录。');
   const db = getDb();
@@ -648,26 +628,6 @@ async function accessibleCandidate(id: string, accountId: string) {
   return getDb().prepare(`SELECT id, owner_id, job_id, stage, name, role, email FROM candidates WHERE id = ? AND (
     owner_id = ? OR id IN (SELECT candidate_id FROM candidate_assignments WHERE hr_account_id = ?)
   ) LIMIT 1`).bind(id, accountId, accountId).first<{id:string;owner_id:string;job_id:string|null;stage:string;name:string;role:string;email:string}>();
-}
-
-async function clearBusinessData(ownerId:string){
-  const db=getDb();
-  const [resumeFiles,recordingFiles]=await Promise.all([
-    db.prepare('SELECT file_key FROM resume_profiles WHERE owner_id = ? AND file_key IS NOT NULL').bind(ownerId).all<{file_key:string}>(),
-    db.prepare('SELECT object_key FROM ai_interview_recordings WHERE owner_id = ?').bind(ownerId).all<{object_key:string}>(),
-  ]);
-  await db.batch([
-    db.prepare('DELETE FROM ai_interview_recordings WHERE owner_id = ?').bind(ownerId),db.prepare('DELETE FROM ai_interviews WHERE owner_id = ?').bind(ownerId),
-    db.prepare('DELETE FROM ai_interview_invitations WHERE owner_id = ?').bind(ownerId),db.prepare('DELETE FROM manual_assessments WHERE owner_id = ?').bind(ownerId),
-    db.prepare('DELETE FROM interviews WHERE owner_id = ?').bind(ownerId),db.prepare('DELETE FROM offers WHERE owner_id = ?').bind(ownerId),
-    db.prepare('DELETE FROM screening_reviews WHERE owner_id = ?').bind(ownerId),db.prepare('DELETE FROM screening_logs WHERE owner_id = ?').bind(ownerId),
-    db.prepare('DELETE FROM resume_applications WHERE owner_id = ?').bind(ownerId),db.prepare('DELETE FROM resume_profiles WHERE owner_id = ?').bind(ownerId),
-    db.prepare('DELETE FROM candidate_assignments WHERE owner_id = ?').bind(ownerId),db.prepare('DELETE FROM candidates WHERE owner_id = ?').bind(ownerId),
-    db.prepare('DELETE FROM ai_questions WHERE owner_id = ?').bind(ownerId),db.prepare('DELETE FROM screening_rules WHERE owner_id = ?').bind(ownerId),
-    db.prepare('DELETE FROM screening_templates WHERE owner_id = ?').bind(ownerId),db.prepare('DELETE FROM jobs WHERE owner_id = ?').bind(ownerId),
-  ]);
-  const keys=[...resumeFiles.results.map(row=>row.file_key),...recordingFiles.results.map(row=>row.object_key)].filter(Boolean);
-  if(keys.length)await deleteStoredObjects(keys);
 }
 
 function mapJob(row: DataRow) {

@@ -24,7 +24,9 @@ export function normalizeCandidateStage(stage: string) {
 
 export function displayCandidateStage(stage: string) {
   const normalized = normalizeCandidateStage(stage);
-  return normalized === '用人部门筛选' ? '待用人部门审核' : normalized;
+  if (normalized === '用人部门筛选') return '待审核';
+  if (normalized === '已淘汰') return '已拒绝';
+  return normalized;
 }
 
 export function candidateStageIndex(stage: string) {

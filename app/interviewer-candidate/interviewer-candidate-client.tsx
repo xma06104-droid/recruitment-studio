@@ -370,7 +370,7 @@ function candidateReviewStatus(stage:string):ReviewStatus {
 function candidateDisplayStatus(stage:string){
   if(stage==='已淘汰')return '已拒绝';
   if(stage==='待定')return '待定';
-  if(stage==='用人部门筛选')return '待用人部门审核';
+  if(stage==='用人部门筛选')return '待审核';
   if(stage==='简历筛选')return '待筛选';
   return '已通过';
 }

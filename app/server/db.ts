@@ -9,6 +9,7 @@ export type AppAccount = {
   phone: string;
   email: string;
   role: 'super_admin' | 'hr';
+  organizationId: string;
   createdAt: string;
 };
 
@@ -19,6 +20,7 @@ type AccountRow = {
   email: string;
   password_hash: string;
   role: 'super_admin' | 'hr' | 'none';
+  organization_id: string;
   created_at: string;
 };
 
@@ -83,6 +85,7 @@ export async function ensureSchema() {
         ]);
       }
       await db.batch(SCHEMA_STATEMENTS.map(statement => db.prepare(statement)));
+      await migrateOrganizations(db);
       const currentQuestionColumns=await db.prepare('PRAGMA table_info(ai_questions)').all<{name:string}>();
       if(currentQuestionColumns.results.some(column=>column.name==='max_score'))await backfillLegacyQuestionScores(db);
     })().catch(error => {
@@ -91,6 +94,45 @@ export async function ensureSchema() {
     });
   }
   await schemaReady;
+}
+
+async function migrateOrganizations(db:D1Database){
+  const accountColumns=await db.prepare('PRAGMA table_info(accounts)').all<{name:string}>();
+  if(accountColumns.results.length&&!accountColumns.results.some(column=>column.name==='organization_id')){
+    await db.prepare("ALTER TABLE accounts ADD COLUMN organization_id TEXT NOT NULL DEFAULT ''").run();
+  }
+  // These accounts were development fixtures. Removing the account cascades all
+  // of its sessions and demo business records, and the seed is no longer present.
+  await db.prepare("DELETE FROM accounts WHERE id LIKE 'test-account-%' OR email LIKE 'test%@xingjian.ai'").run();
+  const now=new Date().toISOString();
+  await db.batch([
+    db.prepare(`INSERT OR IGNORE INTO organizations (id, name, owner_account_id, created_at, updated_at)
+      SELECT id, contact || '的企业', id, created_at, ? FROM accounts
+      WHERE role = 'super_admin' AND COALESCE(organization_id, '') = ''`).bind(now),
+    db.prepare(`UPDATE accounts SET organization_id = id
+      WHERE role = 'super_admin' AND COALESCE(organization_id, '') = ''`),
+  ]);
+  await db.prepare(`UPDATE accounts SET organization_id = COALESCE(
+      (SELECT owner.organization_id FROM candidate_assignments assignment
+        JOIN accounts owner ON owner.id = assignment.owner_id
+        WHERE assignment.hr_account_id = accounts.id AND owner.organization_id <> ''
+        ORDER BY assignment.assigned_at DESC LIMIT 1),
+      (SELECT organization_id FROM accounts administrator
+        WHERE administrator.role = 'super_admin' AND administrator.organization_id <> ''
+        ORDER BY administrator.created_at ASC LIMIT 1),
+      id
+    ) WHERE COALESCE(organization_id, '') = ''`).run();
+  await db.prepare(`INSERT OR IGNORE INTO organizations (id, name, owner_account_id, created_at, updated_at)
+    SELECT organization_id, contact || '的企业', id, created_at, ? FROM accounts
+    WHERE organization_id <> '' GROUP BY organization_id`).bind(now).run();
+  await db.prepare(`DELETE FROM candidate_assignments
+    WHERE NOT EXISTS (
+      SELECT 1 FROM accounts owner JOIN accounts recipient
+        ON owner.organization_id = recipient.organization_id
+      WHERE owner.id = candidate_assignments.owner_id
+        AND recipient.id = candidate_assignments.hr_account_id
+    )`).run();
+  await db.prepare('CREATE INDEX IF NOT EXISTS idx_accounts_organization_role ON accounts(organization_id, role, created_at)').run();
 }
 
 async function backfillLegacyQuestionScores(db:D1Database){
@@ -163,7 +205,7 @@ export async function accountFromRequest(request: NextRequest): Promise<AppAccou
   if (!token) return null;
   await ensureSchema();
   const tokenHash = await hashToken(token);
-  const row = await getDb().prepare(`SELECT a.id, a.contact, a.phone, a.email, a.role, a.created_at
+  const row = await getDb().prepare(`SELECT a.id, a.contact, a.phone, a.email, a.role, a.organization_id, a.created_at
     FROM sessions s JOIN accounts a ON a.id = s.account_id
     WHERE s.token_hash = ? AND s.expires_at > ?`).bind(tokenHash, new Date().toISOString()).first<AccountRow>();
   return row && row.role !== 'none' ? publicAccount(row) : null;
@@ -188,8 +230,8 @@ export function sessionExpiry() {
   return new Date(Date.now() + SESSION_SECONDS * 1000).toISOString();
 }
 
-export function publicAccount(row: Pick<AccountRow, 'id' | 'contact' | 'phone' | 'email' | 'role' | 'created_at'>): AppAccount {
-  return { id: row.id, contact: row.contact, phone: row.phone, email: row.email, role:row.role as AppAccount['role'], createdAt: row.created_at };
+export function publicAccount(row: Pick<AccountRow, 'id' | 'contact' | 'phone' | 'email' | 'role' | 'organization_id' | 'created_at'>): AppAccount {
+  return { id: row.id, contact: row.contact, phone: row.phone, email: row.email, role:row.role as AppAccount['role'], organizationId:row.organization_id, createdAt: row.created_at };
 }
 
 async function derivePassword(password: string, salt: Uint8Array) {

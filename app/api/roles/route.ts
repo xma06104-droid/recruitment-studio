@@ -11,7 +11,8 @@ export async function GET(request:NextRequest){
   if(!account)return NextResponse.json({message:'请先登录。'},{status:401});
   if(account.role!=='super_admin')return forbidden();
   const rows=await getDb().prepare(`SELECT id, contact, phone, email, role, created_at FROM accounts
-    ORDER BY CASE role WHEN 'super_admin' THEN 0 WHEN 'hr' THEN 1 ELSE 2 END, created_at ASC`).all<RoleRow>();
+    WHERE organization_id = ?
+    ORDER BY CASE role WHEN 'super_admin' THEN 0 WHEN 'hr' THEN 1 ELSE 2 END, created_at ASC`).bind(account.organizationId).all<RoleRow>();
   return NextResponse.json({accounts:rows.results.map(row=>({id:row.id,contact:row.contact,phone:row.phone,email:row.email,role:row.role,createdAt:row.created_at,current:row.id===account.id}))});
 }
 
@@ -43,8 +44,8 @@ export async function POST(request:NextRequest){
     :await getDb().prepare('SELECT id FROM accounts WHERE phone = ? OR email = ? LIMIT 1').bind(phone,email).first();
   if(duplicate)return invalid('该手机号或邮箱已存在。',409);
   const now=new Date().toISOString();
-  await getDb().prepare(`INSERT INTO accounts (id, contact, phone, email, password_hash, role, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(),contact,phone,storedEmail,await createPasswordHash(password),role,now).run();
+  await getDb().prepare(`INSERT INTO accounts (id, contact, phone, email, password_hash, role, organization_id, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(),contact,phone,storedEmail,await createPasswordHash(password),role,account.organizationId,now).run();
   return NextResponse.json({ok:true},{status:201});
 }
 
@@ -57,10 +58,10 @@ export async function PATCH(request:NextRequest){
   const role=String(body?.role??'') as ManagedRole;
   if(!id||!['super_admin','hr','none'].includes(role))return invalid('角色更新内容无效。');
   if(id===account.id&&role!=='super_admin')return invalid('不能取消或降低当前登录账号的超级管理员身份。');
-  const target=await getDb().prepare('SELECT id, role FROM accounts WHERE id = ?').bind(id).first<{id:string;role:ManagedRole}>();
+  const target=await getDb().prepare('SELECT id, role FROM accounts WHERE id = ? AND organization_id = ?').bind(id,account.organizationId).first<{id:string;role:ManagedRole}>();
   if(!target)return invalid('人员账号不存在或已被移除。',404);
   if(target.role==='super_admin'&&role!=='super_admin'){
-    const count=await getDb().prepare("SELECT COUNT(*) AS total FROM accounts WHERE role = 'super_admin'").first<{total:number}>();
+    const count=await getDb().prepare("SELECT COUNT(*) AS total FROM accounts WHERE role = 'super_admin' AND organization_id = ?").bind(account.organizationId).first<{total:number}>();
     if(Number(count?.total)<=1)return invalid('系统必须至少保留一名超级管理员。');
   }
   const db=getDb();
@@ -79,7 +80,7 @@ export async function DELETE(request:NextRequest){
   if(!id)return invalid('请选择需要删除的 HR 账号。');
   if(id===account.id)return invalid('不能删除当前登录账号。');
   const db=getDb();
-  const target=await db.prepare('SELECT id, contact, role FROM accounts WHERE id = ?').bind(id).first<{id:string;contact:string;role:ManagedRole}>();
+  const target=await db.prepare('SELECT id, contact, role FROM accounts WHERE id = ? AND organization_id = ?').bind(id,account.organizationId).first<{id:string;contact:string;role:ManagedRole}>();
   if(!target)return invalid('HR 账号不存在或已被删除。',404);
   if(target.role!=='hr')return invalid('仅支持删除 HR 账号。');
   const now=new Date().toISOString();
