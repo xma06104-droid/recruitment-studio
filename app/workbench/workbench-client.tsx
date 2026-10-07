@@ -404,7 +404,7 @@ function AiStudio({data,openQuestion,openGenerator,deleteQuestion,openResult,sen
   const questions=data.aiQuestions
     .filter((question,index,items)=>items.findIndex(item=>questionKey(item)===questionKey(question))===index)
     .sort((first,second)=>Date.parse(first.createdAt)-Date.parse(second.createdAt)||first.id.localeCompare(second.id));
-  const visibleQuestions=jobFilter==='all'?questions:jobFilter==='general'?questions.filter(question=>!question.jobId):questions.filter(question=>!question.jobId||question.jobId===jobFilter);
+  const visibleQuestions=jobFilter==='all'?questions:jobFilter==='general'?questions.filter(question=>!question.jobId):questions.filter(question=>question.jobId===jobFilter);
   function prepareInvitation(person:Candidate){
     const job=data.jobs.find(item=>item.id===person.jobId)||data.jobs.find(item=>item.title.trim().toLowerCase()===person.role.trim().toLowerCase());
     const specific=job?questions.filter(question=>question.jobId===job.id):[];
