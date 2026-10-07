@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import fixWebmDuration from 'fix-webm-duration';
 
 type InterviewRecording = {
   id:string; questionId:string; questionTitle:string; contentType:string; sizeBytes:number;
@@ -12,6 +13,7 @@ export default function AiInterviewRecordings({candidateId}:{candidateId:string}
   const [selectedId,setSelectedId]=useState('');
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState('');
+  const [playbackUrl,setPlaybackUrl]=useState('');
 
   useEffect(()=>{
     const controller=new AbortController();
@@ -24,6 +26,22 @@ export default function AiInterviewRecordings({candidateId}:{candidateId:string}
     return()=>controller.abort();
   },[candidateId]);
 
+  useEffect(()=>{
+    const selected=recordings.find(item=>item.id===selectedId)||recordings[0];
+    if(!selected){setPlaybackUrl('');return}
+    if(!selected.contentType.includes('webm')){setPlaybackUrl(selected.playbackUrl);return}
+    const controller=new AbortController();let objectUrl='';
+    setPlaybackUrl('');
+    void fetch(selected.playbackUrl,{cache:'no-store',signal:controller.signal}).then(response=>{
+      if(!response.ok)throw new Error('recording-fetch-failed');
+      return response.blob();
+    }).then(blob=>fixWebmDuration(blob,Math.max(1000,selected.durationSeconds*1000),{logger:false})).then(fixed=>{
+      if(controller.signal.aborted)return;
+      objectUrl=URL.createObjectURL(fixed);setPlaybackUrl(objectUrl);
+    }).catch(reason=>{if(reason?.name!=='AbortError')setPlaybackUrl(selected.playbackUrl)});
+    return()=>{controller.abort();if(objectUrl)URL.revokeObjectURL(objectUrl)};
+  },[recordings,selectedId]);
+
   if(loading)return <div className="ai-recordings-state">正在读取面试录音…</div>;
   if(error)return <div className="ai-recordings-state error">{error}</div>;
   if(!recordings.length)return <div className="ai-recordings-state"><b>暂无可回放录音</b><span>新完成的 AI 面试会按题保存原始音频。</span></div>;
@@ -31,7 +49,7 @@ export default function AiInterviewRecordings({candidateId}:{candidateId:string}
   return <section className="ai-recordings-panel">
     <header><div><h3>AI 面试录音</h3><p>当前保存原始音频，同时兼容后续视频回放</p></div><span>{recordings.length} 段</span></header>
     <div className="ai-recordings-layout">
-      <div className={`ai-recording-player ${selected.contentType.startsWith('audio/')?'audio':'video'}`}>{selected.contentType.startsWith('audio/')?<audio key={selected.id} controls preload="metadata" src={selected.playbackUrl}/>:<video key={selected.id} controls playsInline preload="metadata" src={selected.playbackUrl}/>}<div><b>{selected.questionTitle}</b><span>{formatDuration(selected.durationSeconds)} · {formatSize(selected.sizeBytes)}</span></div></div>
+      <div className={`ai-recording-player ${selected.contentType.startsWith('audio/')?'audio':'video'}`}>{playbackUrl?(selected.contentType.startsWith('audio/')?<audio key={`${selected.id}-${playbackUrl}`} controls preload="metadata" src={playbackUrl}/>:<video key={`${selected.id}-${playbackUrl}`} controls playsInline preload="metadata" src={playbackUrl}/>):<div className="ai-recording-preparing">正在校准录音时长…</div>}<div><b>{selected.questionTitle}</b><span>{formatDuration(selected.durationSeconds)} · {formatSize(selected.sizeBytes)}</span></div></div>
       <div className="ai-recording-list">{recordings.map((item,index)=><button type="button" key={item.id} className={item.id===selected.id?'active':''} onClick={()=>setSelectedId(item.id)}><i>{String(index+1).padStart(2,'0')}</i><span><b>{item.questionTitle}</b><small>{formatDuration(item.durationSeconds)} · {formatSize(item.sizeBytes)}</small></span><em>▶</em></button>)}</div>
     </div>
   </section>;

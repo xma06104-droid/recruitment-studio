@@ -361,7 +361,6 @@ export default function WorkbenchClient() {
       aiCompleted={data.aiInterviews.some(item=>item.candidateId===selectedCandidate.id&&item.status==='已完成')}
       interviewCompleted={data.interviews.some(item=>item.candidateId===selectedCandidate.id&&item.status==='已完成'&&item.round!=='AI 初面')}
       offerAccepted={data.offers.some(item=>item.candidateId===selectedCandidate.id&&item.status==='已接受')}
-      canApproveDepartment={selectedCandidate.assignedHrId===data.account.id}
       close={()=>setDrawer(null)}
       openInterviews={()=>{setDrawer(null);setActive('面试管理')}}
       saveFact={(field,value)=>updateCandidateFact(selectedCandidate.id,field,value)}
@@ -424,7 +423,7 @@ function AiStudio({data,openQuestion,openGenerator,deleteQuestion,openResult,sen
     try{await navigator.clipboard.writeText(value);flash('AI 面试地址已复制')}
     catch{const input=document.createElement('textarea');input.value=value;input.style.position='fixed';input.style.opacity='0';document.body.appendChild(input);input.select();const copied=document.execCommand('copy');input.remove();flash(copied?'AI 面试地址已复制':'复制失败，请手动复制')}
   }
-  return <section>
+  return <section className="ai-studio-page">
     <Head path="AI 面试" title="AI 面试" sub="题库与总结仅展示当前账号真实保存的内容"/>
     <div className="ai-studio-tabs">
       <button className={tab==='candidates'?'active':''} onClick={()=>setTab('candidates')}><i>◎</i><span>面试记录<small>{data.aiInterviews.length} 份真实记录</small></span></button>
@@ -672,15 +671,24 @@ function Interviews({items,people,onNew,onPick,updateStatus}:{items:Interview[];
     months.set(`${current.getFullYear()}-${current.getMonth()}`,current);
     return [...months.values()].sort((a,b)=>b.getTime()-a.getTime());
   },[items,today]);
-  const dayItems=items.filter(item=>sameDay(new Date(item.scheduledAt),selectedDate));
+  const selectedDayItems=items.filter(item=>sameDay(new Date(item.scheduledAt),selectedDate)).sort((first,second)=>Date.parse(first.scheduledAt)-Date.parse(second.scheduledAt));
+  const viewingToday=sameDay(selectedDate,today);
+  const otherCreatedItems=viewingToday?items
+    .filter(item=>!sameDay(new Date(item.scheduledAt),today))
+    .sort((first,second)=>Date.parse(second.createdAt)-Date.parse(first.createdAt))
+    .slice(0,3):[];
+  const displayedItems=viewingToday?[...selectedDayItems,...otherCreatedItems]:selectedDayItems;
+  const scheduleSummary=viewingToday
+    ?`${selectedDayItems.length} 场当天面试${otherCreatedItems.length?` · ${otherCreatedItems.length} 场已创建面试`:''}`
+    :`${selectedDayItems.length} 场已创建面试`;
   return <section>
     <Head path="面试管理" title="面试管理" sub="日程来自实际保存的面试安排" action="安排面试" click={onNew}/>
     <div className="interview-layout">
       <div className="interview-list">
-        <div className="list-title"><h3>面试日程</h3><span>{dayItems.length} 场当天面试</span></div>
-        {dayItems.length===0
-          ?<Empty icon="◴" title="当天暂无面试" text="请选择其他日期，或为候选人安排新的面试。" action="安排面试" click={onNew}/>
-          :dayItems.map(item=><article className="interview-card clickable" role="button" tabIndex={0} key={item.id} onClick={()=>onPick(item.id)} onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();onPick(item.id)}}}><time><b>{formatTime(item.scheduledAt)}</b><small>{formatMonthDay(item.scheduledAt)}</small></time><i className="interview-color"/><div><h3>{candidateName(item.candidateId,people)} · {item.round}</h3><p>{people.find(person=>person.id===item.candidateId)?.role||'职位未关联'}</p><span>{item.mode}　面试官：{item.interviewer}{item.assistant?`　助理：${item.assistant}`:''}</span></div><select value={item.status} onClick={event=>event.stopPropagation()} onChange={event=>updateStatus(item.id,event.target.value)}>{interviewStatuses.map(status=><option key={status}>{status}</option>)}</select></article>)}
+        <div className="list-title"><h3>面试日程</h3><span>{scheduleSummary}</span></div>
+        {displayedItems.length===0
+          ?<Empty icon="◴" title="暂无已创建面试" text="请选择其他日期，或为候选人安排新的面试。" action="安排面试" click={onNew}/>
+          :displayedItems.map(item=>{const isTodayInterview=sameDay(new Date(item.scheduledAt),today);return <article className="interview-card clickable" role="button" tabIndex={0} key={item.id} onClick={()=>onPick(item.id)} onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();onPick(item.id)}}}><time><b>{formatTime(item.scheduledAt)}</b><small>{formatMonthDay(item.scheduledAt)}</small></time><i className={`interview-color ${isTodayInterview?'today':'created'}`}/><div><h3>{candidateName(item.candidateId,people)} · {item.round}</h3><p>{people.find(person=>person.id===item.candidateId)?.role||'职位未关联'}<em className={`interview-schedule-kind ${isTodayInterview?'today':'created'}`}>{isTodayInterview?'当天面试':'已创建面试'}</em></p><span>{item.mode}　面试官：{item.interviewer}{item.assistant?`　助理：${item.assistant}`:''}</span></div><select value={item.status} onClick={event=>event.stopPropagation()} onChange={event=>updateStatus(item.id,event.target.value)}>{interviewStatuses.map(status=><option key={status}>{status}</option>)}</select></article>})}
       </div>
       <aside className="interview-calendar-side">
         <header><h3>面试日历</h3><button type="button" className={historyOpen?'active':''} onClick={()=>setHistoryOpen(value=>!value)}>历史日历</button></header>
@@ -688,7 +696,7 @@ function Interviews({items,people,onNew,onPick,updateStatus}:{items:Interview[];
         <div className="interview-calendar-month"><button type="button" aria-label="上个月" onClick={()=>setCalendarMonth(value=>new Date(value.getFullYear(),value.getMonth()-1,1))}>‹</button><b>{calendarMonth.getFullYear()}年 {calendarMonth.getMonth()+1}月</b><button type="button" aria-label="下个月" onClick={()=>setCalendarMonth(value=>new Date(value.getFullYear(),value.getMonth()+1,1))}>›</button></div>
         <div className="interview-calendar-weekdays">{['一','二','三','四','五','六','日'].map(day=><span key={day}>{day}</span>)}</div>
         <div className="interview-calendar-days">{monthCells.map((date,index)=>date?<button type="button" key={date.toISOString()} aria-pressed={sameDay(date,selectedDate)} className={[sameDay(date,selectedDate)?'active':'',sameDay(date,today)?'today':'',items.some(item=>sameDay(new Date(item.scheduledAt),date))?'has-interview':''].filter(Boolean).join(' ')} onClick={()=>setSelectedDate(date)}><b>{date.getDate()}</b></button>:<span key={`blank-${index}`}/>)}</div>
-        <footer><span>当前查看</span><b>{selectedDate.getFullYear()}年{selectedDate.getMonth()+1}月{selectedDate.getDate()}日</b><small>{dayItems.length} 场已创建面试</small></footer>
+        <footer><span>当前查看</span><b>{selectedDate.getFullYear()}年{selectedDate.getMonth()+1}月{selectedDate.getDate()}日</b><small>{selectedDayItems.length} 场已创建面试</small></footer>
       </aside>
     </div>
   </section>
@@ -718,7 +726,7 @@ function Analytics({data}:{data:Dataset}){
   </section>
 }
 
-function FormModal({close,submit,kicker,title,description,children,submitLabel='保存真实记录',error='',submitting=false,scrollable=false,className=''}:{close:()=>void;submit:(data:FormData)=>void;kicker:string;title:string;description:string;children:ReactNode;submitLabel?:string;error?:string;submitting?:boolean;scrollable?:boolean;className?:string}){return <div className="modal-backdrop" onMouseDown={close}><form className={`job-modal${scrollable?' scrollable-modal':''}${className?` ${className}`:''}`} onSubmit={(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();submit(new FormData(event.currentTarget))}} onMouseDown={event=>event.stopPropagation()}><button type="button" className="modal-close" onClick={close}>×</button><span className="eyebrow purple">{kicker}</span><h2>{title}</h2><p>{description}</p>{children}{error&&<div className="account-form-error">{error}</div>}<button className="primary-button" type="submit" disabled={submitting}>{submitting?'正在保存…':submitLabel} <span>→</span></button></form></div>}
+function FormModal({close,submit,kicker,title,description,children,submitLabel='保存真实记录',error='',submitting=false,scrollable=false,className='',backdropClassName=''}:{close:()=>void;submit:(data:FormData)=>void;kicker:string;title:string;description:string;children:ReactNode;submitLabel?:string;error?:string;submitting?:boolean;scrollable?:boolean;className?:string;backdropClassName?:string}){return <div className={`modal-backdrop${backdropClassName?` ${backdropClassName}`:''}`} onMouseDown={close}><form className={`job-modal${scrollable?' scrollable-modal':''}${className?` ${className}`:''}`} onSubmit={(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();submit(new FormData(event.currentTarget))}} onMouseDown={event=>event.stopPropagation()}><button type="button" className="modal-close" onClick={close}>×</button><span className="eyebrow purple">{kicker}</span><h2>{title}</h2><p>{description}</p>{children}{error&&<div className="account-form-error">{error}</div>}<button className="primary-button" type="submit" disabled={submitting}>{submitting?'正在保存…':submitLabel} <span>→</span></button></form></div>}
 function CandidateEntryModal({close,manual,upload}:{close:()=>void;manual:()=>void;upload:()=>void}){return <div className="modal-backdrop" onMouseDown={close}><section className="candidate-entry-modal" role="dialog" aria-modal="true" aria-labelledby="candidate-entry-title" onMouseDown={event=>event.stopPropagation()}><button type="button" className="modal-close" onClick={close}>×</button><span className="eyebrow purple">ADD CANDIDATE</span><h2 id="candidate-entry-title">添加候选人</h2><p>选择录入方式，候选人会统一进入候选人管理并同步到后续招聘流程。</p><div className="candidate-entry-options"><button type="button" onClick={upload}><i>⇧</i><span><b>上传简历添加</b><small>上传文件并自动解析为候选人档案</small></span><em>→</em></button><button type="button" onClick={manual}><i>＋</i><span><b>手动添加</b><small>直接填写信息，可附加原件但不自动解析</small></span><em>→</em></button></div></section></div>}
 function CityPicker({defaultValue}:{defaultValue:string}){
   const customCity=defaultValue&&!CHINA_CITIES.includes(defaultValue)?defaultValue:'';
@@ -760,7 +768,7 @@ function CityPicker({defaultValue}:{defaultValue:string}){
 }
 function JobModal({job,close,submit,submitting}:{job:Job|null;close:()=>void;submit:(data:FormData)=>void;submitting:boolean}){
   const selectedCity=visibleCity(job?.city||'');
-  return <FormModal close={close} submit={submit} submitting={submitting} kicker={job?'POSITION DETAILS':'NEW POSITION'} title={job?'编辑职位信息':'发布新职位'} description={job?'修改后将保留该职位与候选人、AI 面试题的现有关联。':'保存后，该职位将参与工作台与招聘数据的实时统计。'} submitLabel={job?'保存职位修改':'保存真实记录'}>
+  return <FormModal close={close} submit={submit} submitting={submitting} backdropClassName="modal-backdrop-top" kicker={job?'POSITION DETAILS':'NEW POSITION'} title={job?'编辑职位信息':'发布新职位'} description={job?'修改后将保留该职位与候选人、AI 面试题的现有关联。':'保存后，该职位将参与工作台与招聘数据的实时统计。'} submitLabel={job?'保存职位修改':'保存真实记录'}>
     <label>职位名称<input required name="title" defaultValue={job?.title||''} placeholder="请输入真实职位名称"/></label>
     <label>所属部门<input required name="department" defaultValue={job?.department||''} placeholder="请输入实际部门"/></label>
     <div className="form-grid"><div className="job-form-label"><span>工作城市</span><CityPicker defaultValue={selectedCity}/></div><label>招聘人数<input name="headcount" type="number" min="1" max="999" defaultValue={job?.headcount||1}/></label></div>
@@ -914,12 +922,13 @@ function CandidateInterviewAssessment({report}:{report?:AiInterview}){
   return <AiInterviewResultPanel summary={report.summary} fallbackScore={report.score} durationSeconds={report.durationSeconds} completedAt={report.completedAt} compact/>;
 }
 
-function CandidateStageStepper({stage,assignedName,aiCompleted,interviewCompleted,offerAccepted,canApproveDepartment,advance,requestAssignment,openInterviews}:{stage:string;assignedName?:string;aiCompleted:boolean;interviewCompleted:boolean;offerAccepted:boolean;canApproveDepartment:boolean;advance:(value:string)=>Promise<boolean>;requestAssignment:()=>void;openInterviews:()=>void}){
+function CandidateStageStepper({stage,assignedName,aiCompleted,interviewCompleted,offerAccepted,advance,requestAssignment,openInterviews}:{stage:string;assignedName?:string;aiCompleted:boolean;interviewCompleted:boolean;offerAccepted:boolean;advance:(value:string)=>Promise<boolean>;requestAssignment:()=>void;openInterviews:()=>void}){
   const [saving,setSaving]=useState('');
   const flowStage=stage==='待定'?'用人部门筛选':stage;
   const currentIndex=stages.indexOf(flowStage);
   const terminal=stage==='已淘汰'||currentIndex===stages.length-1;
-  const stageCompleted=flowStage==='简历筛选'||(flowStage==='用人部门筛选'&&canApproveDepartment)||(flowStage==='AI面试'&&aiCompleted)||(flowStage==='安排面试'&&interviewCompleted)||(flowStage==='录用'&&offerAccepted)||flowStage==='待入职';
+  const displayedStage=stage==='已淘汰'?'已淘汰':displayCandidateStage(stage);
+  const stageCompleted=flowStage==='简历筛选'||(flowStage==='AI面试'&&aiCompleted)||(flowStage==='安排面试'&&interviewCompleted)||(flowStage==='录用'&&offerAccepted)||flowStage==='待入职';
   const nextStage=!terminal&&currentIndex>=0?stages[currentIndex+1]:undefined;
   const canAdvance=Boolean(nextStage&&stageCompleted);
   async function moveNext(nextStage:string,index:number){
@@ -928,11 +937,20 @@ function CandidateStageStepper({stage,assignedName,aiCompleted,interviewComplete
     setSaving(nextStage);
     try{const moved=await advance(nextStage);if(moved&&nextStage==='安排面试')openInterviews()}finally{setSaving('')}
   }
+  async function eliminate(){
+    if(saving||terminal||!window.confirm('确认淘汰该候选人吗？\n\n淘汰后将终止后续招聘流程，未完成的面试、AI 面试邀请和 Offer 将同步关闭。'))return;
+    setSaving('已淘汰');
+    try{await advance('已淘汰')}finally{setSaving('')}
+  }
   return <section className={`candidate-stage-stepper ${terminal?'terminal-only':''}`} aria-label="候选人招聘阶段">
-    <header><div><span>候选人流程</span><small>仅显示当前所处阶段</small></div><b className={terminal?'terminal':''}>当前：{displayCandidateStage(stage)}</b></header>
-    {canAdvance&&nextStage&&<button type="button" className="candidate-next-stage-button" disabled={Boolean(saving)} onClick={()=>void moveNext(nextStage,currentIndex+1)}><span>下一阶段</span><b>{nextStage}</b><em>{saving?`正在进入${nextStage}…`:'点击进入'}</em></button>}
-    {!terminal&&flowStage==='安排面试'&&!interviewCompleted&&<button type="button" className="candidate-next-stage-button" onClick={openInterviews}><span>当前流程</span><b>安排面试</b><em>进入面试管理 →</em></button>}
-    {!terminal&&flowStage==='AI面试'&&!aiCompleted&&<p className="candidate-stage-waiting" role="status">候选人未答题</p>}
+    <header><div><span>候选人流程</span><small>仅显示当前所处阶段</small></div><b className={terminal?'terminal':''} data-stage={displayedStage}>当前：{displayedStage}</b></header>
+    {!terminal&&<div className="candidate-stage-actions">
+      {canAdvance&&nextStage&&<button type="button" className="candidate-next-stage-button" disabled={Boolean(saving)} onClick={()=>void moveNext(nextStage,currentIndex+1)}><span>下一阶段</span><b>{nextStage}</b><em>{saving?`正在进入${nextStage}…`:'点击进入'}</em></button>}
+      {flowStage==='安排面试'&&!interviewCompleted&&<button type="button" className="candidate-next-stage-button" onClick={openInterviews}><span>当前流程</span><b>安排面试</b><em>进入面试管理 →</em></button>}
+      {flowStage==='AI面试'&&!aiCompleted&&<p className="candidate-stage-waiting" role="status">候选人未答题</p>}
+      {flowStage==='用人部门筛选'&&<p className="candidate-stage-waiting" role="status">等待用人部门审核</p>}
+      <button type="button" className="candidate-eliminate-button" disabled={Boolean(saving)} onClick={()=>void eliminate()}><span>淘汰候选人</span><small>{saving==='已淘汰'?'正在终止流程…':'终止后续招聘流程'}</small></button>
+    </div>}
     {!terminal&&flowStage==='用人部门筛选'&&assignedName&&<small className="candidate-current-assignee">已推送：{assignedName}</small>}
   </section>;
 }
@@ -954,7 +972,7 @@ function AssessmentComment({text}:{text:string}){
   return <div className="candidate-assessment-comment"><span>评估意见</span>{items.length?<div>{items.map(item=><article key={item.label}><small>{item.label}</small><b>{item.result}</b><em>{item.rating}</em></article>)}</div>:<p>{text||'未填写'}</p>}</div>;
 }
 
-function CandidateDrawer({person,aiInterview,assessment,aiCompleted,interviewCompleted,offerAccepted,canApproveDepartment,close,openInterviews,saveFact,advance,requestAssignment}:{person:Candidate;aiInterview?:AiInterview;assessment?:ManualAssessment;aiCompleted:boolean;interviewCompleted:boolean;offerAccepted:boolean;canApproveDepartment:boolean;close:()=>void;openInterviews:()=>void;saveFact:(field:CandidateFactType,value:string)=>Promise<boolean>;advance:(value:string)=>Promise<boolean>;requestAssignment:()=>void}){
+function CandidateDrawer({person,aiInterview,assessment,aiCompleted,interviewCompleted,offerAccepted,close,openInterviews,saveFact,advance,requestAssignment}:{person:Candidate;aiInterview?:AiInterview;assessment?:ManualAssessment;aiCompleted:boolean;interviewCompleted:boolean;offerAccepted:boolean;close:()=>void;openInterviews:()=>void;saveFact:(field:CandidateFactType,value:string)=>Promise<boolean>;advance:(value:string)=>Promise<boolean>;requestAssignment:()=>void}){
   const [editingFact,setEditingFact]=useState<CandidateFactType|null>(null);
   const [factValue,setFactValue]=useState('');
   const [factError,setFactError]=useState('');
@@ -997,7 +1015,7 @@ function CandidateDrawer({person,aiInterview,assessment,aiCompleted,interviewCom
   return <div className="drawer-backdrop candidate-drawer-backdrop" onMouseDown={close}><aside className="detail-drawer candidate-drawer" role="dialog" aria-modal="true" aria-label={`${person.name}候选人详情`} onMouseDown={event=>event.stopPropagation()}>
     <button className="drawer-close" onClick={close}>×</button>
     <div className="candidate-profile"><span>{person.name.slice(0,1)}</span><div><div className="candidate-title-row"><h2>{person.name}</h2><span>{person.role||'应聘职位未填写'}</span></div><div className="candidate-profile-summary">{facts.map(fact=>editingFact===fact.type?<form key={fact.type} className="candidate-fact-editor" onSubmit={event=>void submitFact(event)}><CandidateFactIcon type={fact.type}/>{factInput(fact.type)}<button disabled={factSaving}>{factSaving?'保存中':'保存'}</button><button type="button" onClick={cancelFactEdit}>取消</button>{factError&&<small>{factError}</small>}</form>:<button key={fact.type} type="button" className="candidate-fact-edit" title={`点击修改${fact.label}`} aria-label={`${fact.label} ${fact.value}，点击修改`} onClick={()=>beginFactEdit(fact)}><CandidateFactIcon type={fact.type}/><b>{fact.value}</b><small>修改</small></button>)}</div></div><em><b>{displayedScore??'—'}</b><small>{displayedLabel}</small></em></div>
-    <CandidateStageStepper stage={person.stage} assignedName={person.assignedHrName} aiCompleted={aiCompleted} interviewCompleted={interviewCompleted} offerAccepted={offerAccepted} canApproveDepartment={canApproveDepartment} advance={advance} requestAssignment={requestAssignment} openInterviews={openInterviews}/>
+    <CandidateStageStepper stage={person.stage} assignedName={person.assignedHrName} aiCompleted={aiCompleted} interviewCompleted={interviewCompleted} offerAccepted={offerAccepted} advance={advance} requestAssignment={requestAssignment} openInterviews={openInterviews}/>
     {assessment&&<section><h3>HR 人工评估</h3><div className="profile-info"><p><span>综合得分</span>{assessment.total} 分</p><p><span>专业能力</span>{assessment.professional} 分</p><p><span>沟通表达</span>{assessment.communication} 分</p><p><span>文化匹配</span>{assessment.culture} 分</p><p><span>评估人</span>{assessment.reviewer}</p></div><AssessmentComment text={assessment.comment}/></section>}
     <section><div className="candidate-section-title"><h3>AI 面试记录</h3>{person.resumeFileName&&<button type="button" title={person.resumeFileName} onClick={()=>setResumeOpen(true)}>查看简历 ↗</button>}</div><CandidateInterviewAssessment report={aiInterview}/><AiInterviewRecordings candidateId={person.id}/></section>
     <section><h3>核心技能</h3><div className="channel-tags">{person.skills.length?person.skills.map(skill=><span key={skill}>{skill}</span>):<span>未填写</span>}</div></section>

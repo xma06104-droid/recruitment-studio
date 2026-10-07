@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { CANDIDATE_STAGES, normalizeCandidateStage } from '@/app/candidate-stages';
 import { env } from 'cloudflare:workers';
 import { accountFromRequest, createInvitationShareToken, ensureSchema, getDb, hashToken } from '@/app/server/db';
-import { repairResumeProfiles } from '@/app/server/resume-repair';
 import { questionMaxScores } from '@/app/interview-score-weights';
 import { deriveInterviewKeywords, isGenericInterviewKeywords } from '@/app/interview-keywords';
 
@@ -13,7 +12,6 @@ export async function GET(request: NextRequest) {
   const account = await accountFromRequest(request);
   if (!account) return unauthorized();
   await ensureSchema();
-  await repairResumeProfiles(account.id);
   const db = getDb();
   const now = new Date().toISOString();
   await db.prepare(`UPDATE ai_interview_invitations SET status = '已超时', updated_at = ?
@@ -565,12 +563,20 @@ export async function PATCH(request: NextRequest) {
       const assignedRecipient = await db.prepare('SELECT candidate_id FROM candidate_assignments WHERE candidate_id = ? AND hr_account_id = ? LIMIT 1').bind(id, account.id).first<{candidate_id:string}>();
       if (account.role === 'hr' && (!['用人部门筛选', '待定'].includes(currentStage) || !assignedRecipient)) return invalid('仅接收该简历的 HR 可以提交筛选结果。');
     }
-    await db.batch([
+    const stageUpdates = [
       db.prepare('UPDATE candidates SET stage = ?, updated_at = ? WHERE id = ?').bind(value, now, id),
       db.prepare('UPDATE resume_applications SET status = ? WHERE candidate_id = ? AND owner_id = ?').bind(value, id, candidate.owner_id),
       db.prepare(`INSERT INTO screening_logs (id, owner_id, candidate_id, job_id, operator_name, action, detail, created_at)
         VALUES (?, ?, ?, ?, ?, '用人部门反馈', ?, ?)`).bind(crypto.randomUUID(), candidate.owner_id, id, candidate.job_id, account.contact, `候选人状态更新为${value}`, now),
-    ]);
+    ];
+    if (value === '已淘汰') {
+      stageUpdates.push(
+        db.prepare("UPDATE interviews SET status = '已取消', updated_at = ? WHERE candidate_id = ? AND status NOT IN ('已完成', '已取消')").bind(now, id),
+        db.prepare("UPDATE ai_interview_invitations SET status = '已失效', updated_at = ? WHERE candidate_id = ? AND status NOT IN ('已完成', '已失效')").bind(now, id),
+        db.prepare("UPDATE offers SET status = '已撤回', updated_at = ? WHERE candidate_id = ? AND status NOT IN ('已接受', '已拒绝', '已撤回')").bind(now, id),
+      );
+    }
+    await db.batch(stageUpdates);
     return NextResponse.json({ ok: true });
   }
   if (resource === 'offerStatus') {

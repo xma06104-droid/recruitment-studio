@@ -4,7 +4,7 @@ import { accountFromRequest, ensureSchema, getDb } from '@/app/server/db';
 import { deleteStoredObject, deleteStoredObjects } from '@/app/server/object-storage';
 import { repairResumeProfiles } from '@/app/server/resume-repair';
 import { getResumeJobs } from '@/app/server/resume-jobs';
-import { buildSystemResumeJob, matchResumeJob, parseResumeText, ResumeJob } from '@/app/server/resume-parser';
+import { buildResumeHighlights, buildSystemResumeJob, cleanResumeTag, matchResumeJob, parseResumeText, ResumeJob } from '@/app/server/resume-parser';
 import { CANDIDATE_STAGES } from '@/app/candidate-stages';
 
 type DataRow = Record<string, string | number | null>;
@@ -430,7 +430,8 @@ function scoreCandidate(row: DataRow, rule: RuleRow) {
   }
   const knockout = rule.logic === 'OR' ? failures.length > 0 && failures.length === hardRuleCount(rule) : failures.length > 0;
   const haystack = [row.title, row.role, row.company, row.raw_text, ...skills, ...certificates].join(' ').toLowerCase();
-  const keywordScore = keywords.length ? Math.round(keywords.filter(item => haystack.includes(item.toLowerCase())).length / keywords.length * 100) : 0;
+  const matchedKeywords = keywords.filter(item => haystack.includes(item.toLowerCase()));
+  const keywordScore = keywords.length ? Math.round(matchedKeywords.length / keywords.length * 100) : 0;
   const experienceScore = rule.min_years ? Math.min(100, Math.round(years / Number(rule.min_years) * 100)) : Math.min(100, Math.round(years / 5 * 100));
   const educationScore = education ? Math.min(100, Math.round((educationRanks[education] || 0) / 5 * 100)) : 0;
   const stabilityMonths = Number(row.stability_months || 0);
@@ -438,15 +439,21 @@ function scoreCandidate(row: DataRow, rule: RuleRow) {
   const weightTotal = Number(rule.keyword_weight) + Number(rule.experience_weight) + Number(rule.education_weight) + Number(rule.stability_weight);
   const total = knockout ? 0 : Math.round((keywordScore * Number(rule.keyword_weight) + experienceScore * Number(rule.experience_weight) + educationScore * Number(rule.education_weight) + stabilityScore * Number(rule.stability_weight)) / Math.max(1, weightTotal));
   const level = total >= 80 ? '高匹配' : total >= 60 ? '中匹配' : '低匹配';
-  const highlights: string[] = [];
+  const parsed = parseResumeText(String(row.raw_text || ''));
+  const workHistory = jsonList(row.work_history_json);
+  const projectHistory = jsonList(row.project_history_json);
+  const highlights = buildResumeHighlights({
+    ...parsed,
+    role: String(row.role || parsed.role), company: String(row.company || parsed.company),
+    education: education || parsed.education, major: String(row.major || parsed.major),
+    school: String(row.school || parsed.school), workYears: years || parsed.workYears,
+    stabilityMonths: stabilityMonths || parsed.stabilityMonths,
+    industry: String(row.industry || parsed.industry), skills: skills.length ? skills : parsed.skills,
+    certificates: certificates.length ? certificates : parsed.certificates,
+    workHistory: workHistory.length ? workHistory : parsed.workHistory,
+    projectHistory: projectHistory.length ? projectHistory : parsed.projectHistory,
+  }, matchedKeywords, String(row.title || row.role || ''));
   const risks = [...failures];
-  const school = String(row.school || '');
-  const experienceText = [row.company, row.raw_text, ...jsonList(row.work_history_json)].join(' ');
-  if (/985|211|双一流/.test(school)) highlights.push('985/211/双一流院校');
-  if (/阿里巴巴|腾讯|字节跳动|华为|美团|百度|京东|小米/.test(experienceText)) highlights.push('大厂工作经验');
-  if (years >= 5 && /管理|负责人|主管|经理|总监/.test(experienceText)) highlights.push('5年以上管理经验');
-  if (certificates.length) highlights.push('持证上岗');
-  if (years >= 5) highlights.push('5年以上经验');
   if (stabilityMonths && stabilityMonths < 12) risks.push('职业稳定性偏低');
   return { knockout, failures, keywordScore, experienceScore, educationScore, stabilityScore, total, level, highlights, risks: [...new Set(risks)] };
 }
@@ -591,7 +598,7 @@ async function accessibleScreeningCandidate(id: string, accountId: string) {
 }
 
 function mapProfile(row: DataRow) {
-  return { candidateId: row.candidate_id, education: row.education, major: row.major, school: row.school, age: row.age, gender: row.gender, industry: row.industry, expectedSalary: row.expected_salary, workYears: row.work_years, stabilityMonths: row.stability_months, workHistory: readableTextList(row.work_history_json), projectHistory: readableTextList(row.project_history_json), certificates: jsonList(row.certificates_json), highlights: jsonList(row.highlights_json), risks: jsonList(row.risks_json), parsingStatus: row.parsing_status, fileName: row.file_name, fileType: row.file_type, fileSize: row.file_size, keywordScore: row.keyword_score, experienceScore: row.experience_score, educationScore: row.education_score, stabilityScore: row.stability_score, matchScore: row.match_score, matchLevel: row.match_level, screenedAt: row.screened_at, updatedAt: row.updated_at };
+  return { candidateId: row.candidate_id, education: row.education, major: row.major, school: row.school, age: row.age, gender: row.gender, industry: row.industry, expectedSalary: row.expected_salary, workYears: row.work_years, stabilityMonths: row.stability_months, workHistory: readableTextList(row.work_history_json), projectHistory: readableTextList(row.project_history_json), certificates: jsonList(row.certificates_json), highlights: jsonList(row.highlights_json).map(cleanResumeTag).filter(Boolean), risks: jsonList(row.risks_json).map(cleanResumeTag).filter(Boolean), parsingStatus: row.parsing_status, fileName: row.file_name, fileType: row.file_type, fileSize: row.file_size, keywordScore: row.keyword_score, experienceScore: row.experience_score, educationScore: row.education_score, stabilityScore: row.stability_score, matchScore: row.match_score, matchLevel: row.match_level, screenedAt: row.screened_at, updatedAt: row.updated_at };
 }
 function mapApplication(row: DataRow) { return { id: row.id, candidateId: row.candidate_id, jobId: row.job_id, channel: row.channel, appliedAt: row.applied_at, status: row.status, createdAt: row.created_at }; }
 function mapRule(row: DataRow) { return { id: row.id, jobId: row.job_id, name: row.name, logic: row.logic, minEducation: row.min_education, majors: jsonList(row.majors_json), minYears: row.min_years, certificates: jsonList(row.certificates_json), ageMin: row.age_min, ageMax: row.age_max, cities: jsonList(row.cities_json), salaryMax: row.salary_max, industries: jsonList(row.industries_json), customConditions: jsonCustomConditions(row.custom_conditions_json), keywords: jsonList(row.keywords_json), keywordWeight: row.keyword_weight, experienceWeight: row.experience_weight, educationWeight: row.education_weight, stabilityWeight: row.stability_weight, updatedAt: row.updated_at }; }

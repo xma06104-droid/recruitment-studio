@@ -305,12 +305,8 @@ export function scoreResumeForJob(parsed: ParsedResume, rawText: string, job: Re
   const totalWeight = Math.max(1, weights.reduce((sum, item) => sum + item, 0));
   const score = Math.round((keywordScore * weights[0] + experienceScore * weights[1] + educationScore * weights[2] + stabilityScore * weights[3]) / totalWeight);
   const level: ResumeMatchAnalysis['level'] = score >= 80 ? '高匹配' : score >= 60 ? '中匹配' : '低匹配';
-  const highlights: string[] = [];
   const risks: string[] = [];
-  if (titleScore >= 85) highlights.push('岗位方向高度一致');
-  if (matchedKeywords.length >= Math.min(4, Math.max(2, Math.ceil(keywords.length * .45)))) highlights.push('核心技能覆盖较好');
-  if (parsed.workYears !== null && parsed.workYears >= Math.max(5, requiredYears)) highlights.push('经验年限充足');
-  if (parsed.certificates.length) highlights.push('具备相关证书');
+  const highlights = buildResumeHighlights(parsed, matchedKeywords, job.title);
   if (job.minYears !== null && job.minYears !== undefined && (parsed.workYears ?? 0) < job.minYears) risks.push('工作年限低于岗位要求');
   if (requiredEducation && currentEducation < requiredEducation) risks.push(parsed.education ? '学历低于岗位要求' : '学历信息待核验');
   if (keywords.length && matchedKeywords.length / keywords.length < .3) risks.push('核心技能覆盖不足');
@@ -320,8 +316,44 @@ export function scoreResumeForJob(parsed: ParsedResume, rawText: string, job: Re
   return {
     score, level, keywordScore, experienceScore, educationScore, stabilityScore,
     matchedKeywords: matchedKeywords.slice(0, 8), missingKeywords: missingKeywords.slice(0, 6),
-    highlights: [...new Set(highlights)], risks: [...new Set(risks)], summary,
+    highlights, risks: [...new Set(risks)], summary,
   };
+}
+
+export function buildResumeHighlights(parsed: ParsedResume, matchedKeywords: string[], jobTitle = '') {
+  const highlights: string[] = [];
+  const add = (value: string) => {
+    const clean = cleanResumeTag(value).slice(0, 20);
+    if (clean && !highlights.includes(clean)) highlights.push(clean);
+  };
+  const normalizedTitle = normalizeJobTitle(jobTitle);
+  const specificSkills = [...new Set([
+    ...parsed.skills.filter(skill => matchedKeywords.some(keyword => includesTerm(skill, keyword) || includesTerm(keyword, skill))),
+    ...matchedKeywords,
+  ])].filter(skill => {
+    const normalized = normalizeJobTitle(skill);
+    return normalized && normalized !== normalizedTitle && !/(?:工程师|岗位|职位|软件工程|质量保障)$/.test(skill) && skill.length <= 18;
+  });
+
+  if (specificSkills[0]) add(`${specificSkills[0]}经验`);
+  if (specificSkills[1]) add(`${specificSkills[1]}经验`);
+  if (parsed.workYears !== null && parsed.workYears > 0) add(`${formatYears(parsed.workYears)}年相关经验`);
+  if (parsed.projectHistory.length) add(`${parsed.projectHistory.length}段项目经历`);
+  if (parsed.certificates[0]) add(`${parsed.certificates[0]}资质`);
+  if (parsed.industry) add(`${parsed.industry}行业经验`);
+  if (/985|211|双一流/.test(parsed.school)) add('重点院校背景');
+  if (parsed.major) add(`${parsed.major}专业背景`);
+  else if (parsed.education) add(`${parsed.education}学历`);
+  if (!highlights.length && parsed.company) add(`${parsed.company.slice(0, 10)}任职经历`);
+  return highlights.slice(0, 6);
+}
+
+export function cleanResumeTag(value:string) {
+  return value.replace(/[。；，、：！？,;:!?]+/g,' ').replace(/\s+/g,' ').trim();
+}
+
+function formatYears(value: number) {
+  return Number.isInteger(value) ? String(value) : String(Math.round(value * 10) / 10);
 }
 
 export function stripResumeHtml(value: string) {
