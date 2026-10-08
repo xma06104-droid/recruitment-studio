@@ -40,6 +40,7 @@ export async function repairResumeProfiles(ownerId: string) {
       OR (c.skills_json LIKE '%"销售"%' AND c.role NOT LIKE '%销售%' AND c.role NOT LIKE '%商务%' AND c.role NOT LIKE '%客户%')
       OR p.work_history_json LIKE '%--%'
       OR p.work_history_json LIKE '%~%' OR p.project_history_json LIKE '%~%'
+      OR (p.project_history_json = '[]' AND (p.raw_text LIKE '%项目经验%' OR p.raw_text LIKE '%项目经历%' OR p.raw_text LIKE '%项目名称%'))
       OR p.work_history_json LIKE '%"内容:%' OR p.work_history_json LIKE '%"业绩:%'
       OR p.highlights_json LIKE '%岗位方向高度一致%' OR p.highlights_json LIKE '%核心技能覆盖较好%'
     ) AND (p.raw_text <> '' OR p.file_name <> '') LIMIT 100`).bind(ownerId).all<RepairRow>();

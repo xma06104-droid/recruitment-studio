@@ -1758,6 +1758,7 @@ input[type="date"]::-webkit-calendar-picker-indicator,input[type="datetime-local
 .hr-project-timeline article{grid-template-columns:148px minmax(0,1fr);padding:16px 17px}
 .hr-project-timeline article>strong{padding-top:1px;color:#6eddea;font-size:14px;font-weight:850;line-height:1.55;overflow-wrap:anywhere}
 .hr-project-timeline p{font-size:14px;line-height:1.85}
+.hr-timeline-labeled{display:grid;grid-template-columns:max-content minmax(0,1fr);align-items:start;gap:10px}.hr-timeline-labeled>b{min-width:62px;margin-top:2px;padding:2px 8px;border:1px solid rgba(162,181,211,.12);border-radius:6px;font-size:11px;line-height:1.55;text-align:center}.hr-timeline-labeled>b.duty{border-color:rgba(246,176,82,.24);color:#f2bd72;background:rgba(139,86,20,.18)}.hr-timeline-labeled>b.summary{border-color:rgba(167,139,250,.24);color:#bba6ff;background:rgba(92,61,155,.18)}.hr-timeline-labeled>b.tech{border-color:rgba(82,213,232,.24);color:#71dce9;background:rgba(20,116,137,.18)}.hr-timeline-labeled>span{min-width:0;color:#b8c6d7}
 .hr-insight-group>b{padding-top:7px;font-size:13px}.hr-insight-group span{padding:8px 12px;font-size:13px;line-height:1.4}
 .hr-resume-file-actions{display:grid;grid-template-columns:140px minmax(0,1fr);gap:10px;margin-top:30px}
 .hr-resume-file-actions .hr-resume-file{margin-top:0}

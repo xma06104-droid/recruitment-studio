@@ -253,9 +253,23 @@ function CandidateResumeDrawer({candidate,job,profile,review,aiInterview,saving,
 }
 
 function ExperienceTimeline({title,items}:{title:string;items:string[]|undefined}){
-  const source=title==='工作经历'?mergeLeadingWorkDates(items||[]):items||[];
+  const source=title==='工作经历'?mergeLeadingWorkDates(items||[]):expandProjectHistoryItems(items||[]);
   const projects=groupProjectHistory(source);
-  return <section className="hr-resume-section"><h3>{title}</h3>{projects.length?<div className="hr-project-timeline">{projects.map((project,index)=><article key={`${project.label}-${index}`}><strong>{project.label}</strong><div>{project.details.length?project.details.map((detail,detailIndex)=><p key={`${project.label}-${detailIndex}`}>{detail}</p>):<p>暂无详细描述</p>}</div></article>)}</div>:<p className="hr-resume-copy">暂无{title}信息</p>}</section>;
+  return <section className="hr-resume-section"><h3>{title}</h3>{projects.length?<div className="hr-project-timeline">{projects.map((project,index)=><article key={`${project.label}-${index}`}><strong>{project.label}</strong><div>{project.details.length?project.details.map((detail,detailIndex)=><TimelineDetail key={`${project.label}-${detailIndex}`} value={detail}/>):<p>暂无详细描述</p>}</div></article>)}</div>:<p className="hr-resume-copy">暂无{title}信息</p>}</section>;
+}
+
+function TimelineDetail({value}:{value:string}){
+  const match=value.match(/^(工作职责|工作内容|职责描述|责任描述|项目简介|项目描述|技术点|技术栈|软件环境|硬件环境|开发工具|项目周期)\s*[:：]\s*([\s\S]*)$/);
+  if(!match)return <p>{value}</p>;
+  const tone=/技术|环境|工具/.test(match[1])?'tech':/职责|责任|工作内容/.test(match[1])?'duty':'summary';
+  return <p className="hr-timeline-labeled"><b className={tone}>{match[1]}</b><span>{match[2]||'未填写'}</span></p>;
+}
+
+function expandProjectHistoryItems(items:string[]){
+  return items.flatMap(item=>item
+    .split(/(?=项目(?:名称|名)\s*[:：]|项目[一二三四五六七八九十\d]+\s+(?:19|20)\d{2})/g)
+    .map(part=>part.trim())
+    .filter(Boolean));
 }
 
 function mergeLeadingWorkDates(items:string[]){
@@ -274,6 +288,8 @@ function groupProjectHistory(items:string[]){
     for(const item of parsed){
       const detail=item.detail.replace(/^[-—·•\s]+/,'').trim();
       if(!detail)continue;
+      const labeled=splitLabeledProject(detail);
+      if(labeled){groups.push(labeled);continue}
       const explicit=explicitProjectTitle(detail);
       const split=splitProjectTitleAndDescription(explicit||detail);
       if(explicit&&split.title){
@@ -308,6 +324,18 @@ function groupProjectHistory(items:string[]){
     else groups.push({label:projectTitle(item.detail)||'时间未标注',details:[item.detail]});
   }
   return finishProjectGroups(groups.sort((a,b)=>projectDateValue(b.label)-projectDateValue(a.label)));
+}
+
+function splitLabeledProject(value:string){
+  const match=value.match(/^项目(?:名称|名)\s*[:：]\s*([\s\S]+)$/);
+  if(!match)return null;
+  const body=match[1].trim();
+  const marker=/(?:工作职责|工作内容|职责描述|责任描述|项目简介|项目描述|技术点|技术栈|软件环境|硬件环境|开发工具|项目周期)\s*[:：]/;
+  const markerIndex=body.search(marker);
+  const label=(markerIndex>=0?body.slice(0,markerIndex):body).trim().replace(/[，,。；;]+$/,'');
+  const remainder=markerIndex>=0?body.slice(markerIndex).trim():'';
+  const details=remainder?remainder.split(/(?=(?:工作职责|工作内容|职责描述|责任描述|项目简介|项目描述|技术点|技术栈|软件环境|硬件环境|开发工具|项目周期)\s*[:：])/g).map(item=>item.trim()).filter(Boolean):[];
+  return {label:label||'未命名项目',details};
 }
 
 function explicitProjectTitle(value:string){
