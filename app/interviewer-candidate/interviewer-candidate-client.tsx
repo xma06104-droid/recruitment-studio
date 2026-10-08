@@ -32,6 +32,8 @@ export default function InterviewerCandidateClient() {
   const [error,setError]=useState('');
   const [status,setStatus]=useState<ReviewStatus>('待筛选');
   const [keyword,setKeyword]=useState('');
+  const [globalQuery,setGlobalQuery]=useState('');
+  const [searchAllStatuses,setSearchAllStatuses]=useState(false);
   const [jobKeyword,setJobKeyword]=useState('');
   const [jobId,setJobId]=useState('');
   const [selected,setSelected]=useState<string[]>([]);
@@ -77,11 +79,12 @@ export default function InterviewerCandidateClient() {
   const jobs=useMemo(()=>data?.jobs.filter(job=>!jobKeyword||`${job.title}${job.department}${job.city}`.toLowerCase().includes(jobKeyword.toLowerCase()))||[],[data,jobKeyword]);
   const counts=useMemo(()=>Object.fromEntries(reviewStatuses.map(item=>[item,data?.candidates.filter(candidate=>candidateReviewStatus(candidate.stage)===item).length||0])) as Record<ReviewStatus,number>,[data]);
   const candidates=useMemo(()=>data?.candidates.filter(candidate=>{
-    const matchesStatus=candidateReviewStatus(candidate.stage)===status;
+    const matchesStatus=searchAllStatuses||candidateReviewStatus(candidate.stage)===status;
     const matchesJob=!jobId||candidate.jobId===jobId;
-    const text=`${candidate.name}${candidate.phone}${candidate.email}${candidate.role}${candidate.company}${candidate.city}${candidate.skills.join('')}`.toLowerCase();
+    const job=data.jobs.find(item=>item.id===candidate.jobId);
+    const text=`${candidate.name}${candidate.phone}${candidate.email}${candidate.role}${candidate.company}${candidate.city}${candidate.skills.join('')}${job?.title||''}${job?.department||''}`.toLowerCase();
     return matchesStatus&&matchesJob&&(!keyword||text.includes(keyword.toLowerCase()));
-  })||[],[data,status,jobId,keyword]);
+  })||[],[data,status,jobId,keyword,searchAllStatuses]);
   const allSelected=candidates.length>0&&candidates.every(candidate=>selected.includes(candidate.id));
   const currentJob=jobId?data?.jobs.find(job=>job.id===jobId):null;
   const detailCandidate=detailId?data?.candidates.find(candidate=>candidate.id===detailId):undefined;
@@ -90,6 +93,11 @@ export default function InterviewerCandidateClient() {
   const detailAiInterview=detailCandidate?data?.aiInterviews.find(report=>report.candidateId===detailCandidate.id):undefined;
 
   function flash(message:string){setToast(message);window.setTimeout(()=>setToast(''),2200)}
+  function submitGlobalSearch(){
+    const query=globalQuery.trim();
+    setKeyword(query);setJobId('');setSelected([]);setSearchAllStatuses(Boolean(query));
+    if(query&&!data?.candidates.some(candidate=>{const job=data.jobs.find(item=>item.id===candidate.jobId);return `${candidate.name}${candidate.phone}${candidate.email}${candidate.role}${candidate.company}${candidate.city}${candidate.skills.join('')}${job?.title||''}${job?.department||''}`.toLowerCase().includes(query.toLowerCase())}))flash('未找到匹配的候选人');
+  }
   function toggleAll(){setSelected(allSelected?selected.filter(id=>!candidates.some(candidate=>candidate.id===id)):[...new Set([...selected,...candidates.map(candidate=>candidate.id)])])}
   function selectedCandidates(){return data?.candidates.filter(candidate=>selected.includes(candidate.id))||[]}
   function downloadBatchResumes(){
@@ -159,7 +167,7 @@ export default function InterviewerCandidateClient() {
       <header className="interviewer-header">
         <div className="interviewer-heading"><h1>候选人筛选</h1><small>HR 候选人工作台</small></div>
         <div className="interviewer-tools">
-          <div className="interviewer-global-search"><input placeholder="全局搜索，请输入关键字"/><button type="button">⌕</button></div>
+          <form className="interviewer-global-search" onSubmit={event=>{event.preventDefault();submitGlobalSearch()}}><input value={globalQuery} onChange={event=>setGlobalQuery(event.target.value)} placeholder="搜索姓名、手机号、职位或技能"/><button type="submit" aria-label="搜索">⌕</button></form>
           <HrAccountMenu contact={data.account.contact} phone={data.account.phone} email={data.account.email} role={data.account.role}/>
         </div>
       </header>
@@ -167,10 +175,10 @@ export default function InterviewerCandidateClient() {
 
       <div className="interviewer-content">
         <aside className="interviewer-filter-panel">
-          <div className="interviewer-name-search"><input value={keyword} onChange={event=>setKeyword(event.target.value)} placeholder="回车搜索手机号或姓名"/><span>⌕</span></div>
+          <div className="interviewer-name-search"><input value={keyword} onChange={event=>{setKeyword(event.target.value);setGlobalQuery(event.target.value);setSearchAllStatuses(false)}} placeholder="搜索手机号或姓名"/><span>⌕</span></div>
           <div className="interviewer-status-grid">
-            {reviewStatuses.slice(0,4).map(item=><button type="button" key={item} className={status===item?'active':''} onClick={()=>{setStatus(item);setSelected([])}}><b>{counts[item]}</b><span>{item}</span></button>)}
-            <button type="button" className={`wide ${status==='已失效'?'active':''}`} onClick={()=>{setStatus('已失效');setSelected([])}}><b>{counts['已失效']}</b><span>已失效</span></button>
+            {reviewStatuses.slice(0,4).map(item=><button type="button" key={item} className={!searchAllStatuses&&status===item?'active':''} onClick={()=>{setStatus(item);setSearchAllStatuses(false);setSelected([])}}><b>{counts[item]}</b><span>{item}</span></button>)}
+            <button type="button" className={`wide ${!searchAllStatuses&&status==='已失效'?'active':''}`} onClick={()=>{setStatus('已失效');setSearchAllStatuses(false);setSelected([])}}><b>{counts['已失效']}</b><span>已失效</span></button>
           </div>
           <button type="button" className="interviewer-detail-filter" onClick={()=>flash('候选人信息筛选')}>▦ <span>候选人信息筛选</span><b>›</b></button>
           <section className="interviewer-position-filter">
@@ -181,7 +189,7 @@ export default function InterviewerCandidateClient() {
         </aside>
 
         <section className="interviewer-list-panel">
-          <h2>{status}{currentJob?<small>{currentJob.title}</small>:null}</h2>
+          <h2>{searchAllStatuses&&keyword?'全局搜索结果':status}{currentJob?<small>{currentJob.title}</small>:null}</h2>
           <div className="interviewer-filter-row"><select defaultValue=""><option value="">沟通状态</option><option>未沟通</option><option>已沟通</option></select><select defaultValue=""><option value="">推荐筛选状态</option><option>未推荐</option><option>已推荐</option></select><select defaultValue="time"><option value="time">状态变更时间　⇅</option></select></div>
           <div className="interviewer-batch-row"><label><input type="checkbox" checked={allSelected} onChange={toggleAll}/> 全选</label><button type="button" onClick={downloadBatchResumes}><span>下载简历</span></button></div>
           <div className="interviewer-candidate-list">
