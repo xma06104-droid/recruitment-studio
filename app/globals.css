@@ -1836,6 +1836,7 @@ input[type="date"]::-webkit-calendar-picker-indicator,input[type="datetime-local
 :root{--control-accent:#45d3e5;--control-accent-strong:#23b9d1;--control-accent-soft:rgba(69,211,229,.18)}
 ::selection{color:#061522;background:#78e3ed}
 :is(input,textarea,select):focus{border-color:var(--control-accent)!important;outline:none!important;box-shadow:0 0 0 3px var(--control-accent-soft)!important}
+.global-search input,.global-search input:focus,.global-search input:focus-visible{border:0!important;outline:0!important;box-shadow:none!important}
 :is(button,a,[role="button"]):focus-visible{outline:2px solid var(--control-accent)!important;outline-offset:2px;box-shadow:0 0 0 4px rgba(69,211,229,.13)!important}
 input[type="checkbox"],input[type="radio"]{accent-color:var(--control-accent-strong)}
 .talent-tabs button.active,.tab-set button.active,.flow-stage-tabs button.active,.rs-tabs button.active,.ai-studio-tabs button.active,.ai-library-filter button.active,.interviewer-status-grid button.active,.interviewer-position-filter button.active{border-color:rgba(69,211,229,.42)!important;color:#f5feff!important;background:linear-gradient(110deg,#149cb7,#337fdc)!important;box-shadow:0 9px 22px rgba(28,156,188,.22)!important}
